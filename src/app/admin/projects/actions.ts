@@ -135,6 +135,35 @@ export async function createProjectAction(formData: FormData) {
       client_id: client.id,
       role: "couple",
     });
+
+    // Mirror to contacts (skip if email already exists)
+    const contactEmail = entry.email || null;
+    if (contactEmail) {
+      const { data: existing } = await admin
+        .from("contacts")
+        .select("id")
+        .eq("email", contactEmail)
+        .maybeSingle();
+      if (!existing) {
+        await admin.from("contacts").insert({
+          full_name: fullName,
+          email: contactEmail,
+          phone: entry.phone || null,
+          notes: entry.notes || null,
+          status: "confirmed",
+          converted_client_id: client.id,
+        });
+      }
+    } else {
+      await admin.from("contacts").insert({
+        full_name: fullName,
+        email: null,
+        phone: entry.phone || null,
+        notes: entry.notes || null,
+        status: "confirmed",
+        converted_client_id: client.id,
+      });
+    }
   }
 
   // Create / assign crew
@@ -331,6 +360,34 @@ export async function addClientToProjectAction(formData: FormData) {
     throw new Error(linkError.message);
   }
 
+  // Also add to contacts list (skip if email already exists)
+  if (email) {
+    const { data: existing } = await admin
+      .from("contacts")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (!existing) {
+      await admin.from("contacts").insert({
+        full_name: fullName,
+        email,
+        phone,
+        status: "confirmed",
+        converted_client_id: client.id,
+      });
+    }
+  } else {
+    await admin.from("contacts").insert({
+      full_name: fullName,
+      email: null,
+      phone,
+      status: "confirmed",
+      converted_client_id: client.id,
+    });
+  }
+
   revalidatePath(`/admin/projects/${projectId}`);
   revalidatePath("/admin/projects");
+  revalidatePath("/admin/contacts");
 }
