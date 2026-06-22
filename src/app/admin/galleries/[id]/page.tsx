@@ -111,8 +111,9 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
           <input type="hidden" name="galleryId" value={detail.gallery.id} />
           <input
             type="file"
-            name="file"
+            name="files"
             accept="image/*,video/*"
+            multiple
             required
             className="h-10 rounded-xl border border-border px-3 py-2 text-sm"
           />

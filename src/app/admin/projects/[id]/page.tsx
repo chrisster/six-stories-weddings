@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import {
+  addClientToProjectAction,
+  updateClientAction,
+  updateProjectAction,
+} from "@/app/admin/projects/actions";
 import { getGalleries, getProjectById } from "@/lib/data";
+import { hasSupabaseEnv } from "@/lib/env";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -49,16 +55,48 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       <section className="grid gap-4 lg:grid-cols-3">
         <article className="soft-panel p-5 lg:col-span-2">
           <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Clients</h3>
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {project.clients.map((client) => (
-              <li key={client.id} className="rounded-xl border border-border/80 bg-white/80 px-3 py-2">
-                <p className="font-medium">{client.fullName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {client.email || "No email"} · {client.phone || "No phone"}
-                </p>
+              <li key={client.id} className="rounded-xl border border-border/80 bg-white/80 px-3 py-3">
+                <form action={updateClientAction} className="grid gap-2 sm:grid-cols-3">
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <input type="hidden" name="clientId" value={client.id} />
+                  <input
+                    name="fullName"
+                    defaultValue={client.fullName}
+                    required
+                    className="h-10 rounded-xl border border-border px-3 text-sm"
+                  />
+                  <input
+                    name="email"
+                    type="email"
+                    defaultValue={client.email || ""}
+                    placeholder="Email"
+                    className="h-10 rounded-xl border border-border px-3 text-sm"
+                  />
+                  <input
+                    name="phone"
+                    defaultValue={client.phone || ""}
+                    placeholder="Phone"
+                    className="h-10 rounded-xl border border-border px-3 text-sm"
+                  />
+                  <button type="submit" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-3 sm:justify-self-start">
+                    Save client
+                  </button>
+                </form>
               </li>
             ))}
           </ul>
+
+          <form action={addClientToProjectAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 p-3 sm:grid-cols-3">
+            <input type="hidden" name="projectId" value={project.id} />
+            <input name="fullName" placeholder="Add client name" required className="h-10 rounded-xl border border-border px-3 text-sm" />
+            <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border px-3 text-sm" />
+            <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border px-3 text-sm" />
+            <button type="submit" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-3 sm:justify-self-start">
+              Add client
+            </button>
+          </form>
         </article>
 
         <article className="soft-panel p-5">
@@ -82,6 +120,66 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             </p>
           </div>
         </article>
+      </section>
+
+      <section className="soft-panel p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Edit Wedding Details</h3>
+          {!hasSupabaseEnv ? <p className="text-xs text-muted-foreground">Read-only in demo mode.</p> : null}
+        </div>
+        <form action={updateProjectAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <input type="hidden" name="projectId" value={project.id} />
+          <input name="title" required defaultValue={project.title} className="h-10 rounded-xl border border-border px-3 text-sm" />
+          <input
+            name="eventDate"
+            type="date"
+            required
+            defaultValue={project.eventDate}
+            className="h-10 rounded-xl border border-border px-3 text-sm"
+          />
+          <input name="projectType" defaultValue={project.projectType} className="h-10 rounded-xl border border-border px-3 text-sm" />
+          <select name="status" defaultValue={project.status} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+            <option value="confirmed">Confirmed</option>
+            <option value="unconfirmed">Unconfirmed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <select
+            name="editingStatus"
+            defaultValue={project.editingStatus}
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          >
+            <option value="not_started">Not started</option>
+            <option value="in_progress">In progress</option>
+            <option value="review">Review</option>
+            <option value="completed">Completed</option>
+          </select>
+          <input
+            name="budgetTotal"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue={project.budgetTotal}
+            className="h-10 rounded-xl border border-border px-3 text-sm"
+          />
+          <input
+            name="amountPaid"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue={project.amountPaid}
+            className="h-10 rounded-xl border border-border px-3 text-sm"
+          />
+          <input
+            name="notes"
+            defaultValue={project.notes || ""}
+            placeholder="Notes"
+            className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-2"
+          />
+
+          <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background xl:justify-self-start">
+            Save wedding
+          </button>
+        </form>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">

@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getBucketName, uploadMediaToStorage } from "@/lib/storage";
+import { ensureMediaBucket, getBucketName, uploadMediaToStorage } from "@/lib/storage";
 
 export async function createGallerySectionAction(formData: FormData) {
   if (!hasSupabaseEnv) {
@@ -84,9 +84,11 @@ export async function uploadMediaAction(formData: FormData) {
 
   const galleryId = String(formData.get("galleryId") || "");
   const sectionId = String(formData.get("sectionId") || "");
-  const file = formData.get("file");
+  const files = formData
+    .getAll("files")
+    .filter((value): value is File => value instanceof File && value.size > 0);
 
-  if (!galleryId || !(file instanceof File) || file.size === 0) {
+  if (!galleryId || files.length === 0) {
     return;
   }
 
@@ -95,9 +97,7 @@ export async function uploadMediaAction(formData: FormData) {
     return;
   }
 
-  const extension = file.name.split(".").pop() || "bin";
-  const storagePath = `${galleryId}/${randomUUID()}.${extension}`;
-  await uploadMediaToStorage(storagePath, file);
+  await ensureMediaBucket();
 
   const { data: latestAsset } = await admin
     .from("media_assets")
@@ -107,16 +107,30 @@ export async function uploadMediaAction(formData: FormData) {
     .limit(1)
     .maybeSingle();
 
-  await admin.from("media_assets").insert({
-    gallery_id: galleryId,
-    section_id: sectionId || null,
-    storage_provider: "supabase",
-    storage_bucket: getBucketName(),
-    storage_path: storagePath,
-    media_type: file.type.startsWith("video/") ? "video" : "photo",
-    sort_order: (latestAsset?.sort_order || 0) + 1,
-    is_cover: false,
-  });
+  let sortOrder = (latestAsset?.sort_order || 0) + 1;
+
+  for (const file of files) {
+    const extension = file.name.split(".").pop() || "bin";
+    const storagePath = `${galleryId}/${randomUUID()}.${extension}`;
+    await uploadMediaToStorage(storagePath, file);
+
+    const { error } = await admin.from("media_assets").insert({
+      gallery_id: galleryId,
+      section_id: sectionId || null,
+      storage_provider: "supabase",
+      storage_bucket: getBucketName(),
+      storage_path: storagePath,
+      media_type: file.type.startsWith("video/") ? "video" : "photo",
+      sort_order: sortOrder,
+      is_cover: false,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    sortOrder += 1;
+  }
 
   revalidatePath(`/admin/galleries/${galleryId}`);
 }

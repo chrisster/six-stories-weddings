@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { createProjectAction } from "@/app/admin/projects/actions";
+import { hasSupabaseEnv } from "@/lib/env";
 import { getProjects } from "@/lib/data";
 
 type ProjectsPageProps = {
@@ -33,6 +35,90 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
 
   return (
     <div className="space-y-5">
+      <section className="soft-panel p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Add Wedding</h2>
+          {!hasSupabaseEnv ? <p className="text-xs text-muted-foreground">Configure Supabase to save new weddings.</p> : null}
+        </div>
+        <form action={createProjectAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <input
+            name="title"
+            required
+            placeholder="Project title"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          />
+          <input name="eventDate" type="date" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
+          <input
+            name="projectType"
+            defaultValue="Wedding"
+            placeholder="Type"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          />
+          <select name="status" defaultValue="unconfirmed" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+            <option value="confirmed">Confirmed</option>
+            <option value="unconfirmed">Unconfirmed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          <select
+            name="editingStatus"
+            defaultValue="not_started"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          >
+            <option value="not_started">Editing: Not Started</option>
+            <option value="in_progress">Editing: In Progress</option>
+            <option value="review">Editing: Review</option>
+            <option value="completed">Editing: Completed</option>
+          </select>
+          <input
+            name="budgetTotal"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue="0"
+            placeholder="Budget total"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          />
+          <input
+            name="amountPaid"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue="0"
+            placeholder="Amount paid"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          />
+          <input
+            name="clientName"
+            placeholder="Primary client name"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          />
+          <input
+            name="clientEmail"
+            type="email"
+            placeholder="Client email"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          />
+          <input
+            name="clientPhone"
+            placeholder="Client phone"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+          />
+          <input
+            name="notes"
+            placeholder="Notes"
+            className="h-10 rounded-xl border border-border bg-white px-3 text-sm sm:col-span-2"
+          />
+
+          <button
+            type="submit"
+            className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background xl:justify-self-start"
+          >
+            Create wedding
+          </button>
+        </form>
+      </section>
+
       <section className="soft-panel p-4">
         <form className="grid gap-3 sm:grid-cols-[1fr_180px_auto]">
           <input

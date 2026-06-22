@@ -2,6 +2,28 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "wedding-media";
 
+export async function ensureMediaBucket() {
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  const { data: buckets } = await admin.storage.listBuckets();
+  const exists = (buckets || []).some((bucket) => bucket.id === BUCKET);
+  if (exists) {
+    return;
+  }
+
+  const { error } = await admin.storage.createBucket(BUCKET, {
+    public: false,
+    fileSizeLimit: "200MB",
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function uploadMediaToStorage(path: string, file: File) {
   const admin = createAdminClient();
   if (!admin) {
