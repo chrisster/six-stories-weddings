@@ -3,10 +3,10 @@ import { notFound } from "next/navigation";
 
 import {
   addClientToProjectAction,
-  deleteProjectAction,
   updateClientAction,
   updateProjectAction,
 } from "@/app/admin/projects/actions";
+import { DeleteProjectButton } from "@/components/admin/delete-project-button";
 import { getGalleries, getProjectById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
@@ -51,15 +51,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 Open Gallery Manager
               </Link>
             ) : null}
-            <form action={deleteProjectAction} onSubmit={(e) => { if (!confirm(`Delete "${project.title}"? This cannot be undone.`)) e.preventDefault(); }}>
-              <input type="hidden" name="projectId" value={project.id} />
-              <button
-                type="submit"
-                className="rounded-full border border-red-200 px-4 py-2 text-sm text-red-600 hover:border-red-400 hover:bg-red-50"
-              >
-                Delete project
-              </button>
-            </form>
+            <DeleteProjectButton projectId={project.id} projectTitle={project.title} />
           </div>
         </div>
       </section>
