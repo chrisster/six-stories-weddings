@@ -185,6 +185,22 @@ export async function createProjectAction(formData: FormData) {
   redirect(`/admin/projects/${project.id}`);
 }
 
+export async function deleteProjectAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+
+  const projectId = String(formData.get("projectId") || "").trim();
+  if (!projectId) return;
+
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  await admin.from("projects").delete().eq("id", projectId);
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/galleries");
+  redirect("/admin");
+}
+
 export async function updateProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;

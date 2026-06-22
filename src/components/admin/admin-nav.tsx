@@ -7,14 +7,12 @@ import {
   ContactRound,
   FolderKanban,
   ImageIcon,
-  PlusSquare,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/admin", label: "Projects", icon: FolderKanban },
-  { href: "/admin/projects/new", label: "New Wedding", icon: PlusSquare },
   { href: "/admin/contacts", label: "Contacts", icon: ContactRound },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/admin/galleries", label: "Galleries", icon: ImageIcon },
