@@ -43,6 +43,30 @@ export async function createGallerySectionAction(formData: FormData) {
   revalidatePath(`/admin/galleries/${galleryId}`);
   revalidatePath(`/g`);
 }
+export async function renameSectionAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const sectionId = String(formData.get("sectionId") || "").trim();
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  const name = String(formData.get("name") || "").trim();
+  if (!sectionId || !galleryId || !name) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  await admin.from("gallery_sections").update({ name }).eq("id", sectionId);
+  revalidatePath(`/admin/galleries/${galleryId}`);
+}
+
+export async function deleteSectionAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const sectionId = String(formData.get("sectionId") || "").trim();
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  if (!sectionId || !galleryId) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  // Unassign any media in this section before deleting
+  await admin.from("media_assets").update({ section_id: null }).eq("section_id", sectionId);
+  await admin.from("gallery_sections").delete().eq("id", sectionId);
+  revalidatePath(`/admin/galleries/${galleryId}`);
+}
 
 export async function updateGallerySettingsAction(formData: FormData) {
   if (!hasSupabaseEnv) {

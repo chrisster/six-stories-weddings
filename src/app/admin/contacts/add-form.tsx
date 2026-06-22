@@ -9,12 +9,17 @@ const labelCls = "text-xs font-medium tracking-wide text-muted-foreground upperc
 
 export function AddContactForm() {
   const [type, setType] = useState<"client" | "crew">("client");
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   async function handleSubmit(formData: FormData) {
+    setEmailError(null);
     if (type === "crew") {
       await createCrewMemberAction(formData);
     } else {
-      await createContactAction(formData);
+      const result = await createContactAction(formData);
+      if (result?.error) {
+        setEmailError(result.error);
+      }
     }
   }
 
@@ -77,6 +82,10 @@ export function AddContactForm() {
       {/* Hidden defaults for unused fields */}
       {type === "crew" && <input type="hidden" name="phone" value="" />}
       {type === "client" && <input type="hidden" name="status" value="lead" />}
+
+      {emailError && (
+        <p className="text-sm text-red-600 sm:col-span-2 xl:col-span-4">{emailError}</p>
+      )}
 
       <button
         type="submit"

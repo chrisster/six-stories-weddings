@@ -11,9 +11,9 @@ function toNumber(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export async function createContactAction(formData: FormData) {
+export async function createContactAction(formData: FormData): Promise<{ error: string } | null> {
   if (!hasSupabaseEnv) {
-    return;
+    return null;
   }
 
   const fullName = String(formData.get("fullName") || "").trim();
@@ -25,12 +25,23 @@ export async function createContactAction(formData: FormData) {
   const notes = String(formData.get("notes") || "").trim() || null;
 
   if (!fullName) {
-    return;
+    return null;
   }
 
   const admin = createAdminClient();
   if (!admin) {
-    return;
+    return null;
+  }
+
+  if (email) {
+    const { data: existing } = await admin
+      .from("contacts")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (existing) {
+      return { error: "A contact with this email already exists." };
+    }
   }
 
   const { error } = await admin.from("contacts").insert({
@@ -48,6 +59,7 @@ export async function createContactAction(formData: FormData) {
   }
 
   revalidatePath("/admin/contacts");
+  return null;
 }
 
 export async function updateContactStatusAction(formData: FormData) {

@@ -11,6 +11,7 @@ import {
 } from "@/app/admin/galleries/[id]/actions";
 import { getGalleryById } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
+import { SectionRow } from "./section-row";
 
 type GalleryManagerPageProps = {
   params: Promise<{ id: string }>;
@@ -107,9 +108,7 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
           <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Sections</h3>
           <ul className="mb-4 space-y-2">
             {detail.sections.map((section) => (
-              <li key={section.id} className="rounded-xl border border-border/70 px-3 py-2 text-sm">
-                {section.name}
-              </li>
+              <SectionRow key={section.id} section={section} galleryId={detail.gallery.id} />
             ))}
           </ul>
 

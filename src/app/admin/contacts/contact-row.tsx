@@ -65,13 +65,17 @@ export function ClientContactRow({ contact }: { contact: Contact }) {
                 <button type="submit" className="h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background">
                   Save
                 </button>
-                <form action={deleteContactAction}>
-                  <input type="hidden" name="contactId" value={contact.id} />
-                  <button type="submit" className="h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400">
-                    Delete
-                  </button>
-                </form>
+                <button
+                  type="submit"
+                  form={`del-c-${contact.id}`}
+                  className="h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
+                >
+                  Delete
+                </button>
               </div>
+            </form>
+            <form id={`del-c-${contact.id}`} action={deleteContactAction}>
+              <input type="hidden" name="contactId" value={contact.id} />
             </form>
           </td>
         </tr>
@@ -134,13 +138,17 @@ export function CrewContactRow({ member }: { member: CrewMember }) {
                 <button type="submit" className="h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background">
                   Save
                 </button>
-                <form action={deleteCrewMemberAction}>
-                  <input type="hidden" name="crewMemberId" value={member.id} />
-                  <button type="submit" className="h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400">
-                    Remove
-                  </button>
-                </form>
+                <button
+                  type="submit"
+                  form={`del-cr-${member.id}`}
+                  className="h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
+                >
+                  Remove
+                </button>
               </div>
+            </form>
+            <form id={`del-cr-${member.id}`} action={deleteCrewMemberAction}>
+              <input type="hidden" name="crewMemberId" value={member.id} />
             </form>
           </td>
         </tr>
