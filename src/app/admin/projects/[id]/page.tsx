@@ -139,10 +139,8 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         </form>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-
-        <article className="soft-panel p-5">
-          <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
+      <section className="soft-panel p-5">
+        <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
           <ul className="space-y-2">
             {project.crewAssignments.map((assignment) => (
               <li key={assignment.id} className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
@@ -175,9 +173,9 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               {crewMembers.length === 0 ? "No crew in roster yet — add them in Contacts." : "All crew members are already assigned."}
             </p>
           )}
-        </article>
+      </section>
 
-        <article className="soft-panel p-5">
+      <section className="soft-panel p-5">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Tasks</h3>
             <Link href="/admin/tasks" className="text-xs text-muted-foreground hover:text-foreground">View all →</Link>
@@ -223,8 +221,6 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <input name="dueDate" type="date" className="h-10 rounded-xl border border-border px-3 text-sm" />
             <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm">Add</button>
           </form>
-        </article>
-
       </section>
     </div>
   );

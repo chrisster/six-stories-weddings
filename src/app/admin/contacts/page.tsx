@@ -36,17 +36,6 @@ export default async function ContactsPage() {
           <input name="fullName" required placeholder="Full name" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
           <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
           <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-          <input name="eventDate" type="date" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-
-          <input
-            name="offerAmount"
-            type="number"
-            min="0"
-            step="0.01"
-            defaultValue="0"
-            placeholder="Offer amount"
-            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-          />
           <select name="status" defaultValue="lead" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
             <option value="lead">Lead</option>
             <option value="offer_sent">Offer sent</option>
