@@ -29,17 +29,20 @@ export async function createProjectAction(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const eventDate = String(formData.get("eventDate") || "").trim();
 
-  // Services → project_type string
+  // Services + event type → project_type string
   const servicesRaw = String(formData.get("services") || "");
   const servicesArr = servicesRaw.split(",").filter(Boolean);
-  const projectType =
+  const rawEventType = String(formData.get("eventType") || "wedding").trim().toLowerCase();
+  const eventLabel = rawEventType === "baptism" ? "Baptism" : "Wedding";
+  const servicesLabel =
     servicesArr.includes("photo") && servicesArr.includes("video")
       ? "Photo + Video"
       : servicesArr.includes("photo")
         ? "Photography"
         : servicesArr.includes("video")
           ? "Videography"
-          : String(formData.get("projectType") || "Wedding").trim();
+          : null;
+  const projectType = servicesLabel ? `${eventLabel} ${servicesLabel}` : eventLabel;
 
   // Always create as draft initially
   const status = "draft";
@@ -249,6 +252,7 @@ export async function updateProjectAction(formData: FormData) {
   const projectType = String(formData.get("projectType") || "Wedding").trim();
   const status = String(formData.get("status") || "draft").trim();
   const editingStatus = String(formData.get("editingStatus") || "not_started").trim();
+  const referral = String(formData.get("referral") || "").trim() || null;
   const notes = String(formData.get("notes") || "").trim() || null;
   const budgetTotal = toNumber(formData.get("budgetTotal"));
   const amountPaid = toNumber(formData.get("amountPaid"));
@@ -268,6 +272,7 @@ export async function updateProjectAction(formData: FormData) {
       project_type: projectType,
       status,
       editing_status: editingStatus,
+      referral,
       budget_total: budgetTotal,
       amount_paid: amountPaid,
       amount_remaining: amountRemaining,
@@ -337,6 +342,9 @@ export async function addCrewToProjectAction(formData: FormData) {
   const projectId = String(formData.get("projectId") || "").trim();
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const assignmentRole = String(formData.get("assignmentRole") || "crew").trim();
+  const participantType = String(formData.get("participantType") || "inhouse").trim();
+  const rawFee = formData.get("freelancerFee");
+  const freelancerFee = rawFee && String(rawFee).trim() !== "" ? Number(rawFee) : null;
   if (!projectId || !crewMemberId) return;
   const admin = createAdminClient();
   if (!admin) return;
@@ -350,6 +358,8 @@ export async function addCrewToProjectAction(formData: FormData) {
       project_id: projectId,
       crew_member_id: crewMemberId,
       assignment_role: assignmentRole,
+      participant_type: participantType,
+      freelancer_fee: freelancerFee,
     });
   }
   revalidatePath(`/admin/projects/${projectId}`);

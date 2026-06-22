@@ -56,6 +56,7 @@ export function NewWeddingForm({
   crewMembers: CrewMember[];
 }) {
   const [services, setServices] = useState<ServiceType[]>(["photo", "video"]);
+  const [eventType, setEventType] = useState<"wedding" | "baptism">("wedding");
   const [clients, setClients] = useState<ClientEntry[]>([emptyClient()]);
   const [crew, setCrew] = useState<CrewEntry[]>([]);
 
@@ -130,6 +131,7 @@ export function NewWeddingForm({
     <form action={createProjectAction} className="space-y-6">
       {/* Serialized dynamic data */}
       <input type="hidden" name="services" value={services.join(",")} />
+      <input type="hidden" name="eventType" value={eventType} />
       <input type="hidden" name="clientsData" value={JSON.stringify(clients)} />
       <input type="hidden" name="crewData" value={JSON.stringify(crew)} />
 
@@ -143,13 +145,33 @@ export function NewWeddingForm({
             <input
               name="title"
               required
-              placeholder="e.g. Joost & Stav Wedding"
+              placeholder="e.g. Joost & Stav"
               className={inputCls}
             />
           </div>
           <div className="space-y-1">
             <label className={labelCls}>Event Date *</label>
             <input name="eventDate" type="date" required className={inputCls} />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className={labelCls}>Event Type</label>
+          <div className="flex gap-2">
+            {(["wedding", "baptism"] as const).map((et) => (
+              <button
+                key={et}
+                type="button"
+                onClick={() => setEventType(et)}
+                className={`rounded-xl border px-5 py-2.5 text-sm font-medium transition ${
+                  eventType === et
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-border bg-white hover:border-foreground/30"
+                }`}
+              >
+                {et === "wedding" ? "Wedding" : "Baptism"}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -434,7 +456,7 @@ export function NewWeddingForm({
           type="submit"
           className="h-11 rounded-xl border border-foreground bg-foreground px-6 text-sm font-medium text-background"
         >
-          Create Wedding
+          Create Project
         </button>
         <Link
           href="/admin"

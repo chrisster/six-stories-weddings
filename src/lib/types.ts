@@ -12,7 +12,7 @@ export type Client = {
 export type CrewMember = {
   id: string;
   fullName: string;
-  roleType: "photographer" | "videographer" | "editor" | "assistant";
+  roleType: "photographer" | "videographer" | "editor" | "assistant" | "partner";
   contactInfo?: string | null;
 };
 
@@ -21,6 +21,8 @@ export type CrewAssignment = {
   projectId: string;
   crewMemberId: string;
   assignmentRole: string;
+  participantType: "inhouse" | "freelancer";
+  freelancerFee: number | null;
   notes?: string | null;
   crewMember: CrewMember;
 };

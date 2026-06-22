@@ -38,11 +38,13 @@ function normalizeProject(row: Record<string, unknown>): Project {
         projectId: String(assignment.project_id),
         crewMemberId: String(assignment.crew_member_id),
         assignmentRole: String(assignment.assignment_role || ""),
+        participantType: ((assignment.participant_type as string) === "freelancer" ? "freelancer" : "inhouse") as "inhouse" | "freelancer",
+        freelancerFee: assignment.freelancer_fee != null ? Number(assignment.freelancer_fee) : null,
         notes: assignment.notes as string | null,
         crewMember: {
           id: String(member.id || ""),
           fullName: String(member.full_name || ""),
-          roleType: (member.role_type as "photographer" | "videographer" | "editor" | "assistant") || "assistant",
+          roleType: (member.role_type as "photographer" | "videographer" | "editor" | "assistant" | "partner") || "assistant",
           contactInfo: member.contact_info as string | null,
         },
       };

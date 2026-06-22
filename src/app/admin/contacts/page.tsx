@@ -28,11 +28,14 @@ export default async function ContactsPage() {
     <div className="space-y-6">
       <section className="soft-panel p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="title-cinematic text-2xl font-semibold">Contacts Pipeline</h2>
+          <h2 className="title-cinematic text-2xl font-semibold">Contacts</h2>
           {!hasSupabaseEnv ? <p className="text-xs text-muted-foreground">Demo mode: changes are not persisted.</p> : null}
         </div>
 
-        <form action={createContactAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <details className="mt-1">
+          <summary className="inline-flex cursor-pointer select-none items-center rounded-xl border border-border px-4 py-2 text-sm hover:border-foreground/40">+ Add contact</summary>
+          <div className="mt-3">
+            <form action={createContactAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input name="fullName" required placeholder="Full name" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
           <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
           <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
@@ -51,7 +54,9 @@ export default async function ContactsPage() {
           <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background xl:justify-self-start">
             Add contact
           </button>
-        </form>
+            </form>
+          </div>
+        </details>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-border/80 bg-white/80">
@@ -131,6 +136,7 @@ export default async function ContactsPage() {
             <option value="videographer">Videographer</option>
             <option value="editor">Editor</option>
             <option value="assistant">Assistant</option>
+            <option value="partner">Partner</option>
           </select>
           <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
           <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />

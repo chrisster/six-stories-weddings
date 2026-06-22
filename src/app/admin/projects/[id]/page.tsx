@@ -62,6 +62,9 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <p className="mt-2 text-sm text-muted-foreground">
               {project.eventDate} · {project.projectType}
             </p>
+            {(project as any).referral ? (
+              <p className="mt-1 text-sm text-muted-foreground">Referred by {(project as any).referral}</p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {linkedGallery ? (
@@ -124,14 +127,23 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
       <section className="soft-panel p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Edit Wedding Details</h3>
+          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Edit Project Details</h3>
           {!hasSupabaseEnv ? <p className="text-xs text-muted-foreground">Read-only in demo mode.</p> : null}
         </div>
         <form id="edit-wedding-form" action={updateProjectAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input type="hidden" name="projectId" value={project.id} />
           <input name="title" required defaultValue={project.title} className="h-10 rounded-xl border border-border px-3 text-sm" />
           <input name="eventDate" type="text" required defaultValue={toDisplayDate(project.eventDate)} placeholder="DD-MM-YYYY" className="h-10 rounded-xl border border-border px-3 text-sm" />
-          <input name="projectType" defaultValue={project.projectType} className="h-10 rounded-xl border border-border px-3 text-sm" />
+          <select name="projectType" defaultValue={project.projectType} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+            <option value="Wedding">Wedding</option>
+            <option value="Wedding Photo + Video">Wedding Photo + Video</option>
+            <option value="Wedding Photography">Wedding Photography</option>
+            <option value="Wedding Videography">Wedding Videography</option>
+            <option value="Baptism">Baptism</option>
+            <option value="Baptism Photo + Video">Baptism Photo + Video</option>
+            <option value="Baptism Photography">Baptism Photography</option>
+            <option value="Baptism Videography">Baptism Videography</option>
+          </select>
           <select name="status" defaultValue={project.status} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
             <option value="draft">Draft</option>
             <option value="negotiating">Negotiating</option>
@@ -148,12 +160,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           </select>
           <input name="budgetTotal" type="number" min="0" step="0.01" defaultValue={project.budgetTotal} className="h-10 rounded-xl border border-border px-3 text-sm" />
           <input name="amountPaid" type="number" min="0" step="0.01" defaultValue={project.amountPaid} className="h-10 rounded-xl border border-border px-3 text-sm" />
+          <input name="referral" defaultValue={project.referral || ""} placeholder="Referred by" className="h-10 rounded-xl border border-border px-3 text-sm" />
           <input name="notes" defaultValue={project.notes || ""} placeholder="Notes" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-2" />
         </form>
       </section>
 
-      <div className="flex">
-        <button type="submit" form="edit-wedding-form" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Save wedding</button>
+      <div className="flex justify-end">
+        <button type="submit" form="edit-wedding-form" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Save</button>
       </div>
 
       <section className="soft-panel p-5">
@@ -163,8 +176,20 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               <li key={assignment.id} className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
                 <div>
                   <p className="font-medium">{assignment.crewMember.fullName}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{assignment.assignmentRole} · {assignment.crewMember.roleType}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {assignment.assignmentRole} · {assignment.crewMember.roleType} ·{" "}
+                    {assignment.participantType === "freelancer" ? (
+                      <span className="text-amber-600">
+                        Freelancer{assignment.freelancerFee != null ? ` · ${currency(assignment.freelancerFee)}` : ""}
+                      </span>
+                    ) : (
+                      "In-house"
+                    )}
+                  </p>
                 </div>
+                {(assignment as any).participantType === "freelancer" ? (
+                  <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Freelancer{(assignment as any).freelancerBudget ? ` €${(assignment as any).freelancerBudget}` : ""}</span>
+                ) : null}
                 <form action={removeCrewFromProjectAction}>
                   <input type="hidden" name="projectId" value={project.id} />
                   <input type="hidden" name="assignmentId" value={assignment.id} />
@@ -174,7 +199,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             ))}
           </ul>
           {availableCrew.length > 0 ? (
-            <form action={addCrewToProjectAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 p-3 sm:grid-cols-[1fr_1fr_auto]">
+            <form action={addCrewToProjectAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto_auto]">
               <input type="hidden" name="projectId" value={project.id} />
               <select name="crewMemberId" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
                 <option value="">Select crew member</option>
@@ -183,6 +208,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 ))}
               </select>
               <input name="assignmentRole" placeholder="Role on this project" className="h-10 rounded-xl border border-border px-3 text-sm" />
+              <select name="participantType" defaultValue="inhouse" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+                <option value="inhouse">In-house</option>
+                <option value="freelancer">Freelancer</option>
+              </select>
+              <input name="freelancerFee" type="number" min="0" step="0.01" placeholder="Fee (freelancer)" className="h-10 rounded-xl border border-border px-3 text-sm" />
               <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm">Add</button>
             </form>
           ) : (

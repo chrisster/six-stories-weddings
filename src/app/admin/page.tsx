@@ -50,12 +50,12 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
 
       <section className="soft-panel p-4">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="title-cinematic text-2xl font-semibold">Wedding Projects</h2>
+          <h2 className="title-cinematic text-2xl font-semibold">Projects</h2>
           <Link
             href="/admin/projects/new"
             className="h-9 rounded-xl border border-foreground bg-foreground px-4 py-2 text-sm text-background"
           >
-            Add wedding
+            Add project
           </Link>
         </div>
 

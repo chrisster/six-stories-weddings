@@ -46,6 +46,8 @@ export const demoProject: Project = {
       projectId,
       crewMemberId: "demo-crew-chris",
       assignmentRole: "Lead Photographer",
+      participantType: "inhouse" as const,
+      freelancerFee: null,
       crewMember: {
         id: "demo-crew-chris",
         fullName: "Chris",
@@ -57,6 +59,8 @@ export const demoProject: Project = {
       projectId,
       crewMemberId: "demo-crew-ares",
       assignmentRole: "Videographer",
+      participantType: "inhouse" as const,
+      freelancerFee: null,
       crewMember: {
         id: "demo-crew-ares",
         fullName: "Ares",
@@ -68,6 +72,8 @@ export const demoProject: Project = {
       projectId,
       crewMemberId: "demo-crew-vicky",
       assignmentRole: "Editor",
+      participantType: "inhouse" as const,
+      freelancerFee: null,
       crewMember: {
         id: "demo-crew-vicky",
         fullName: "Vicky",
