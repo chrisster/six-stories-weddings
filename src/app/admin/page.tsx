@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { MetricCard } from "@/components/admin/metric-card";
 import { getDashboardMetrics, getProjects } from "@/lib/data";
+import { formatDateDDMMYY } from "@/lib/utils";
 
 type AdminPageProps = {
   searchParams: Promise<{ q?: string; status?: string }>;
@@ -106,7 +107,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
             <tbody>
               {filtered.map((project) => (
                 <tr key={project.id} className="border-b border-border/70 last:border-b-0 hover:bg-muted/20">
-                  <td className="px-4 py-3 align-top text-sm text-muted-foreground">{project.eventDate}</td>
+                  <td className="px-4 py-3 align-top text-sm text-muted-foreground">{formatDateDDMMYY(project.eventDate)}</td>
                   <td className="px-4 py-3 align-top">
                     <Link href={`/admin/projects/${project.id}`} className="font-medium hover:underline">
                       {project.title}

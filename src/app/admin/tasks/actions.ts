@@ -9,7 +9,7 @@ export async function createTaskAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
   const projectId = String(formData.get("projectId") || "").trim();
   const title = String(formData.get("title") || "").trim();
-  const priority = String(formData.get("priority") || "medium").trim();
+  const assigneeId = String(formData.get("assigneeId") || "").trim() || null;
   const dueDate = String(formData.get("dueDate") || "").trim() || null;
   if (!projectId || !title) return;
   const admin = createAdminClient();
@@ -18,7 +18,7 @@ export async function createTaskAction(formData: FormData) {
     project_id: projectId,
     title,
     status: "todo",
-    priority,
+    assignee_id: assigneeId,
     due_date: dueDate,
   });
   revalidatePath(`/admin/projects/${projectId}`);

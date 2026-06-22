@@ -56,7 +56,7 @@ function normalizeProject(row: Record<string, unknown>): Project {
     title: String(task.title || ""),
     status: (task.status as "todo" | "in_progress" | "done") || "todo",
     dueDate: task.due_date as string | null,
-    priority: (task.priority as "low" | "medium" | "high") || "medium",
+    assigneeId: task.assignee_id as string | null,
   }));
 
   const deliverables =

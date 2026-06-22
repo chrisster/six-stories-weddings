@@ -7,6 +7,7 @@ import {
 } from "@/app/admin/contacts/actions";
 import { getContacts, getCrewMembers } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
+import { formatDateDDMMYY } from "@/lib/utils";
 
 function currency(value: number | null | undefined) {
   if (value == null) {
@@ -36,20 +37,35 @@ export default async function ContactsPage() {
           <summary className="inline-flex cursor-pointer select-none items-center rounded-xl border border-border px-4 py-2 text-sm hover:border-foreground/40">+ Add contact</summary>
           <div className="mt-3">
             <form action={createContactAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <input name="fullName" required placeholder="Full name" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-          <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-          <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-          <select name="status" defaultValue="lead" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+          <div className="space-y-1">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Full Name *</label>
+            <input name="fullName" required placeholder="Full name" className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Email</label>
+            <input name="email" type="email" placeholder="Email" className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Phone</label>
+            <input name="phone" placeholder="Phone" className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Status</label>
+            <select name="status" defaultValue="lead" className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
             <option value="lead">Lead</option>
             <option value="offer_sent">Offer sent</option>
             <option value="confirmed">Confirmed</option>
             <option value="rejected">Rejected</option>
           </select>
-          <input
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Notes</label>
+            <input
             name="notes"
             placeholder="Notes"
-            className="h-10 rounded-xl border border-border bg-white px-3 text-sm sm:col-span-2"
+            className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
           />
+          </div>
 
           <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background xl:justify-self-start">
             Add contact
@@ -60,6 +76,9 @@ export default async function ContactsPage() {
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-border/80 bg-white/80">
+        <div className="px-4 pt-4 pb-2">
+          <h3 className="text-sm font-semibold tracking-[0.15em] text-foreground uppercase">Clients</h3>
+        </div>
         <table className="w-full min-w-[980px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
@@ -76,7 +95,7 @@ export default async function ContactsPage() {
             {contacts.map((contact) => (
               <tr key={contact.id} className="border-b border-border/70 last:border-b-0">
                 <td className="px-4 py-3 align-top font-medium">{contact.fullName}</td>
-                <td className="px-4 py-3 align-top">{contact.eventDate || "-"}</td>
+                <td className="px-4 py-3 align-top">{formatDateDDMMYY(contact.eventDate)}</td>
                 <td className="px-4 py-3 align-top">{currency(contact.offerAmount)}</td>
                 <td className="px-4 py-3 align-top capitalize">{contact.status.replace("_", " ")}</td>
                 <td className="px-4 py-3 align-top">
@@ -129,18 +148,27 @@ export default async function ContactsPage() {
           <p className="mt-1 text-sm text-muted-foreground">Crew members available to assign to projects.</p>
         </div>
 
-        <form action={createCrewMemberAction} className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <input name="fullName" required placeholder="Full name" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-          <select name="roleType" defaultValue="photographer" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
-            <option value="photographer">Photographer</option>
-            <option value="videographer">Videographer</option>
-            <option value="editor">Editor</option>
-            <option value="assistant">Assistant</option>
-            <option value="partner">Partner</option>
-          </select>
-          <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-          <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
-          <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background xl:justify-self-start">
+        <form action={createCrewMemberAction} className="mb-5 grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Full Name *</label>
+            <input name="fullName" required placeholder="Full name" className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Role</label>
+            <select name="roleType" defaultValue="photographer" className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
+              <option value="photographer">Photographer</option>
+              <option value="videographer">Videographer</option>
+              <option value="editor">Editor</option>
+              <option value="assistant">Assistant</option>
+              <option value="partner">Partner</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Email</label>
+            <input name="email" type="email" placeholder="Email" className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+          </div>
+          <input type="hidden" name="phone" value="" />
+          <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background sm:justify-self-start">
             Add crew member
           </button>
         </form>

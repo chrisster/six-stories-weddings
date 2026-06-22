@@ -35,12 +35,12 @@ export async function createProjectAction(formData: FormData) {
   const rawEventType = String(formData.get("eventType") || "wedding").trim().toLowerCase();
   const eventLabel = rawEventType === "baptism" ? "Baptism" : "Wedding";
   const servicesLabel =
-    servicesArr.includes("photo") && servicesArr.includes("video")
-      ? "Photo + Video"
+    servicesArr.includes("photo") && servicesArr.includes("film")
+      ? "Photography + Film"
       : servicesArr.includes("photo")
         ? "Photography"
-        : servicesArr.includes("video")
-          ? "Videography"
+        : servicesArr.includes("film")
+          ? "Film"
           : null;
   const projectType = servicesLabel ? `${eventLabel} ${servicesLabel}` : eventLabel;
 

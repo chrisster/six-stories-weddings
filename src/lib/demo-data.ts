@@ -88,7 +88,6 @@ export const demoProject: Project = {
       title: "Pre-wedding planning call",
       status: "done",
       dueDate: "2026-05-15",
-      priority: "medium",
     },
     {
       id: "demo-task-2",
@@ -96,7 +95,6 @@ export const demoProject: Project = {
       title: "Backup footage and dual-drive archive",
       status: "done",
       dueDate: "2026-05-24",
-      priority: "high",
     },
     {
       id: "demo-task-3",
@@ -104,7 +102,6 @@ export const demoProject: Project = {
       title: "First photo cull",
       status: "in_progress",
       dueDate: "2026-06-30",
-      priority: "high",
     },
     {
       id: "demo-task-4",
@@ -112,7 +109,6 @@ export const demoProject: Project = {
       title: "Highlight film draft",
       status: "todo",
       dueDate: "2026-07-12",
-      priority: "medium",
     },
   ],
   deliverables: [

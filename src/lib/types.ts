@@ -33,7 +33,7 @@ export type ProjectTask = {
   title: string;
   status: "todo" | "in_progress" | "done";
   dueDate?: string | null;
-  priority: "low" | "medium" | "high";
+  assigneeId?: string | null;
 };
 
 export type Deliverable = {

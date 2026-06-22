@@ -7,7 +7,7 @@ import { PlusIcon } from "lucide-react";
 import { createProjectAction } from "@/app/admin/projects/actions";
 import type { Contact, CrewMember } from "@/lib/types";
 
-type ServiceType = "photo" | "video";
+type ServiceType = "photo" | "film";
 
 type ClientEntry = {
   contactId: string;
@@ -55,7 +55,7 @@ export function NewWeddingForm({
   contacts: Contact[];
   crewMembers: CrewMember[];
 }) {
-  const [services, setServices] = useState<ServiceType[]>(["photo", "video"]);
+  const [services, setServices] = useState<ServiceType[]>(["photo", "film"]);
   const [eventType, setEventType] = useState<"wedding" | "baptism">("wedding");
   const [clients, setClients] = useState<ClientEntry[]>([emptyClient()]);
   const [crew, setCrew] = useState<CrewEntry[]>([]);
@@ -178,7 +178,7 @@ export function NewWeddingForm({
         <div className="space-y-1">
           <label className={labelCls}>Services</label>
           <div className="flex gap-2">
-            {(["photo", "video"] as ServiceType[]).map((svc) => (
+            {(["photo", "film"] as ServiceType[]).map((svc) => (
               <button
                 key={svc}
                 type="button"
@@ -189,7 +189,7 @@ export function NewWeddingForm({
                     : "border-border bg-white hover:border-foreground/30"
                 }`}
               >
-                {svc === "photo" ? "Photography" : "Videography"}
+                {svc === "photo" ? "Photography" : "Film"}
               </button>
             ))}
           </div>

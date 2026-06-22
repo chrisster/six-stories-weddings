@@ -13,6 +13,7 @@ import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/ap
 import { DeleteProjectButton } from "@/components/admin/delete-project-button";
 import { getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
+import { formatDateDDMMYY } from "@/lib/utils";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -31,10 +32,10 @@ function toDisplayDate(iso: string): string {
   return iso;
 }
 
-const priorityBadge: Record<string, string> = {
-  low: "bg-zinc-100 text-zinc-500",
-  medium: "bg-sky-100 text-sky-700",
-  high: "bg-red-100 text-red-700",
+const statusBadge: Record<string, string> = {
+  todo: "bg-zinc-100 text-zinc-500",
+  in_progress: "bg-amber-100 text-amber-700",
+  done: "bg-emerald-100 text-emerald-700",
 };
 
 export default async function ProjectDetailPage({ params }: ProjectPageProps) {
@@ -60,7 +61,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase">Project</p>
             <h2 className="title-cinematic mt-2 text-3xl font-semibold">{project.title}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {project.eventDate} · {project.projectType}
+              {formatDateDDMMYY(project.eventDate)} · {project.projectType}
             </p>
             {(project as any).referral ? (
               <p className="mt-1 text-sm text-muted-foreground">Referred by {(project as any).referral}</p>
@@ -136,13 +137,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <input name="eventDate" type="text" required defaultValue={toDisplayDate(project.eventDate)} placeholder="DD-MM-YYYY" className="h-10 rounded-xl border border-border px-3 text-sm" />
           <select name="projectType" defaultValue={project.projectType} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
             <option value="Wedding">Wedding</option>
-            <option value="Wedding Photo + Video">Wedding Photo + Video</option>
+            <option value="Wedding Photography + Film">Wedding Photography + Film</option>
             <option value="Wedding Photography">Wedding Photography</option>
-            <option value="Wedding Videography">Wedding Videography</option>
+            <option value="Wedding Film">Wedding Film</option>
             <option value="Baptism">Baptism</option>
-            <option value="Baptism Photo + Video">Baptism Photo + Video</option>
+            <option value="Baptism Photography + Film">Baptism Photography + Film</option>
             <option value="Baptism Photography">Baptism Photography</option>
-            <option value="Baptism Videography">Baptism Videography</option>
+            <option value="Baptism Film">Baptism Film</option>
           </select>
           <select name="status" defaultValue={project.status} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
             <option value="draft">Draft</option>
@@ -228,13 +229,17 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <Link href="/admin/tasks" className="text-xs text-muted-foreground hover:text-foreground">View all →</Link>
           </div>
           <ul className="space-y-2">
-            {project.tasks.map((task) => (
+            {project.tasks.map((task) => {
+              const assignee = task.assigneeId
+                ? project.crewAssignments.find((a) => a.crewMemberId === task.assigneeId)?.crewMember.fullName
+                : null;
+              return (
               <li key={task.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 px-3 py-2">
                 <div className="min-w-0">
                   <p className={`text-sm font-medium ${task.status === "done" ? "line-through opacity-40" : ""}`}>{task.title}</p>
                   <div className="mt-0.5 flex items-center gap-2">
-                    <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${priorityBadge[task.priority] || ""}`}>{task.priority}</span>
-                    {task.dueDate ? <span className="text-xs text-muted-foreground">{task.dueDate}</span> : null}
+                    {assignee ? <span className="text-xs text-muted-foreground">{assignee}</span> : null}
+                    {task.dueDate ? <span className="text-xs text-muted-foreground">{formatDateDDMMYY(task.dueDate)}</span> : null}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -255,15 +260,17 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                   </form>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
           <form action={createTaskAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 p-3 sm:grid-cols-[1fr_auto_auto_auto]">
             <input type="hidden" name="projectId" value={project.id} />
             <input name="title" placeholder="New task..." required className="h-10 rounded-xl border border-border px-3 text-sm" />
-            <select name="priority" defaultValue="medium" className="h-10 rounded-xl border border-border bg-white px-2 text-sm">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+            <select name="assigneeId" className="h-10 rounded-xl border border-border bg-white px-2 text-sm">
+              <option value="">Assignee</option>
+              {project.crewAssignments.map((a) => (
+                <option key={a.crewMemberId} value={a.crewMemberId}>{a.crewMember.fullName}</option>
+              ))}
             </select>
             <input name="dueDate" type="date" className="h-10 rounded-xl border border-border px-3 text-sm" />
             <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm">Add</button>

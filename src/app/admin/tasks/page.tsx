@@ -2,14 +2,9 @@ import Link from "next/link";
 
 import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/app/admin/tasks/actions";
 import { getProjects } from "@/lib/data";
+import { formatDateDDMMYY } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-
-const priorityBadge: Record<string, string> = {
-  low: "bg-zinc-100 text-zinc-500",
-  medium: "bg-sky-100 text-sky-700",
-  high: "bg-red-100 text-red-700",
-};
 
 const statusBadge: Record<string, string> = {
   todo: "bg-zinc-100 text-zinc-500",
@@ -57,22 +52,24 @@ export default async function TasksPage() {
               <Link href={`/admin/projects/${project.id}`} className="font-medium hover:underline">
                 {project.title}
               </Link>
-              <span className="text-xs text-muted-foreground">{project.eventDate}</span>
+              <span className="text-xs text-muted-foreground">{formatDateDDMMYY(project.eventDate)}</span>
             </div>
 
             {tasks.length > 0 ? (
               <ul className="divide-y divide-border/50">
-                {tasks.map((task) => (
+                {tasks.map((task) => {
+                  const assignee = task.assigneeId
+                    ? project.crewAssignments.find((a) => a.crewMemberId === task.assigneeId)?.crewMember.fullName
+                    : null;
+                  return (
                   <li key={task.id} className="flex items-center gap-3 px-5 py-3">
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm font-medium ${task.status === "done" ? "line-through opacity-40" : ""}`}>
                         {task.title}
                       </p>
                       <div className="mt-0.5 flex items-center gap-2">
-                        <span className={`inline-block rounded px-1.5 py-0.5 text-xs ${priorityBadge[task.priority] || ""}`}>
-                          {task.priority}
-                        </span>
-                        {task.dueDate ? <span className="text-xs text-muted-foreground">{task.dueDate}</span> : null}
+                        {assignee ? <span className="text-xs text-muted-foreground">{assignee}</span> : null}
+                        {task.dueDate ? <span className="text-xs text-muted-foreground">{formatDateDDMMYY(task.dueDate)}</span> : null}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -102,7 +99,8 @@ export default async function TasksPage() {
                       </form>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : (
               <p className="px-5 py-3 text-sm text-muted-foreground">No tasks yet.</p>
@@ -117,10 +115,11 @@ export default async function TasksPage() {
                   required
                   className="h-9 flex-1 rounded-xl border border-border px-3 text-sm"
                 />
-                <select name="priority" defaultValue="medium" className="h-9 rounded-xl border border-border bg-white px-2 text-sm">
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
+                <select name="assigneeId" className="h-9 rounded-xl border border-border bg-white px-2 text-sm">
+                  <option value="">Assignee</option>
+                  {project.crewAssignments.map((a) => (
+                    <option key={a.crewMemberId} value={a.crewMemberId}>{a.crewMember.fullName}</option>
+                  ))}
                 </select>
                 <input name="dueDate" type="date" className="h-9 rounded-xl border border-border px-3 text-sm" />
                 <button type="submit" className="h-9 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">
