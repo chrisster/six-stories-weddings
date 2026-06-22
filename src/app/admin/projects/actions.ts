@@ -241,7 +241,11 @@ export async function updateProjectAction(formData: FormData) {
   }
 
   const title = String(formData.get("title") || "").trim();
-  const eventDate = String(formData.get("eventDate") || "").trim();
+  // Accept DD-MM-YYYY (display format) and convert to YYYY-MM-DD for storage
+  const rawDate = String(formData.get("eventDate") || "").trim();
+  const eventDate = /^\d{2}-\d{2}-\d{4}$/.test(rawDate)
+    ? `${rawDate.slice(6)}-${rawDate.slice(3, 5)}-${rawDate.slice(0, 2)}`
+    : rawDate;
   const projectType = String(formData.get("projectType") || "Wedding").trim();
   const status = String(formData.get("status") || "draft").trim();
   const editingStatus = String(formData.get("editingStatus") || "not_started").trim();

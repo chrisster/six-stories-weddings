@@ -22,6 +22,15 @@ function currency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 }
 
+function toDisplayDate(iso: string): string {
+  if (!iso) return "";
+  const parts = iso.split("-");
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  return iso;
+}
+
 const priorityBadge: Record<string, string> = {
   low: "bg-zinc-100 text-zinc-500",
   medium: "bg-sky-100 text-sky-700",
@@ -88,13 +97,18 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               </li>
             ))}
           </ul>
-          <form action={addClientToProjectAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 p-3 sm:grid-cols-3">
-            <input type="hidden" name="projectId" value={project.id} />
-            <input name="fullName" placeholder="Full name" required className="h-10 rounded-xl border border-border px-3 text-sm" />
-            <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border px-3 text-sm" />
-            <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border px-3 text-sm" />
-            <button type="submit" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-3 sm:justify-self-start">Add client</button>
-          </form>
+          <details className="mt-4 rounded-xl border border-border/80">
+            <summary className="cursor-pointer select-none px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground">+ Add client</summary>
+            <div className="p-3">
+              <form action={addClientToProjectAction} className="grid gap-2 sm:grid-cols-3">
+                <input type="hidden" name="projectId" value={project.id} />
+                <input name="fullName" placeholder="Full name" required className="h-10 rounded-xl border border-border px-3 text-sm" />
+                <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border px-3 text-sm" />
+                <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border px-3 text-sm" />
+                <button type="submit" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-3 sm:justify-self-start">Add client</button>
+              </form>
+            </div>
+          </details>
         </article>
 
         <article className="soft-panel p-5">
@@ -113,10 +127,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Edit Wedding Details</h3>
           {!hasSupabaseEnv ? <p className="text-xs text-muted-foreground">Read-only in demo mode.</p> : null}
         </div>
-        <form action={updateProjectAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <form id="edit-wedding-form" action={updateProjectAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input type="hidden" name="projectId" value={project.id} />
           <input name="title" required defaultValue={project.title} className="h-10 rounded-xl border border-border px-3 text-sm" />
-          <input name="eventDate" type="date" required defaultValue={project.eventDate} className="h-10 rounded-xl border border-border px-3 text-sm" />
+          <input name="eventDate" type="text" required defaultValue={toDisplayDate(project.eventDate)} placeholder="DD-MM-YYYY" className="h-10 rounded-xl border border-border px-3 text-sm" />
           <input name="projectType" defaultValue={project.projectType} className="h-10 rounded-xl border border-border px-3 text-sm" />
           <select name="status" defaultValue={project.status} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
             <option value="draft">Draft</option>
@@ -135,9 +149,12 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <input name="budgetTotal" type="number" min="0" step="0.01" defaultValue={project.budgetTotal} className="h-10 rounded-xl border border-border px-3 text-sm" />
           <input name="amountPaid" type="number" min="0" step="0.01" defaultValue={project.amountPaid} className="h-10 rounded-xl border border-border px-3 text-sm" />
           <input name="notes" defaultValue={project.notes || ""} placeholder="Notes" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-2" />
-          <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background xl:justify-self-start">Save wedding</button>
         </form>
       </section>
+
+      <div className="flex">
+        <button type="submit" form="edit-wedding-form" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Save wedding</button>
+      </div>
 
       <section className="soft-panel p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
