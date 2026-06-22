@@ -2,13 +2,14 @@ import { addDays, isAfter, parseISO } from "date-fns";
 
 import {
   demoContacts,
+  demoCrewMembersList,
   demoGallery,
   demoGalleryDetail,
   demoProject,
 } from "@/lib/demo-data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Contact, Gallery, GalleryDetail, Project } from "@/lib/types";
+import type { Contact, CrewMember, Gallery, GalleryDetail, Project } from "@/lib/types";
 
 type DashboardMetrics = {
   totalProjects: number;
@@ -272,6 +273,34 @@ export async function getPublicGalleryBySlug(slug: string) {
   }
 
   return getGalleryById(String(galleryRow.id));
+}
+
+export async function getCrewMembers(): Promise<CrewMember[]> {
+  if (!hasSupabaseEnv) {
+    return demoCrewMembersList;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return demoCrewMembersList;
+  }
+
+  const { data, error } = await admin
+    .from("crew_members")
+    .select("*")
+    .eq("active", true)
+    .order("full_name", { ascending: true });
+
+  if (error || !data) {
+    return demoCrewMembersList;
+  }
+
+  return data.map((row) => ({
+    id: String(row.id),
+    fullName: String(row.full_name || ""),
+    roleType: (row.role_type as CrewMember["roleType"]) || "assistant",
+    contactInfo: (row.contact_info as string | null) || null,
+  }));
 }
 
 export async function getContacts(): Promise<Contact[]> {

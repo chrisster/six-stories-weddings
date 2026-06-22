@@ -28,17 +28,59 @@ export async function createProjectAction(formData: FormData) {
 
   const title = String(formData.get("title") || "").trim();
   const eventDate = String(formData.get("eventDate") || "").trim();
-  const projectType = String(formData.get("projectType") || "Wedding").trim();
-  const status = String(formData.get("status") || "unconfirmed").trim();
-  const editingStatus = String(formData.get("editingStatus") || "not_started").trim();
+
+  // Services → project_type string
+  const servicesRaw = String(formData.get("services") || "");
+  const servicesArr = servicesRaw.split(",").filter(Boolean);
+  const projectType =
+    servicesArr.includes("photo") && servicesArr.includes("video")
+      ? "Photo + Video"
+      : servicesArr.includes("photo")
+        ? "Photography"
+        : servicesArr.includes("video")
+          ? "Videography"
+          : String(formData.get("projectType") || "Wedding").trim();
+
+  // Always create as draft initially
+  const status = "draft";
+  const editingStatus = "not_started";
   const notes = String(formData.get("notes") || "").trim() || null;
   const budgetTotal = toNumber(formData.get("budgetTotal"));
   const amountPaid = toNumber(formData.get("amountPaid"));
   const amountRemaining = Math.max(0, budgetTotal - amountPaid);
 
-  const clientName = String(formData.get("clientName") || "").trim();
-  const clientEmail = String(formData.get("clientEmail") || "").trim() || null;
-  const clientPhone = String(formData.get("clientPhone") || "").trim() || null;
+  // Structured client + crew data from client component
+  let clientsData: {
+    contactId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    notes: string;
+  }[] = [];
+  let crewData: {
+    crewMemberId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    roleType: string;
+    assignmentRole: string;
+  }[] = [];
+
+  try {
+    const raw = String(formData.get("clientsData") || "[]");
+    clientsData = JSON.parse(raw);
+  } catch {
+    clientsData = [];
+  }
+
+  try {
+    const raw = String(formData.get("crewData") || "[]");
+    crewData = JSON.parse(raw);
+  } catch {
+    crewData = [];
+  }
 
   if (!title || !eventDate) {
     return;
@@ -70,30 +112,59 @@ export async function createProjectAction(formData: FormData) {
     throw new Error(projectError?.message || "Could not create project");
   }
 
-  if (clientName) {
+  // Create clients
+  for (const entry of clientsData) {
+    const fullName = [entry.firstName, entry.lastName].filter(Boolean).join(" ").trim();
+    if (!fullName) continue;
+
     const { data: client, error: clientError } = await admin
       .from("clients")
       .insert({
-        full_name: clientName,
-        email: clientEmail,
-        phone: clientPhone,
+        full_name: fullName,
+        email: entry.email || null,
+        phone: entry.phone || null,
+        notes: entry.notes || null,
       })
       .select("id")
       .single();
 
-    if (clientError || !client) {
-      throw new Error(clientError?.message || "Could not create client");
-    }
+    if (clientError || !client) continue;
 
-    const { error: linkError } = await admin.from("project_clients").insert({
+    await admin.from("project_clients").insert({
       project_id: project.id,
       client_id: client.id,
       role: "couple",
     });
+  }
 
-    if (linkError) {
-      throw new Error(linkError.message);
+  // Create / assign crew
+  for (const entry of crewData) {
+    let crewMemberId = entry.crewMemberId || "";
+
+    if (!crewMemberId) {
+      const fullName = [entry.firstName, entry.lastName].filter(Boolean).join(" ").trim();
+      if (!fullName) continue;
+
+      const { data: member } = await admin
+        .from("crew_members")
+        .insert({
+          full_name: fullName,
+          role_type: entry.roleType || "assistant",
+          contact_info: entry.email || entry.phone || null,
+        })
+        .select("id")
+        .single();
+
+      crewMemberId = member?.id || "";
     }
+
+    if (!crewMemberId) continue;
+
+    await admin.from("crew_assignments").insert({
+      project_id: project.id,
+      crew_member_id: crewMemberId,
+      assignment_role: entry.assignmentRole || entry.roleType || "crew",
+    });
   }
 
   const baseSlug = slugify(String(project.title || title));
@@ -127,7 +198,7 @@ export async function updateProjectAction(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const eventDate = String(formData.get("eventDate") || "").trim();
   const projectType = String(formData.get("projectType") || "Wedding").trim();
-  const status = String(formData.get("status") || "unconfirmed").trim();
+  const status = String(formData.get("status") || "draft").trim();
   const editingStatus = String(formData.get("editingStatus") || "not_started").trim();
   const notes = String(formData.get("notes") || "").trim() || null;
   const budgetTotal = toNumber(formData.get("budgetTotal"));

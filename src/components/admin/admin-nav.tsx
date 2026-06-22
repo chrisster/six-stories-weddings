@@ -7,15 +7,13 @@ import {
   ContactRound,
   FolderKanban,
   ImageIcon,
-  LayoutDashboard,
   PlusSquare,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/projects", label: "Projects", icon: FolderKanban },
+  { href: "/admin", label: "Projects", icon: FolderKanban },
   { href: "/admin/projects/new", label: "New Wedding", icon: PlusSquare },
   { href: "/admin/contacts", label: "Contacts", icon: ContactRound },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
@@ -29,7 +27,9 @@ export function AdminNav() {
     <nav className="flex flex-col gap-1">
       {links.map((link) => {
         const isActive =
-          link.href === "/admin" ? pathname === link.href : pathname.startsWith(link.href);
+          link.href === "/admin"
+            ? pathname === "/admin" || (pathname.startsWith("/admin/projects/") && !pathname.startsWith("/admin/projects/new"))
+            : pathname.startsWith(link.href);
         const Icon = link.icon;
 
         return (

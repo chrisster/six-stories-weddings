@@ -1,5 +1,6 @@
 import type {
   Contact,
+  CrewMember,
   Gallery,
   GalleryDetail,
   GallerySection,
@@ -202,6 +203,12 @@ export const demoGalleryDetail: GalleryDetail = {
   sections: demoGallerySections,
   mediaAssets: demoMediaAssets,
 };
+
+export const demoCrewMembersList: CrewMember[] = [
+  { id: "demo-crew-chris", fullName: "Chris", roleType: "photographer", contactInfo: null },
+  { id: "demo-crew-ares", fullName: "Ares", roleType: "videographer", contactInfo: null },
+  { id: "demo-crew-vicky", fullName: "Vicky", roleType: "editor", contactInfo: null },
+];
 
 export const demoContacts: Contact[] = [
   {

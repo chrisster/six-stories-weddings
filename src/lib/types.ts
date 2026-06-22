@@ -1,4 +1,4 @@
-export type ProjectStatus = "confirmed" | "unconfirmed" | "cancelled";
+export type ProjectStatus = "confirmed" | "unconfirmed" | "cancelled" | "negotiating" | "declined" | "draft";
 export type EditingStatus = "not_started" | "in_progress" | "review" | "completed";
 
 export type Client = {

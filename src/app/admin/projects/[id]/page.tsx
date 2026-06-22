@@ -139,8 +139,11 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           />
           <input name="projectType" defaultValue={project.projectType} className="h-10 rounded-xl border border-border px-3 text-sm" />
           <select name="status" defaultValue={project.status} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+            <option value="draft">Draft</option>
+            <option value="negotiating">Negotiating</option>
             <option value="confirmed">Confirmed</option>
             <option value="unconfirmed">Unconfirmed</option>
+            <option value="declined">Declined</option>
             <option value="cancelled">Cancelled</option>
           </select>
           <select
