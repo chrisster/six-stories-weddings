@@ -317,6 +317,51 @@ export async function updateClientAction(formData: FormData) {
   revalidatePath("/admin/projects");
 }
 
+export async function removeClientFromProjectAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const projectId = String(formData.get("projectId") || "").trim();
+  const clientId = String(formData.get("clientId") || "").trim();
+  if (!projectId || !clientId) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  await admin.from("project_clients").delete().match({ project_id: projectId, client_id: clientId });
+  revalidatePath(`/admin/projects/${projectId}`);
+}
+
+export async function addCrewToProjectAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const projectId = String(formData.get("projectId") || "").trim();
+  const crewMemberId = String(formData.get("crewMemberId") || "").trim();
+  const assignmentRole = String(formData.get("assignmentRole") || "crew").trim();
+  if (!projectId || !crewMemberId) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  const { data: existing } = await admin
+    .from("crew_assignments")
+    .select("id")
+    .match({ project_id: projectId, crew_member_id: crewMemberId })
+    .maybeSingle();
+  if (!existing) {
+    await admin.from("crew_assignments").insert({
+      project_id: projectId,
+      crew_member_id: crewMemberId,
+      assignment_role: assignmentRole,
+    });
+  }
+  revalidatePath(`/admin/projects/${projectId}`);
+}
+
+export async function removeCrewFromProjectAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const projectId = String(formData.get("projectId") || "").trim();
+  const assignmentId = String(formData.get("assignmentId") || "").trim();
+  if (!projectId || !assignmentId) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  await admin.from("crew_assignments").delete().eq("id", assignmentId);
+  revalidatePath(`/admin/projects/${projectId}`);
+}
+
 export async function addClientToProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;

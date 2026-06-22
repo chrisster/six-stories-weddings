@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
+  CheckSquare,
   ContactRound,
   FolderKanban,
   ImageIcon,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/admin", label: "Projects", icon: FolderKanban },
   { href: "/admin/contacts", label: "Contacts", icon: ContactRound },
+  { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/admin/galleries", label: "Galleries", icon: ImageIcon },
 ];

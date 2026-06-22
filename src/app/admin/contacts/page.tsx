@@ -1,9 +1,11 @@
 import {
   convertContactToClientAction,
   createContactAction,
+  createCrewMemberAction,
+  deleteCrewMemberAction,
   updateContactStatusAction,
 } from "@/app/admin/contacts/actions";
-import { getContacts } from "@/lib/data";
+import { getContacts, getCrewMembers } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
 function currency(value: number | null | undefined) {
@@ -17,8 +19,10 @@ function currency(value: number | null | undefined) {
   }).format(value);
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function ContactsPage() {
-  const contacts = await getContacts();
+  const [contacts, crewMembers] = await Promise.all([getContacts(), getCrewMembers()]);
 
   return (
     <div className="space-y-6">
@@ -122,6 +126,63 @@ export default async function ContactsPage() {
             ))}
           </tbody>
         </table>
+      </section>
+
+      {/* Crew Roster */}
+      <section className="soft-panel p-5">
+        <div className="mb-4">
+          <h2 className="title-cinematic text-2xl font-semibold">Crew Roster</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Crew members available to assign to projects.</p>
+        </div>
+
+        <form action={createCrewMemberAction} className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <input name="fullName" required placeholder="Full name" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
+          <select name="roleType" defaultValue="photographer" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+            <option value="photographer">Photographer</option>
+            <option value="videographer">Videographer</option>
+            <option value="editor">Editor</option>
+            <option value="assistant">Assistant</option>
+          </select>
+          <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
+          <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border bg-white px-3 text-sm" />
+          <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background xl:justify-self-start">
+            Add crew member
+          </button>
+        </form>
+
+        {crewMembers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No crew members yet.</p>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-border/80 bg-white/80">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Contact</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {crewMembers.map((member) => (
+                  <tr key={member.id} className="border-b border-border/70 last:border-b-0">
+                    <td className="px-4 py-3 font-medium">{member.fullName}</td>
+                    <td className="px-4 py-3 capitalize">{member.roleType}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{member.contactInfo || "-"}</td>
+                    <td className="px-4 py-3">
+                      <form action={deleteCrewMemberAction}>
+                        <input type="hidden" name="crewMemberId" value={member.id} />
+                        <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">
+                          Remove
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

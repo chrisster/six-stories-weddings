@@ -131,3 +131,32 @@ export async function convertContactToClientAction(formData: FormData) {
 
   revalidatePath("/admin/contacts");
 }
+
+export async function createCrewMemberAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const fullName = String(formData.get("fullName") || "").trim();
+  const roleType = String(formData.get("roleType") || "assistant").trim();
+  const email = String(formData.get("email") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
+  if (!fullName) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  const contactInfo = [email, phone].filter(Boolean).join(" / ") || null;
+  await admin.from("crew_members").insert({
+    full_name: fullName,
+    role_type: roleType,
+    contact_info: contactInfo,
+    active: true,
+  });
+  revalidatePath("/admin/contacts");
+}
+
+export async function deleteCrewMemberAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const crewMemberId = String(formData.get("crewMemberId") || "").trim();
+  if (!crewMemberId) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  await admin.from("crew_members").update({ active: false }).eq("id", crewMemberId);
+  revalidatePath("/admin/contacts");
+}
