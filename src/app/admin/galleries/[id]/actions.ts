@@ -157,3 +157,55 @@ export async function setCoverMediaAction(formData: FormData) {
 
   revalidatePath(`/admin/galleries/${galleryId}`);
 }
+
+export async function addDemoMediaAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const galleryId = String(formData.get("galleryId") || "");
+  if (!galleryId) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  const { data: firstSection } = await admin
+    .from("gallery_sections")
+    .select("id")
+    .eq("gallery_id", galleryId)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: latestAsset } = await admin
+    .from("media_assets")
+    .select("sort_order")
+    .eq("gallery_id", galleryId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const demoUrl =
+    "https://images.unsplash.com/photo-1525328437458-0c4d4db7cab4?auto=format&fit=crop&w=1600&q=80";
+
+  const { error } = await admin.from("media_assets").insert({
+    gallery_id: galleryId,
+    section_id: firstSection?.id || null,
+    storage_provider: "supabase",
+    storage_bucket: getBucketName(),
+    storage_path: demoUrl,
+    media_type: "photo",
+    sort_order: (latestAsset?.sort_order || 0) + 1,
+    is_cover: false,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+}

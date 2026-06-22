@@ -1,4 +1,5 @@
 import type {
+  Contact,
   Gallery,
   GalleryDetail,
   GallerySection,
@@ -201,3 +202,28 @@ export const demoGalleryDetail: GalleryDetail = {
   sections: demoGallerySections,
   mediaAssets: demoMediaAssets,
 };
+
+export const demoContacts: Contact[] = [
+  {
+    id: "demo-contact-1",
+    fullName: "Ari & Niko",
+    email: "ari.niko@example.com",
+    phone: "+30 6900000011",
+    eventDate: "2026-09-12",
+    offerAmount: 4200,
+    status: "offer_sent",
+    notes: "Requested full-day coverage + drone ceremony shots.",
+    createdAt: "2026-06-20T10:00:00Z",
+  },
+  {
+    id: "demo-contact-2",
+    fullName: "Mila & Theo",
+    email: "mila.theo@example.com",
+    phone: "+30 6900000012",
+    eventDate: "2026-10-03",
+    offerAmount: 3800,
+    status: "confirmed",
+    notes: "Awaiting contract signature this week.",
+    createdAt: "2026-06-21T12:30:00Z",
+  },
+];

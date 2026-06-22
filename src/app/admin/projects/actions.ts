@@ -2,6 +2,7 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -109,6 +110,8 @@ export async function createProjectAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/admin/projects");
   revalidatePath("/admin/galleries");
+
+  redirect(`/admin/projects/${project.id}`);
 }
 
 export async function updateProjectAction(formData: FormData) {

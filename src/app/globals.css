@@ -124,8 +124,9 @@
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(circle at 20% 0%, oklch(0.95 0.03 78 / 0.45), transparent 45%),
-      radial-gradient(circle at 80% 10%, oklch(0.94 0.015 95 / 0.5), transparent 42%);
+      radial-gradient(circle at 12% 0%, oklch(0.95 0.03 78 / 0.55), transparent 44%),
+      radial-gradient(circle at 84% 8%, oklch(0.95 0.03 130 / 0.3), transparent 36%),
+      linear-gradient(165deg, oklch(0.985 0.01 96), oklch(0.97 0.02 92));
   }
   html {
     @apply font-sans;
@@ -143,6 +144,6 @@
   }
 
   .soft-panel {
-    @apply rounded-2xl border border-border/80 bg-white/80 shadow-sm backdrop-blur;
+    @apply rounded-2xl border border-border/80 bg-white/78 shadow-[0_10px_40px_-22px_rgba(0,0,0,0.35)] backdrop-blur;
   }
 }

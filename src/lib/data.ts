@@ -1,13 +1,14 @@
 import { addDays, isAfter, parseISO } from "date-fns";
 
 import {
+  demoContacts,
   demoGallery,
   demoGalleryDetail,
   demoProject,
 } from "@/lib/demo-data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Gallery, GalleryDetail, Project } from "@/lib/types";
+import type { Contact, Gallery, GalleryDetail, Project } from "@/lib/types";
 
 type DashboardMetrics = {
   totalProjects: number;
@@ -271,4 +272,33 @@ export async function getPublicGalleryBySlug(slug: string) {
   }
 
   return getGalleryById(String(galleryRow.id));
+}
+
+export async function getContacts(): Promise<Contact[]> {
+  if (!hasSupabaseEnv) {
+    return demoContacts;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return demoContacts;
+  }
+
+  const { data, error } = await admin.from("contacts").select("*").order("created_at", { ascending: false });
+  if (error || !data) {
+    return demoContacts;
+  }
+
+  return data.map((row) => ({
+    id: String(row.id),
+    fullName: String(row.full_name || ""),
+    email: (row.email as string | null) || null,
+    phone: (row.phone as string | null) || null,
+    eventDate: (row.event_date as string | null) || null,
+    offerAmount: row.offer_amount != null ? Number(row.offer_amount) : null,
+    status: (row.status as Contact["status"]) || "lead",
+    notes: (row.notes as string | null) || null,
+    convertedClientId: (row.converted_client_id as string | null) || null,
+    createdAt: String(row.created_at || ""),
+  }));
 }

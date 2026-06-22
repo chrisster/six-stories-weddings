@@ -100,3 +100,23 @@ export type GalleryDetail = {
   sections: GallerySection[];
   mediaAssets: MediaAsset[];
 };
+
+export type ContactStatus =
+  | "lead"
+  | "offer_sent"
+  | "confirmed"
+  | "converted"
+  | "rejected";
+
+export type Contact = {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  phone?: string | null;
+  eventDate?: string | null;
+  offerAmount?: number | null;
+  status: ContactStatus;
+  notes?: string | null;
+  convertedClientId?: string | null;
+  createdAt?: string;
+};

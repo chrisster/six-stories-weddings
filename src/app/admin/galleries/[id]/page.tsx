@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
+  addDemoMediaAction,
   createGallerySectionAction,
   setCoverMediaAction,
   updateGallerySettingsAction,
@@ -23,10 +24,18 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   }
 
   const mediaWithUrl = await Promise.all(
-    detail.mediaAssets.map(async (asset) => ({
-      ...asset,
-      url: await getSignedMediaUrl(asset.storagePath),
-    })),
+    detail.mediaAssets.map(async (asset) => {
+      try {
+        const url = await getSignedMediaUrl(asset.storagePath);
+        return { ...asset, url, broken: false };
+      } catch {
+        return {
+          ...asset,
+          url: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1200&q=80",
+          broken: true,
+        };
+      }
+    }),
   );
 
   return (
@@ -42,7 +51,21 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
           >
             Open public gallery
           </Link>
+          <form action={addDemoMediaAction}>
+            <input type="hidden" name="galleryId" value={detail.gallery.id} />
+            <button
+              type="submit"
+              className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
+            >
+              Add demo image
+            </button>
+          </form>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Uploads are stored in Supabase Storage bucket <strong>wedding-media</strong>, path format:
+          {" "}
+          <span className="font-mono">galleryId/uuid.ext</span>.
+        </p>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
@@ -132,6 +155,11 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {mediaWithUrl.length === 0 ? (
+          <article className="soft-panel col-span-full p-6 text-sm text-muted-foreground">
+            No media yet. Upload files above or click <strong>Add demo image</strong> to verify gallery rendering.
+          </article>
+        ) : null}
         {mediaWithUrl.map((asset) => (
           <article key={asset.id} className="soft-panel overflow-hidden">
             <div className="relative aspect-[4/3] bg-muted/50">
@@ -143,7 +171,7 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
             </div>
             <div className="flex items-center justify-between gap-2 p-3">
               <p className="text-xs text-muted-foreground">
-                {asset.mediaType} {asset.isCover ? "· cover" : ""}
+                {asset.mediaType} {asset.isCover ? "· cover" : ""} {asset.broken ? "· signed URL fallback" : ""}
               </p>
               <form action={setCoverMediaAction}>
                 <input type="hidden" name="galleryId" value={detail.gallery.id} />
