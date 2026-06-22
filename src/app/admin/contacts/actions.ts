@@ -160,3 +160,41 @@ export async function deleteCrewMemberAction(formData: FormData) {
   await admin.from("crew_members").update({ active: false }).eq("id", crewMemberId);
   revalidatePath("/admin/contacts");
 }
+
+export async function updateContactAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const contactId = String(formData.get("contactId") || "").trim();
+  const fullName = String(formData.get("fullName") || "").trim();
+  const email = String(formData.get("email") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
+  const notes = String(formData.get("notes") || "").trim() || null;
+  if (!contactId || !fullName) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  await admin.from("contacts").update({ full_name: fullName, email, phone, notes }).eq("id", contactId);
+  revalidatePath("/admin/contacts");
+}
+
+export async function updateCrewMemberAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const crewMemberId = String(formData.get("crewMemberId") || "").trim();
+  const fullName = String(formData.get("fullName") || "").trim();
+  const roleType = String(formData.get("roleType") || "").trim();
+  const email = String(formData.get("email") || "").trim() || null;
+  if (!crewMemberId || !fullName) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  const contactInfo = email || null;
+  await admin.from("crew_members").update({ full_name: fullName, role_type: roleType, contact_info: contactInfo }).eq("id", crewMemberId);
+  revalidatePath("/admin/contacts");
+}
+
+export async function deleteContactAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const contactId = String(formData.get("contactId") || "").trim();
+  if (!contactId) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  await admin.from("contacts").delete().eq("id", contactId);
+  revalidatePath("/admin/contacts");
+}
