@@ -73,27 +73,30 @@ Seed output includes demo gallery credentials:
 - `/admin/galleries/[id]`
 - `/g/[gallerySlug]`
 
-## Cloud Deployment (Vercel + Subdomain)
+## Cloud Deployment (Vercel + Plesk Subdomain)
 
-1. Push repository to GitHub.
-2. Import repo in Vercel.
-3. Add production environment variables in Vercel project settings.
-4. Set `APP_URL` to your production domain, for example:
+Use this when moving from `https://six-stories-weddings-*.vercel.app` to a branded subdomain like `https://weddings.sixstoriesstudio.com`.
 
-- `https://weddings.sixstoriesstudio.com`
-- or `https://studio.sixstoriesstudio.com`
+### Minimum required (for domain cutover)
 
-5. In Supabase Auth settings:
+1. In **Vercel → Project → Settings → Domains**, add `weddings.sixstoriesstudio.com`.
+2. In **Plesk → Domains → sixstoriesstudio.com → Add Subdomain**, create `weddings`.
+3. In **Plesk DNS settings**, set a **CNAME** for `weddings` to Vercel's target (`cname.vercel-dns.com`, or the exact value shown in Vercel).
+4. Back in Vercel, wait until the domain status is verified.
 
-- Site URL: production `APP_URL`
-- Redirect URLs: add `https://weddings.sixstoriesstudio.com/*` and/or `https://studio.sixstoriesstudio.com/*`
+### Do the rest in order (production correctness)
 
-6. In your DNS provider:
+No local rebuild is needed if the app is already built on Vercel.
 
-- Add CNAME for `weddings` (or `studio`) to Vercel target
-- Verify domain in Vercel
-
-7. Deploy.
+5. In **Vercel → Settings → Environment Variables**, set:
+   - `APP_URL=https://weddings.sixstoriesstudio.com`
+6. In **Supabase → Authentication → URL Configuration**, set:
+   - Site URL: `https://weddings.sixstoriesstudio.com`
+   - Redirect URLs: `https://weddings.sixstoriesstudio.com/*`
+7. Trigger a new deployment in Vercel so the updated env/domain settings are applied.
+8. Smoke test:
+   - Open home, `/admin`, and one gallery link on the custom domain.
+   - Confirm auth redirects stay on `weddings.sixstoriesstudio.com` (not `*.vercel.app`).
 
 ## Notes
 
