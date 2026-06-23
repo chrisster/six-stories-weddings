@@ -1,10 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  deleteMediaAction,
   bulkDeleteMediaAction,
   reorderMediaAction,
   setCoverMediaAction,
@@ -18,14 +16,12 @@ type MediaManagerProps = {
 };
 
 type SortOption = "date" | "name" | "section";
-type ViewMode = "strip" | "grid";
 
 export function MediaManager({ media, sections, galleryId }: MediaManagerProps) {
   const router = useRouter();
   const [mediaState, setMediaState] = useState(media);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortOption>("date");
-  const [viewMode, setViewMode] = useState<ViewMode>("strip");
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>("");
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
@@ -148,6 +144,19 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     setSelectedIds(new Set());
   };
 
+  const handleSetCoverSelected = async () => {
+    if (selectedIds.size !== 1) return;
+    const [mediaId] = Array.from(selectedIds);
+
+    const formData = new FormData();
+    formData.append("galleryId", galleryId);
+    formData.append("mediaId", mediaId);
+
+    await setCoverMediaAction(formData);
+    setSelectedIds(new Set());
+    router.refresh();
+  };
+
   const handleDeleteSection = async (sectionId: string) => {
     const sectionName = sectionMap.get(sectionId);
     if (!confirm(`Delete all photos in "${sectionName}"?`)) return;
@@ -197,9 +206,17 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
               <span className="text-xs text-muted-foreground">
                 {selectedIds.size} selected
               </span>
+              {selectedIds.size === 1 && (
+                <button
+                  onClick={handleSetCoverSelected}
+                  className="rounded-full border border-border px-3 py-1 text-xs hover:bg-muted"
+                >
+                  Set as cover
+                </button>
+              )}
               <button
                 onClick={handleDeleteSelected}
-                className="text-xs text-red-600 hover:underline"
+                className="rounded-full border border-red-300 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
               >
                 Delete selected
               </button>
@@ -217,23 +234,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
             <option value="name">Sort by name</option>
             <option value="section">Group by section</option>
           </select>
-
-          <div className="inline-flex overflow-hidden rounded-lg border border-border">
-            <button
-              type="button"
-              onClick={() => setViewMode("strip")}
-              className={`px-2 py-1 text-xs ${viewMode === "strip" ? "bg-muted" : "bg-white"}`}
-            >
-              Strip
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("grid")}
-              className={`px-2 py-1 text-xs ${viewMode === "grid" ? "bg-muted" : "bg-white"}`}
-            >
-              Grid
-            </button>
-          </div>
 
           {sections.length > 0 && (
             <select
@@ -297,85 +297,58 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                 )}
               </div>
 
-              <div
-                className={
-                  viewMode === "strip"
-                    ? "flex gap-3 overflow-x-auto pb-2"
-                    : "grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6"
-                }
-              >
-                {sectionMedia.map((asset) => (
-                  <div
-                    key={asset.id}
-                    draggable
-                    onDragStart={() => setDraggedId(asset.id)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => handleDropInSection(sectionName, asset.id)}
-                    className={`group relative overflow-hidden rounded-md border border-border bg-muted/50 ${
-                      viewMode === "strip" ? "w-40 shrink-0" : "w-full"
-                    }`}
-                  >
-                    {/* Checkbox overlay */}
-                    <label className="absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded border border-white bg-black/50">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(asset.id)}
-                        onChange={() => handleSelectOne(asset.id)}
-                        className="h-4 w-4"
-                      />
-                    </label>
+              <div className="columns-2 gap-3 sm:columns-3 xl:columns-4 [&>*]:mb-3">
+                {sectionMedia.map((asset) => {
+                  const selected = selectedIds.has(asset.id);
+                  return (
+                    <div
+                      key={asset.id}
+                      draggable
+                      onDragStart={() => setDraggedId(asset.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => handleDropInSection(sectionName, asset.id)}
+                      onClick={() => handleSelectOne(asset.id)}
+                      className={`group relative block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-md border bg-muted/50 transition ${
+                        selected
+                          ? "border-foreground ring-2 ring-foreground"
+                          : "border-border hover:border-foreground/40"
+                      }`}
+                    >
+                      {/* Selection indicator */}
+                      <span
+                        className={`absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition ${
+                          selected
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-white bg-black/40 text-transparent group-hover:text-white"
+                        }`}
+                      >
+                        ✓
+                      </span>
 
-                    {/* Media */}
-                    <div className="relative aspect-[4/3]">
+                      {asset.isCover && (
+                        <span className="absolute top-2 right-2 z-10 rounded-full bg-foreground px-2 py-0.5 text-[10px] font-medium text-background">
+                          Cover
+                        </span>
+                      )}
+
                       {asset.mediaType === "photo" ? (
-                        <Image
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
                           src={asset.url}
                           alt="Gallery asset"
-                          fill
-                          className="object-cover"
-                          unoptimized
+                          loading="lazy"
+                          className="block w-full"
                         />
                       ) : (
                         <video
                           src={asset.url}
-                          className="size-full object-cover"
+                          className="block w-full"
                           preload="metadata"
                         />
                       )}
                     </div>
-
-                    {/* Actions footer */}
-                    <div className="space-y-2 border-t border-border bg-white/90 p-2 backdrop-blur">
-                      <p className="text-xs text-muted-foreground">
-                        {asset.mediaType} {asset.isCover ? "· cover" : ""}
-                      </p>
-
-                      <div className="flex gap-1">
-                        <form action={setCoverMediaAction} className="contents">
-                          <input type="hidden" name="galleryId" value={galleryId} />
-                          <input type="hidden" name="mediaId" value={asset.id} />
-                          <button
-                            type="submit"
-                            className="rounded-full border border-border px-2 py-1 text-[11px] hover:bg-muted"
-                          >
-                            Cover
-                          </button>
-                        </form>
-
-                        <form action={deleteMediaAction} className="contents">
-                          <input type="hidden" name="galleryId" value={galleryId} />
-                          <input type="hidden" name="mediaId" value={asset.id} />
-                          <button
-                            type="submit"
-                            className="rounded-full border border-red-300 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50"
-                          >
-                            Delete
-                          </button>
-                        </form>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
