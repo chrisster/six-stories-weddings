@@ -4,6 +4,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
 export async function proxy(request: NextRequest) {
+  const host = request.headers.get("host") || "";
+  if (host.includes("vercel.app")) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = "admin.sixstoriesstudio.com";
+    return NextResponse.redirect(url, 308);
+  }
+
   if (!hasSupabaseEnv) {
     return NextResponse.next();
   }
@@ -53,5 +61,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/login"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api).*)"],
 };

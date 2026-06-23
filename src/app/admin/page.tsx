@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { MetricCard } from "@/components/admin/metric-card";
 import { getDashboardMetrics, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
@@ -14,14 +13,38 @@ function statusLabel(status: string) {
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
-    confirmed: "bg-emerald-100 text-emerald-800",
+    scheduled: "bg-emerald-100 text-emerald-800",
+    post_production: "bg-indigo-100 text-indigo-700",
     negotiating: "bg-sky-100 text-sky-800",
-    unconfirmed: "bg-yellow-100 text-yellow-800",
-    draft: "bg-zinc-100 text-zinc-500",
+    draft: "bg-zinc-100 text-zinc-600",
+    cancelled: "bg-rose-100 text-rose-700",
     declined: "bg-red-100 text-red-700",
-    cancelled: "bg-red-100 text-red-700",
   };
   return map[status] || "bg-muted text-muted-foreground";
+}
+
+const statusPills = [
+  { key: "all", label: "Total", cls: "border-zinc-300 bg-zinc-100 text-zinc-700" },
+  { key: "draft", label: "Draft", cls: "border-zinc-300 bg-zinc-100 text-zinc-700" },
+  { key: "negotiating", label: "Negotiating", cls: "border-sky-300 bg-sky-100 text-sky-700" },
+  { key: "scheduled", label: "Scheduled", cls: "border-emerald-300 bg-emerald-100 text-emerald-700" },
+  {
+    key: "post_production",
+    label: "Post-Production",
+    cls: "border-indigo-300 bg-indigo-100 text-indigo-700",
+  },
+  { key: "cancelled", label: "Cancelled", cls: "border-rose-300 bg-rose-100 text-rose-700" },
+  { key: "declined", label: "Declined", cls: "border-red-300 bg-red-100 text-red-700" },
+] as const;
+
+function serviceTags(projectType: string): string[] {
+  const type = projectType.toLowerCase();
+  const tags: string[] = [];
+  if (type.includes("photo")) tags.push("Photography");
+  if (type.includes("film") || type.includes("video")) tags.push("Film");
+  if (type.includes("baptism")) tags.push("Baptism");
+  if (type.includes("wedding")) tags.push("Wedding");
+  return [...new Set(tags)];
 }
 
 export default async function AdminOverviewPage({ searchParams }: AdminPageProps) {
@@ -40,13 +63,30 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
     return matchesText && matchesStatus;
   });
 
+  const statusCounts: Record<string, number> = {
+    all: metrics.totalProjects,
+    draft: metrics.draftProjects,
+    negotiating: metrics.negotiatingProjects,
+    scheduled: metrics.scheduledProjects,
+    post_production: metrics.postProductionProjects,
+    cancelled: metrics.cancelledProjects,
+    declined: metrics.declinedProjects,
+  };
+
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Total" value={String(metrics.totalProjects)} />
-        <MetricCard label="Confirmed" value={String(metrics.confirmedProjects)} />
-        <MetricCard label="Upcoming" value={String(metrics.upcomingProjects)} />
-        <MetricCard label="Unconfirmed" value={String(metrics.unconfirmedProjects)} />
+      <section className="admin-surface p-4">
+        <p className="quiet-label mb-3">Project Statuses</p>
+        <div className="flex flex-wrap gap-2">
+          {statusPills.map((pill) => (
+            <span
+              key={pill.key}
+              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm ${pill.cls}`}
+            >
+              {pill.label} ({statusCounts[pill.key] || 0})
+            </span>
+          ))}
+        </div>
       </section>
 
       <section className="admin-surface p-4">
@@ -60,39 +100,34 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           </Link>
         </div>
 
-        <form className="grid gap-3 sm:grid-cols-[1fr_200px_auto]">
+        <form className="mb-4 grid gap-3">
           <input
             type="search"
             name="q"
             defaultValue={params.q}
-            placeholder="Search by couple or project"
+            placeholder="Search by couple"
             className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
           />
-          <select
-            name="status"
-            defaultValue={statusFilter}
-            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-          >
-            <option value="all">All statuses</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="negotiating">Negotiating</option>
-            <option value="unconfirmed">Unconfirmed</option>
-            <option value="draft">Draft</option>
-            <option value="declined">Declined</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <button
-            type="submit"
-            className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background"
-          >
-            Filter
-          </button>
-        </form>
-      </section>
 
-      <section>
+          <div className="flex flex-wrap gap-2">
+            {statusPills.map((pill) => (
+              <button
+                key={pill.key}
+                type="submit"
+                name="status"
+                value={pill.key}
+                className={`rounded-full border px-3 py-1 text-sm transition ${pill.cls} ${
+                  statusFilter === pill.key ? "ring-1 ring-foreground/35" : "opacity-85 hover:opacity-100"
+                }`}
+              >
+                {pill.label} ({statusCounts[pill.key] || 0})
+              </button>
+            ))}
+          </div>
+        </form>
+
         {filtered.length === 0 ? (
-          <div className="admin-surface px-4 py-12 text-center">
+          <div className="px-4 py-12 text-center">
             <p className="text-sm text-muted-foreground">No projects found.</p>
           </div>
         ) : (
@@ -114,9 +149,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                 </div>
                 <div className="p-6">
                   <div className="mb-3 flex items-start justify-between gap-2">
-                    <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
-                      {project.title}
-                    </h3>
+                    <div className="space-y-0.5">
+                      <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
+                        {project.clients[0]?.fullName || "Groom"}
+                      </h3>
+                      <p className="title-cinematic text-base leading-snug text-foreground/85">
+                        {project.clients[1]?.fullName || "Bride"}
+                      </p>
+                    </div>
                     <span
                       className={`shrink-0 rounded-lg px-2.5 py-1 text-xs capitalize leading-tight ${statusBadge(project.status)}`}
                     >
@@ -125,19 +165,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                   </div>
 
                   <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground">
-                      {project.clients.map((c) => c.fullName).join(" & ") || "—"}
-                    </p>
-                    <p className="text-xs">
-                      <span className="inline-block w-12 text-muted-foreground">Date:</span>
-                      {formatDateDDMMYY(project.eventDate)}
-                    </p>
-                    {project.projectType && (
-                      <p className="text-xs">
-                        <span className="inline-block w-12 text-muted-foreground">Type:</span>
-                        {project.projectType}
-                      </p>
-                    )}
+                    <p className="text-xs text-foreground/80">{formatDateDDMMYY(project.eventDate)}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {serviceTags(project.projectType).map((tag) => (
+                        <span key={tag} className="rounded-full border border-border bg-white px-2 py-0.5 text-[11px] text-foreground/80">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="text-xs text-muted-foreground group-hover:text-foreground/70">

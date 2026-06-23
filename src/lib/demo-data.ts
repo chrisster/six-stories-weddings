@@ -19,7 +19,7 @@ export const demoProject: Project = {
   projectType: "Wedding Photo + Video",
   referral: "Six Stories Studio",
   packageCategory: "Premium",
-  status: "confirmed",
+  status: "scheduled",
   editingStatus: "in_progress",
   completed: false,
   budgetTotal: 3200,

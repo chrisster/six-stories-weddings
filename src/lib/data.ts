@@ -1,5 +1,3 @@
-import { addDays, isAfter, parseISO } from "date-fns";
-
 import {
   demoContacts,
   demoCrewMembersList,
@@ -14,9 +12,12 @@ import type { Contact, CrewMember, Gallery, GalleryDetail, Project } from "@/lib
 
 type DashboardMetrics = {
   totalProjects: number;
-  confirmedProjects: number;
-  unconfirmedProjects: number;
-  upcomingProjects: number;
+  draftProjects: number;
+  negotiatingProjects: number;
+  scheduledProjects: number;
+  postProductionProjects: number;
+  cancelledProjects: number;
+  declinedProjects: number;
   totalBudget: number;
   totalPaid: number;
   totalRemaining: number;
@@ -81,7 +82,14 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
     projectType: String(row.project_type || ""),
     referral: row.referral as string | null,
     packageCategory: row.package_category as string | null,
-    status: (row.status as "confirmed" | "unconfirmed" | "cancelled") || "unconfirmed",
+    status:
+      (row.status as
+        | "draft"
+        | "negotiating"
+        | "scheduled"
+        | "post_production"
+        | "cancelled"
+        | "declined") || "draft",
     editingStatus:
       (row.editing_status as "not_started" | "in_progress" | "review" | "completed") ||
       "not_started",
@@ -200,13 +208,15 @@ export async function getProjectById(projectId: string) {
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const projects = await getProjects();
-  const cutoff = addDays(new Date(), -1);
 
   return {
     totalProjects: projects.length,
-    confirmedProjects: projects.filter((project) => project.status === "confirmed").length,
-    unconfirmedProjects: projects.filter((project) => project.status === "unconfirmed").length,
-    upcomingProjects: projects.filter((project) => isAfter(parseISO(project.eventDate), cutoff)).length,
+    draftProjects: projects.filter((project) => project.status === "draft").length,
+    negotiatingProjects: projects.filter((project) => project.status === "negotiating").length,
+    scheduledProjects: projects.filter((project) => project.status === "scheduled").length,
+    postProductionProjects: projects.filter((project) => project.status === "post_production").length,
+    cancelledProjects: projects.filter((project) => project.status === "cancelled").length,
+    declinedProjects: projects.filter((project) => project.status === "declined").length,
     totalBudget: projects.reduce((total, project) => total + project.budgetTotal, 0),
     totalPaid: projects.reduce((total, project) => total + project.amountPaid, 0),
     totalRemaining: projects.reduce((total, project) => total + project.amountRemaining, 0),
