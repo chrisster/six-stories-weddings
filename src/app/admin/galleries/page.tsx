@@ -14,11 +14,11 @@ export default async function GalleriesPage() {
   return (
     <div className="space-y-4">
       {galleryWithProject.map(({ gallery, project }) => (
-        <article key={gallery.id} className="soft-panel p-4">
+        <article key={gallery.id} className="admin-surface p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">Gallery</p>
-              <h3 className="mt-1 text-xl font-semibold">{gallery.title}</h3>
+              <p className="quiet-label">Gallery</p>
+              <h3 className="mt-1 text-xl font-semibold tracking-tight">{gallery.title}</h3>
               <p className="text-sm text-muted-foreground">{project?.title || "Unlinked project"}</p>
             </div>
 
@@ -31,7 +31,7 @@ export default async function GalleriesPage() {
               </Link>
               <Link
                 href={`/g/${gallery.slug}`}
-                className="rounded-full border border-foreground bg-foreground px-3 py-2 text-sm text-background"
+                className="rounded-full border border-foreground bg-foreground px-3 py-2 text-sm text-background transition hover:opacity-90"
               >
                 Open Public
               </Link>

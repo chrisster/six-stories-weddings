@@ -39,39 +39,53 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
     }),
   );
 
+  const cover = mediaWithUrl.find((asset) => asset.isCover) || mediaWithUrl[0] || null;
   return (
     <div className="space-y-6">
-      <section className="soft-panel p-5">
-        <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">Gallery Manager</p>
-        <h2 className="title-cinematic mt-2 text-3xl font-semibold">{detail.gallery.title}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Project: {detail.project.title}</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link
-            href={`/g/${detail.gallery.slug}`}
-            className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
-          >
-            Open public gallery
-          </Link>
-          <form action={addDemoMediaAction}>
-            <input type="hidden" name="galleryId" value={detail.gallery.id} />
-            <button
-              type="submit"
-              className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
-            >
-              Add demo image
-            </button>
-          </form>
+      <section className="admin-surface overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="relative min-h-[220px] border-b border-border/80 bg-zinc-200 lg:min-h-[280px] lg:border-r lg:border-b-0">
+            {cover?.mediaType === "photo" ? (
+              <Image src={cover.url} alt={detail.gallery.title} fill className="object-cover" unoptimized />
+            ) : null}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/15 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+              <p className="text-[10px] tracking-[0.28em] uppercase text-white/85">Gallery Manager</p>
+              <h2 className="title-cinematic mt-2 text-3xl font-semibold">{detail.gallery.title}</h2>
+              <p className="mt-1 text-sm text-white/90">{detail.project.title}</p>
+            </div>
+          </div>
+
+          <div className="p-5 lg:p-6">
+            <p className="quiet-label">Quick Actions</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                href={`/g/${detail.gallery.slug}`}
+                className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
+              >
+                Open public gallery
+              </Link>
+              <form action={addDemoMediaAction}>
+                <input type="hidden" name="galleryId" value={detail.gallery.id} />
+                <button
+                  type="submit"
+                  className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
+                >
+                  Add demo image
+                </button>
+              </form>
+            </div>
+
+            <p className="mt-4 text-xs text-muted-foreground">
+              Upload path format: <span className="font-mono">galleryId/uuid.ext</span>
+            </p>
+          </div>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Uploads are stored in Supabase Storage bucket <strong>wedding-media</strong>, path format:
-          {" "}
-          <span className="font-mono">galleryId/uuid.ext</span>.
-        </p>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <article className="soft-panel p-5">
-          <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Gallery Settings</h3>
+        <article className="admin-surface p-5">
+          <h3 className="quiet-label mb-3">Gallery Settings</h3>
           <form action={updateGallerySettingsAction} className="space-y-4">
             <input type="hidden" name="galleryId" value={detail.gallery.id} />
 
@@ -87,25 +101,25 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
 
             <div className="space-y-2">
               <label htmlFor="passcode" className="text-sm">
-                Gallery passcode (leave empty to keep current)
+                Gallery passcode
               </label>
               <input
                 id="passcode"
                 name="passcode"
                 type="text"
                 className="h-10 w-full rounded-xl border border-border px-3 text-sm"
-                placeholder="Set or update passcode"
+                placeholder="Leave empty to keep current"
               />
             </div>
 
-            <button type="submit" className="h-10 rounded-full border border-foreground bg-foreground px-4 text-sm text-background">
+            <button type="submit" className="h-10 rounded-full border border-foreground bg-foreground px-4 text-sm text-background transition hover:opacity-90">
               Save settings
             </button>
           </form>
         </article>
 
-        <article className="soft-panel p-5">
-          <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Sections</h3>
+        <article className="admin-surface p-5">
+          <h3 className="quiet-label mb-3">Scenes / Sections</h3>
           <ul className="mb-4 space-y-2">
             {detail.sections.map((section) => (
               <SectionRow key={section.id} section={section} galleryId={detail.gallery.id} />
@@ -120,29 +134,27 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
               placeholder="New section name"
               className="h-10 flex-1 rounded-xl border border-border px-3 text-sm"
             />
-            <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm">
+            <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/30">
               Add
             </button>
           </form>
         </article>
       </section>
 
-      <section className="soft-panel p-5">
-        <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Upload Media</h3>
+      <section className="admin-surface p-5">
+        <h3 className="quiet-label mb-3">Upload Media</h3>
         <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} />
       </section>
 
       <section className="space-y-4">
-        <div className="soft-panel p-5">
-          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Media Library</h3>
+        <div className="admin-surface p-5">
+          <h3 className="quiet-label">Media Library</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Manage, sort, and delete media assets from your gallery.
+            Organize media by scenes, set covers, and remove files as needed.
           </p>
         </div>
-        
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <MediaManager media={mediaWithUrl} sections={detail.sections} galleryId={detail.gallery.id} />
-        </div>
+
+        <MediaManager media={mediaWithUrl} sections={detail.sections} galleryId={detail.gallery.id} />
       </section>
     </div>
   );

@@ -12,7 +12,7 @@ export function SectionRow({ section, galleryId }: { section: Section; galleryId
   return (
     <>
       {renaming ? (
-        <li className="rounded-xl border border-border/70 px-3 py-2">
+        <li className="rounded-xl border border-border/80 bg-white px-3 py-2">
           <form
             action={async (fd) => { await renameSectionAction(fd); setRenaming(false); }}
             className="flex gap-2"
@@ -26,16 +26,16 @@ export function SectionRow({ section, galleryId }: { section: Section; galleryId
               autoFocus
               className="h-8 flex-1 rounded-lg border border-border px-2 text-sm"
             />
-            <button type="submit" className="h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background">
+            <button type="submit" className="h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background transition hover:opacity-90">
               Save
             </button>
-            <button type="button" onClick={() => setRenaming(false)} className="h-8 rounded-lg border border-border px-3 text-xs">
+            <button type="button" onClick={() => setRenaming(false)} className="h-8 rounded-lg border border-border px-3 text-xs hover:border-foreground/30">
               Cancel
             </button>
           </form>
         </li>
       ) : (
-        <li className="flex items-center justify-between gap-2 rounded-xl border border-border/70 px-3 py-2 text-sm">
+        <li className="flex items-center justify-between gap-2 rounded-xl border border-border/80 bg-white px-3 py-2 text-sm">
           <span>{section.name}</span>
           <div className="flex shrink-0 gap-1">
             <button

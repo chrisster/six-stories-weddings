@@ -213,14 +213,14 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
   return (
     <div className="space-y-4">
       {progress.length === 0 ? (
-        <div className="grid gap-3 sm:grid-cols-[1fr_200px_auto]">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px_auto]">
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*,video/*"
             multiple
             onChange={handleFileSelect}
-            className="h-10 rounded-xl border border-border px-3 py-2 text-sm"
+            className="h-10 rounded-xl border border-border bg-white px-3 py-2 text-sm"
           />
           <select
             value={selectedSectionId}
@@ -238,7 +238,7 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
             type="button"
             onClick={handleUpload}
             disabled={selectedFiles.length === 0 || isUploading}
-            className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background disabled:opacity-50"
+            className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background transition hover:opacity-90 disabled:opacity-50"
           >
             {selectedFiles.length > 0
               ? `Upload ${selectedFiles.length} file${selectedFiles.length !== 1 ? "s" : ""}`
@@ -246,7 +246,7 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
           </button>
         </div>
       ) : (
-        <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+        <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">
               {completedCount > 0 && `${completedCount} completed`}
@@ -263,7 +263,7 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
                 {item.status === "completed" && <span className="text-emerald-600">✓</span>}
                 {item.status === "failed" && <span className="text-red-600">✗</span>}
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-white/50">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-white">
                 <div
                   className={`h-full transition-all ${
                     item.status === "completed"

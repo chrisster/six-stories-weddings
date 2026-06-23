@@ -105,7 +105,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
 
   if (media.length === 0) {
     return (
-      <div className="soft-panel col-span-full p-6 text-sm text-muted-foreground">
+      <div className="admin-surface p-6 text-sm text-muted-foreground">
         No media yet. Upload files above or click <strong>Add demo image</strong> to verify
         gallery rendering.
       </div>
@@ -115,7 +115,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3">
+      <div className="admin-surface flex flex-wrap items-center justify-between gap-3 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -182,9 +182,12 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
           const sectionId = sections.find((s) => sectionMap.get(s.id) === sectionName)?.id;
 
           return (
-            <div key={sectionName} className="space-y-3">
+            <div key={sectionName} className="admin-surface space-y-3 p-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium">{sectionName}</h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-medium">{sectionName}</h4>
+                  <span className="text-xs text-muted-foreground">{sectionMedia.length} items</span>
+                </div>
                 {sectionId && !selectedSectionFilter && (
                   <button
                     onClick={() => handleDeleteSection(sectionId)}
@@ -195,11 +198,11 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                 )}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="flex gap-3 overflow-x-auto pb-2">
                 {sectionMedia.map((asset) => (
                   <div
                     key={asset.id}
-                    className="group relative overflow-hidden rounded-xl border border-border bg-muted/50"
+                    className="group relative w-40 shrink-0 overflow-hidden rounded-md border border-border bg-muted/50"
                   >
                     {/* Checkbox overlay */}
                     <label className="absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded border border-white bg-black/50">
@@ -231,7 +234,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                     </div>
 
                     {/* Actions footer */}
-                    <div className="flex items-center justify-between gap-2 border-t border-border bg-white/80 p-2 backdrop-blur">
+                    <div className="space-y-2 border-t border-border bg-white/90 p-2 backdrop-blur">
                       <p className="text-xs text-muted-foreground">
                         {asset.mediaType} {asset.isCover ? "· cover" : ""}
                       </p>
@@ -242,7 +245,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                           <input type="hidden" name="mediaId" value={asset.id} />
                           <button
                             type="submit"
-                            className="rounded-full border border-border px-2 py-1 text-xs hover:bg-muted"
+                            className="rounded-full border border-border px-2 py-1 text-[11px] hover:bg-muted"
                           >
                             Cover
                           </button>
@@ -253,7 +256,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                           <input type="hidden" name="mediaId" value={asset.id} />
                           <button
                             type="submit"
-                            className="rounded-full border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                            className="rounded-full border border-red-300 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50"
                           >
                             Delete
                           </button>
