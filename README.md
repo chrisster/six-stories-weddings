@@ -73,27 +73,28 @@ Seed output includes demo gallery credentials:
 - `/admin/galleries/[id]`
 - `/g/[gallerySlug]`
 
-## Cloud Deployment (Vercel + Subdomain)
+## Cloud Deployment (Vercel + Custom Domain)
 
 1. Push repository to GitHub.
 2. Import repo in Vercel.
 3. Add production environment variables in Vercel project settings.
-4. Set `APP_URL` to your production domain, for example:
+4. Set `APP_URL` to the production domain:
 
-- `https://weddings.sixstoriesstudio.com`
-- or `https://studio.sixstoriesstudio.com`
+- `https://admin.sixstoriesstudio.com`
 
 5. In Supabase Auth settings:
 
-- Site URL: production `APP_URL`
-- Redirect URLs: add `https://weddings.sixstoriesstudio.com/*` and/or `https://studio.sixstoriesstudio.com/*`
+- Site URL: `https://admin.sixstoriesstudio.com`
+- Redirect URLs: add `https://admin.sixstoriesstudio.com/*`
 
 6. In your DNS provider:
 
-- Add CNAME for `weddings` (or `studio`) to Vercel target
-- Verify domain in Vercel
+- Add a CNAME record for `admin` pointing to the Vercel target (e.g. `cname.vercel-dns.com`)
+- Verify and assign the domain in Vercel project settings (Domains tab)
 
 7. Deploy.
+
+> **Routing note:** When accessed via `admin.sixstoriesstudio.com`, the root path `/` automatically redirects to `/admin`. Authentication is enforced via Next.js middleware — unauthenticated visitors are sent to `/login`.
 
 ## Notes
 
