@@ -1,11 +1,11 @@
 import Link from "next/link";
 
 import { ProjectsControls } from "@/components/admin/projects-controls";
-import { getDashboardMetrics, getProjects } from "@/lib/data";
+import { getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type AdminPageProps = {
-  searchParams: Promise<{ q?: string; status?: string; sort?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; sort?: string; period?: string }>;
 };
 
 function statusLabel(status: string) {
@@ -25,19 +25,35 @@ function statusBadge(status: string) {
   return map[status] || "bg-muted text-muted-foreground";
 }
 
-const statusPills = [
-  { key: "all", label: "Total", cls: "border-amber-300 bg-amber-100 text-amber-800" },
-  { key: "draft", label: "Draft", cls: "border-zinc-300 bg-zinc-100 text-zinc-700" },
-  { key: "negotiating", label: "Negotiating", cls: "border-sky-300 bg-sky-100 text-sky-700" },
-  { key: "scheduled", label: "Scheduled", cls: "border-emerald-300 bg-emerald-100 text-emerald-700" },
-  {
-    key: "post_production",
-    label: "Post-Production",
-    cls: "border-indigo-300 bg-indigo-100 text-indigo-700",
-  },
-  { key: "cancelled", label: "Cancelled", cls: "border-rose-300 bg-rose-100 text-rose-700" },
-  { key: "declined", label: "Declined", cls: "border-orange-300 bg-orange-100 text-orange-700" },
+const statusKpis = [
+  { key: "all", label: "Total" },
+  { key: "draft", label: "Draft" },
+  { key: "negotiating", label: "Negotiating" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "post_production", label: "Post-Production" },
+  { key: "cancelled", label: "Cancelled" },
+  { key: "declined", label: "Declined" },
 ] as const;
+
+function isWithinPeriod(eventDate: string, period: string) {
+  if (period === "all") return true;
+
+  const date = new Date(`${eventDate}T00:00:00Z`);
+  const now = new Date();
+
+  if (period === "this_month") {
+    return (
+      date.getUTCFullYear() === now.getUTCFullYear() &&
+      date.getUTCMonth() === now.getUTCMonth()
+    );
+  }
+
+  if (period === "this_year") {
+    return date.getUTCFullYear() === now.getUTCFullYear();
+  }
+
+  return true;
+}
 
 function eventTypeText(projectType: string): string {
   const type = projectType.toLowerCase();
@@ -50,46 +66,52 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const q = (params.q || "").toLowerCase();
   const statusFilter = params.status || "all";
   const sort = params.sort || "date_desc";
+  const period = params.period || "all";
 
-  const [metrics, projects] = await Promise.all([getDashboardMetrics(), getProjects()]);
+  const projects = await getProjects();
 
-  const filtered = projects.filter((project) => {
+  const periodFiltered = projects.filter((project) => isWithinPeriod(project.eventDate, period));
+
+  const filtered = periodFiltered
+    .filter((project) => {
     const matchesText =
       q.length === 0 ||
       project.title.toLowerCase().includes(q) ||
       project.clients.some((c) => c.fullName.toLowerCase().includes(q));
     const matchesStatus = statusFilter === "all" || project.status === statusFilter;
     return matchesText && matchesStatus;
-  }).sort((a, b) => {
-    if (sort === "name_asc") return a.title.localeCompare(b.title);
-    if (sort === "name_desc") return b.title.localeCompare(a.title);
-    if (sort === "date_asc") return a.eventDate.localeCompare(b.eventDate);
-    if (sort === "status_asc") return a.status.localeCompare(b.status);
-    return b.eventDate.localeCompare(a.eventDate);
-  });
+    })
+    .sort((a, b) => {
+      if (sort === "name_asc") return a.title.localeCompare(b.title);
+      if (sort === "name_desc") return b.title.localeCompare(a.title);
+      if (sort === "date_asc") return a.eventDate.localeCompare(b.eventDate);
+      if (sort === "status_asc") return a.status.localeCompare(b.status);
+      return b.eventDate.localeCompare(a.eventDate);
+    });
 
   const statusCounts: Record<string, number> = {
-    all: metrics.totalProjects,
-    draft: metrics.draftProjects,
-    negotiating: metrics.negotiatingProjects,
-    scheduled: metrics.scheduledProjects,
-    post_production: metrics.postProductionProjects,
-    cancelled: metrics.cancelledProjects,
-    declined: metrics.declinedProjects,
+    all: periodFiltered.length,
+    draft: periodFiltered.filter((project) => project.status === "draft").length,
+    negotiating: periodFiltered.filter((project) => project.status === "negotiating").length,
+    scheduled: periodFiltered.filter((project) => project.status === "scheduled").length,
+    post_production: periodFiltered.filter((project) => project.status === "post_production").length,
+    cancelled: periodFiltered.filter((project) => project.status === "cancelled").length,
+    declined: periodFiltered.filter((project) => project.status === "declined").length,
   };
 
   return (
     <div className="space-y-5">
       <section className="admin-surface p-4">
         <p className="quiet-label mb-3">Overview</p>
-        <div className="flex flex-wrap gap-2">
-          {statusPills.map((pill) => (
-            <span
-              key={pill.key}
-              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm ${pill.cls}`}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {statusKpis.map((kpi) => (
+            <article
+              key={kpi.key}
+              className="rounded-2xl border border-border/80 bg-zinc-50 px-4 py-3"
             >
-              {pill.label} ({statusCounts[pill.key] || 0})
-            </span>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{kpi.label}</p>
+              <p className="mt-2 text-3xl font-semibold text-foreground">{statusCounts[kpi.key] || 0}</p>
+            </article>
           ))}
         </div>
       </section>
@@ -109,7 +131,8 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           initialQuery={params.q || ""}
           initialStatus={statusFilter}
           initialSort={sort}
-          statusPills={[...statusPills]}
+          initialPeriod={period}
+          statusOptions={[...statusKpis]}
           statusCounts={statusCounts}
         />
 
