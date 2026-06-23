@@ -19,6 +19,8 @@ type ProjectPageProps = {
   params: Promise<{ id: string }>;
 };
 
+type ServiceType = "photo" | "film";
+
 function currency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 }
@@ -30,6 +32,44 @@ function toDisplayDate(iso: string): string {
     return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
   return iso;
+}
+
+function parseProjectType(projectType: string): {
+  eventType: "wedding" | "baptism";
+  eventLabel: string;
+  services: ServiceType[];
+} {
+  if (projectType.includes("|")) {
+    const [labelRaw, servicesRaw = ""] = projectType.split("|");
+    const eventType = labelRaw.trim().toLowerCase() === "baptism" ? "baptism" : "wedding";
+    const parsed = servicesRaw
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter((value): value is ServiceType => value === "photo" || value === "film");
+    const services = Array.from(new Set(parsed));
+
+    return {
+      eventType,
+      eventLabel: eventType === "baptism" ? "Baptism" : "Wedding",
+      services,
+    };
+  }
+
+  const lower = projectType.toLowerCase();
+  const eventType = lower.includes("baptism") ? "baptism" : "wedding";
+  const services: ServiceType[] = [];
+  if (lower.includes("photography")) services.push("photo");
+  if (lower.includes("film")) services.push("film");
+
+  return {
+    eventType,
+    eventLabel: eventType === "baptism" ? "Baptism" : "Wedding",
+    services,
+  };
+}
+
+function serviceLabel(service: ServiceType) {
+  return service === "photo" ? "Photography" : "Film";
 }
 
 const statusBadge: Record<string, string> = {
@@ -48,6 +88,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
   const [galleries, crewMembers] = await Promise.all([getGalleries(), getCrewMembers()]);
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
+  const projectTypeParts = parseProjectType(project.projectType);
 
   const assignedIds = new Set(project.crewAssignments.map((a) => a.crewMemberId));
   const availableCrew = crewMembers.filter((m) => !assignedIds.has(m.id));
@@ -60,7 +101,12 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase">Project</p>
             <h2 className="title-cinematic mt-2 text-3xl font-semibold">{project.title}</h2>
             <p className="mt-2 text-sm text-muted-foreground">{formatDateDDMMYY(project.eventDate)}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{project.projectType}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{projectTypeParts.eventLabel}</p>
+            {projectTypeParts.services.length > 0 ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {projectTypeParts.services.map((service) => serviceLabel(service)).join(" • ")}
+              </p>
+            ) : null}
             {(project as any).referral ? (
               <p className="mt-1 text-sm text-muted-foreground">Referred by {(project as any).referral}</p>
             ) : null}
@@ -217,16 +263,36 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Event type</label>
-            <select name="projectType" defaultValue={project.projectType} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
-              <option value="Wedding">Wedding</option>
-              <option value="Wedding Photography + Film">Wedding Photography + Film</option>
-              <option value="Wedding Photography">Wedding Photography</option>
-              <option value="Wedding Film">Wedding Film</option>
-              <option value="Baptism">Baptism</option>
-              <option value="Baptism Photography + Film">Baptism Photography + Film</option>
-              <option value="Baptism Photography">Baptism Photography</option>
-              <option value="Baptism Film">Baptism Film</option>
+            <select name="eventType" defaultValue={projectTypeParts.eventType} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
+              <option value="wedding">Wedding</option>
+              <option value="baptism">Baptism</option>
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Services</label>
+            <div className="flex h-10 items-center gap-4 rounded-xl border border-border bg-white px-3 text-sm">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="services"
+                  value="photo"
+                  defaultChecked={projectTypeParts.services.includes("photo")}
+                  className="size-4 rounded border-border"
+                />
+                Photography
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="services"
+                  value="film"
+                  defaultChecked={projectTypeParts.services.includes("film")}
+                  className="size-4 rounded border-border"
+                />
+                Film
+              </label>
+            </div>
           </div>
 
           <div className="space-y-1.5">

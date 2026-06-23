@@ -21,6 +21,42 @@ function slugify(input: string) {
     .slice(0, 48);
 }
 
+type ServiceType = "photo" | "film";
+
+function normalizeEventType(raw: string): "wedding" | "baptism" {
+  return raw.trim().toLowerCase() === "baptism" ? "baptism" : "wedding";
+}
+
+function normalizeServices(values: string[]): ServiceType[] {
+  const next = values
+    .map((value) => value.trim().toLowerCase())
+    .filter((value): value is ServiceType => value === "photo" || value === "film");
+
+  return Array.from(new Set(next));
+}
+
+function parseLegacyProjectType(projectType: string): { eventType: "wedding" | "baptism"; services: ServiceType[] } {
+  if (projectType.includes("|")) {
+    const [labelRaw, servicesRaw = ""] = projectType.split("|");
+    const eventType = normalizeEventType(labelRaw);
+    const services = normalizeServices(servicesRaw.split(","));
+    return { eventType, services };
+  }
+
+  const lower = projectType.toLowerCase();
+  const eventType = lower.includes("baptism") ? "baptism" : "wedding";
+  const services: ServiceType[] = [];
+  if (lower.includes("photography")) services.push("photo");
+  if (lower.includes("film")) services.push("film");
+  return { eventType, services };
+}
+
+function buildProjectType(eventType: "wedding" | "baptism", services: ServiceType[]): string {
+  const label = eventType === "baptism" ? "Baptism" : "Wedding";
+  const normalized = services.length > 0 ? services : ["photo", "film"];
+  return `${label}|${normalized.join(",")}`;
+}
+
 export async function createProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
@@ -29,20 +65,11 @@ export async function createProjectAction(formData: FormData) {
   const manualTitle = String(formData.get("title") || "").trim();
   const eventDate = String(formData.get("eventDate") || "").trim();
 
-  // Services + event type → project_type string
   const servicesRaw = String(formData.get("services") || "");
-  const servicesArr = servicesRaw.split(",").filter(Boolean);
-  const rawEventType = String(formData.get("eventType") || "wedding").trim().toLowerCase();
-  const eventLabel = rawEventType === "baptism" ? "Baptism" : "Wedding";
-  const servicesLabel =
-    servicesArr.includes("photo") && servicesArr.includes("film")
-      ? "Photography + Film"
-      : servicesArr.includes("photo")
-        ? "Photography"
-        : servicesArr.includes("film")
-          ? "Film"
-          : null;
-  const projectType = servicesLabel ? `${eventLabel} ${servicesLabel}` : eventLabel;
+  const rawEventType = String(formData.get("eventType") || "wedding");
+  const eventType = normalizeEventType(rawEventType);
+  const services = normalizeServices(servicesRaw.split(","));
+  const projectType = buildProjectType(eventType, services);
 
   // Always create as draft initially
   const status = "draft";
@@ -256,7 +283,15 @@ export async function updateProjectAction(formData: FormData) {
   const eventDate = /^\d{2}-\d{2}-\d{4}$/.test(rawDate)
     ? `${rawDate.slice(6)}-${rawDate.slice(3, 5)}-${rawDate.slice(0, 2)}`
     : rawDate;
-  const projectType = String(formData.get("projectType") || "Wedding").trim();
+  const fallbackProjectType = String(formData.get("projectType") || "").trim();
+  const parsedFallback = parseLegacyProjectType(fallbackProjectType || "Wedding");
+  const eventType = normalizeEventType(String(formData.get("eventType") || parsedFallback.eventType));
+  const services = normalizeServices(
+    formData
+      .getAll("services")
+      .map((value) => String(value)),
+  );
+  const projectType = buildProjectType(eventType, services.length > 0 ? services : parsedFallback.services);
   const status = String(formData.get("status") || "draft").trim();
   const editingStatus = String(formData.get("editingStatus") || "not_started").trim();
   const referral = String(formData.get("referral") || "").trim() || null;
@@ -288,7 +323,14 @@ export async function updateProjectAction(formData: FormData) {
     .eq("id", projectId);
 
   if (error) {
-    throw new Error(error.message);
+    console.error("updateProjectAction failed", {
+      projectId,
+      message: error.message,
+      status,
+      eventDate,
+      projectType,
+    });
+    return;
   }
 
   revalidatePath(`/admin/projects/${projectId}`);
