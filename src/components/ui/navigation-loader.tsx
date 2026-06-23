@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 export function NavigationLoader() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -15,7 +14,7 @@ export function NavigationLoader() {
 
     const timer = window.setTimeout(() => setLoading(false), 220);
     return () => window.clearTimeout(timer);
-  }, [pathname, searchParams, loading]);
+  }, [pathname, loading]);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
