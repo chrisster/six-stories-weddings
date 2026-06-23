@@ -330,13 +330,13 @@ export async function updateProjectAction(formData: FormData) {
       eventDate,
       projectType,
     });
-    return;
+    redirect(`/admin/projects/${projectId}?save=error`);
   }
 
   revalidatePath(`/admin/projects/${projectId}`);
   revalidatePath("/admin/projects");
   revalidatePath("/admin");
-  redirect(`/admin/projects/${projectId}`);
+  redirect(`/admin/projects/${projectId}?save=ok`);
 }
 
 export async function updateClientAction(formData: FormData) {

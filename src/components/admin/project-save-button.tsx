@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 type ProjectSaveButtonProps = {
   formId: string;
@@ -8,7 +8,6 @@ type ProjectSaveButtonProps = {
 
 export function ProjectSaveButton({ formId }: ProjectSaveButtonProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const timeoutRef = useRef<number | null>(null);
 
   function handleSave() {
     const form = document.getElementById(formId) as HTMLFormElement | null;
@@ -16,13 +15,12 @@ export function ProjectSaveButton({ formId }: ProjectSaveButtonProps) {
       return;
     }
 
-    setIsSaving(true);
-
-    // Fallback reset if the action does not navigate away (e.g. validation/server no-op).
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current);
+    // Do not enter loading state if the form is invalid.
+    if (!form.reportValidity()) {
+      return;
     }
-    timeoutRef.current = window.setTimeout(() => setIsSaving(false), 8000);
+
+    setIsSaving(true);
 
     form.requestSubmit();
   }

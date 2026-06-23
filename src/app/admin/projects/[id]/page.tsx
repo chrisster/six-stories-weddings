@@ -18,6 +18,7 @@ import { formatDateDDMMYY } from "@/lib/utils";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ save?: string }>;
 };
 
 type ServiceType = "photo" | "film";
@@ -79,8 +80,9 @@ const statusBadge: Record<string, string> = {
   done: "bg-emerald-100 text-emerald-700",
 };
 
-export default async function ProjectDetailPage({ params }: ProjectPageProps) {
+export default async function ProjectDetailPage({ params, searchParams }: ProjectPageProps) {
   const { id } = await params;
+  const query = await searchParams;
   const project = await getProjectById(id);
 
   if (!project) {
@@ -96,6 +98,18 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
   return (
     <div className="space-y-6">
+      {query.save === "ok" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+          Project saved.
+        </div>
+      ) : null}
+
+      {query.save === "error" ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          Could not save project. Please check fields and try again.
+        </div>
+      ) : null}
+
       <section className="soft-panel p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
