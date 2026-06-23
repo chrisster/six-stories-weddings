@@ -375,7 +375,9 @@ export async function updateProjectAction(formData: FormData) {
       eventDate,
       projectType,
     });
-    redirect(`/admin/projects/${projectId}?save=error&reason=server`);
+    redirect(
+      `/admin/projects/${projectId}?save=error&reason=server&detail=${encodeURIComponent(error.message)}`,
+    );
   }
 
   revalidatePath(`/admin/projects/${projectId}`);
