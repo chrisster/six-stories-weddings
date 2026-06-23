@@ -75,17 +75,26 @@ Seed output includes demo gallery credentials:
 
 ## Cloud Deployment (Vercel + Plesk Subdomain)
 
-If your app is already live on Vercel and you want to replace the `*.vercel.app` URL with your own subdomain (for example `weddings.sixstoriesstudio.com`), do this in order:
+Use this when moving from `https://six-stories-weddings-*.vercel.app` to a branded subdomain like `https://weddings.sixstoriesstudio.com`.
 
-1. In **Vercel → Project → Settings → Domains**, add your subdomain (example: `weddings.sixstoriesstudio.com`).
-2. In **Plesk → Domains → sixstoriesstudio.com → Add Subdomain**, create the same subdomain (`weddings`).
-3. In **Plesk DNS settings**, add/update a **CNAME** record for that subdomain pointing to Vercel's target (typically `cname.vercel-dns.com`, or exactly what Vercel shows for your project).
-4. Back in Vercel, wait for domain verification to turn valid.
-5. In Vercel environment variables, set `APP_URL=https://weddings.sixstoriesstudio.com`.
-6. In Supabase Auth settings:
+### Minimum required (for domain cutover)
+
+1. In **Vercel → Project → Settings → Domains**, add `weddings.sixstoriesstudio.com`.
+2. In **Plesk → Domains → sixstoriesstudio.com → Add Subdomain**, create `weddings`.
+3. In **Plesk DNS settings**, set a **CNAME** for `weddings` to Vercel's target (`cname.vercel-dns.com`, or the exact value shown in Vercel).
+4. Back in Vercel, wait until the domain status is verified.
+
+### Do the rest in order (production correctness)
+
+5. In **Vercel → Settings → Environment Variables**, set:
+   - `APP_URL=https://weddings.sixstoriesstudio.com`
+6. In **Supabase → Authentication → URL Configuration**, set:
    - Site URL: `https://weddings.sixstoriesstudio.com`
    - Redirect URLs: `https://weddings.sixstoriesstudio.com/*`
-7. Redeploy the project from Vercel so all runtime config uses the custom domain.
+7. Redeploy from Vercel (or trigger a new production deployment).
+8. Smoke test:
+   - Open home, `/admin`, and one gallery link on the custom domain.
+   - Confirm auth redirects stay on `weddings.sixstoriesstudio.com` (not `*.vercel.app`).
 
 ## Notes
 
