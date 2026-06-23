@@ -1,8 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
-import { deleteMediaAction, bulkDeleteMediaAction, setCoverMediaAction } from "@/app/admin/galleries/[id]/actions";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  deleteMediaAction,
+  bulkDeleteMediaAction,
+  reorderMediaAction,
+  setCoverMediaAction,
+} from "@/app/admin/galleries/[id]/actions";
 import type { MediaAsset, GallerySection } from "@/lib/types";
 
 type MediaManagerProps = {
@@ -12,18 +18,27 @@ type MediaManagerProps = {
 };
 
 type SortOption = "date" | "name" | "section";
+type ViewMode = "strip" | "grid";
 
 export function MediaManager({ media, sections, galleryId }: MediaManagerProps) {
+  const router = useRouter();
+  const [mediaState, setMediaState] = useState(media);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortOption>("date");
+  const [viewMode, setViewMode] = useState<ViewMode>("strip");
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>("");
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMediaState(media);
+  }, [media]);
 
   const sectionMap = useMemo(() => {
     return new Map(sections.map((s) => [s.id, s.name]));
   }, [sections]);
 
   const groupedAndSorted = useMemo(() => {
-    let sorted = [...media];
+    let sorted = [...mediaState];
 
     // Filter by section
     if (selectedSectionFilter) {
@@ -51,13 +66,64 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     }
 
     return new Map([[selectedSectionFilter, sorted]]);
-  }, [media, sortBy, selectedSectionFilter, sectionMap]);
+  }, [mediaState, sortBy, selectedSectionFilter, sectionMap]);
+
+  async function persistOrder(next: typeof mediaState) {
+    const orderedIds = [...next]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((item) => item.id)
+      .join(",");
+
+    const formData = new FormData();
+    formData.append("galleryId", galleryId);
+    formData.append("orderedIds", orderedIds);
+    await reorderMediaAction(formData);
+    router.refresh();
+  }
+
+  async function handleDropInSection(sectionName: string, targetId: string) {
+    if (!draggedId || draggedId === targetId) {
+      return;
+    }
+
+    const sectionItems = mediaState
+      .filter((item) => {
+        const key = item.sectionId ? sectionMap.get(item.sectionId) || "Unsorted" : "Unsorted";
+        return key === sectionName;
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const from = sectionItems.findIndex((item) => item.id === draggedId);
+    const to = sectionItems.findIndex((item) => item.id === targetId);
+    if (from < 0 || to < 0) {
+      return;
+    }
+
+    const reordered = [...sectionItems];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+
+    let cursor = Math.min(...sectionItems.map((item) => item.sortOrder));
+    const updates = new Map<string, number>();
+    reordered.forEach((item) => {
+      updates.set(item.id, cursor);
+      cursor += 1;
+    });
+
+    const next = mediaState.map((item) =>
+      updates.has(item.id) ? { ...item, sortOrder: updates.get(item.id)! } : item,
+    );
+
+    setMediaState(next);
+    setDraggedId(null);
+    await persistOrder(next);
+  }
 
   const handleSelectAll = () => {
-    if (selectedIds.size === media.length) {
+    if (selectedIds.size === mediaState.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(media.map((m) => m.id)));
+      setSelectedIds(new Set(mediaState.map((m) => m.id)));
     }
   };
 
@@ -103,7 +169,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     await bulkDeleteMediaAction(formData);
   };
 
-  if (media.length === 0) {
+  if (mediaState.length === 0) {
     return (
       <div className="admin-surface p-6 text-sm text-muted-foreground">
         No media yet. Upload files above or click <strong>Add demo image</strong> to verify
@@ -120,7 +186,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={selectedIds.size === media.length && media.length > 0}
+              checked={selectedIds.size === mediaState.length && mediaState.length > 0}
               onChange={handleSelectAll}
               className="h-4 w-4 rounded border-border"
             />
@@ -152,6 +218,23 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
             <option value="section">Group by section</option>
           </select>
 
+          <div className="inline-flex overflow-hidden rounded-lg border border-border">
+            <button
+              type="button"
+              onClick={() => setViewMode("strip")}
+              className={`px-2 py-1 text-xs ${viewMode === "strip" ? "bg-muted" : "bg-white"}`}
+            >
+              Strip
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={`px-2 py-1 text-xs ${viewMode === "grid" ? "bg-muted" : "bg-white"}`}
+            >
+              Grid
+            </button>
+          </div>
+
           {sections.length > 0 && (
             <select
               value={selectedSectionFilter}
@@ -176,13 +259,29 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
         </div>
       </div>
 
+      <div className="admin-surface flex flex-wrap gap-2 p-3">
+        {[...groupedAndSorted.keys()].map((sectionName) => (
+          <a
+            key={sectionName}
+            href={`#section-${sectionName.toLowerCase().replace(/\s+/g, "-")}`}
+            className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {sectionName}
+          </a>
+        ))}
+      </div>
+
       {/* Media Grid by Section */}
       <div className="space-y-8">
         {[...groupedAndSorted.entries()].map(([sectionName, sectionMedia]) => {
           const sectionId = sections.find((s) => sectionMap.get(s.id) === sectionName)?.id;
 
           return (
-            <div key={sectionName} className="admin-surface space-y-3 p-4">
+            <div
+              id={`section-${sectionName.toLowerCase().replace(/\s+/g, "-")}`}
+              key={sectionName}
+              className="admin-surface space-y-3 p-4"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h4 className="text-sm font-medium">{sectionName}</h4>
@@ -198,11 +297,23 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                 )}
               </div>
 
-              <div className="flex gap-3 overflow-x-auto pb-2">
+              <div
+                className={
+                  viewMode === "strip"
+                    ? "flex gap-3 overflow-x-auto pb-2"
+                    : "grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-6"
+                }
+              >
                 {sectionMedia.map((asset) => (
                   <div
                     key={asset.id}
-                    className="group relative w-40 shrink-0 overflow-hidden rounded-md border border-border bg-muted/50"
+                    draggable
+                    onDragStart={() => setDraggedId(asset.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => handleDropInSection(sectionName, asset.id)}
+                    className={`group relative overflow-hidden rounded-md border border-border bg-muted/50 ${
+                      viewMode === "strip" ? "w-40 shrink-0" : "w-full"
+                    }`}
                   >
                     {/* Checkbox overlay */}
                     <label className="absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded border border-white bg-black/50">

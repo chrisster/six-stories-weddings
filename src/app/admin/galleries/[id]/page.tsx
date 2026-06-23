@@ -41,8 +41,48 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
 
   const cover = mediaWithUrl.find((asset) => asset.isCover) || mediaWithUrl[0] || null;
   return (
-    <div className="space-y-6">
-      <section className="admin-surface overflow-hidden">
+    <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
+      <aside className="admin-surface h-fit p-4 xl:sticky xl:top-6">
+        <p className="quiet-label">Utility Rail</p>
+        <p className="mt-2 text-sm font-medium">{detail.gallery.title}</p>
+        <p className="text-xs text-muted-foreground">{detail.project.title}</p>
+
+        <div className="mt-4 space-y-2">
+          <Link
+            href={`/g/${detail.gallery.slug}`}
+            className="block rounded-xl border border-border px-3 py-2 text-sm hover:border-foreground/30"
+          >
+            Open public gallery
+          </Link>
+          <form action={addDemoMediaAction}>
+            <input type="hidden" name="galleryId" value={detail.gallery.id} />
+            <button
+              type="submit"
+              className="w-full rounded-xl border border-border px-3 py-2 text-left text-sm hover:border-foreground/30"
+            >
+              Add demo image
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-5 border-t border-border/80 pt-4">
+          <p className="quiet-label mb-2">Scenes</p>
+          <div className="space-y-1.5">
+            {detail.sections.map((section) => (
+              <a
+                key={section.id}
+                href={`#section-${section.name.toLowerCase().replace(/\s+/g, "-")}`}
+                className="block rounded-lg border border-border/60 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                {section.name}
+              </a>
+            ))}
+          </div>
+        </div>
+      </aside>
+
+      <div className="space-y-6">
+        <section className="admin-surface overflow-hidden">
         <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="relative min-h-[220px] border-b border-border/80 bg-zinc-200 lg:min-h-[280px] lg:border-r lg:border-b-0">
             {cover?.mediaType === "photo" ? (
@@ -57,27 +97,20 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
           </div>
 
           <div className="p-5 lg:p-6">
-            <p className="quiet-label">Quick Actions</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                href={`/g/${detail.gallery.slug}`}
-                className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
-              >
-                Open public gallery
-              </Link>
-              <form action={addDemoMediaAction}>
-                <input type="hidden" name="galleryId" value={detail.gallery.id} />
-                <button
-                  type="submit"
-                  className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
-                >
-                  Add demo image
-                </button>
-              </form>
+            <p className="quiet-label">Gallery Summary</p>
+            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+              <div className="rounded-xl border border-border/70 px-3 py-2">
+                <p className="text-xs text-muted-foreground">Total media</p>
+                <p className="mt-1 font-medium">{mediaWithUrl.length}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 px-3 py-2">
+                <p className="text-xs text-muted-foreground">Scenes</p>
+                <p className="mt-1 font-medium">{detail.sections.length}</p>
+              </div>
             </div>
 
             <p className="mt-4 text-xs text-muted-foreground">
-              Upload path format: <span className="font-mono">galleryId/uuid.ext</span>
+              Upload path: <span className="font-mono">galleryId/uuid.ext</span>
             </p>
           </div>
         </div>
@@ -156,6 +189,7 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
 
         <MediaManager media={mediaWithUrl} sections={detail.sections} galleryId={detail.gallery.id} />
       </section>
+      </div>
     </div>
   );
 }

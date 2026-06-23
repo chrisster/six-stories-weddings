@@ -309,3 +309,34 @@ export async function bulkDeleteMediaAction(formData: FormData) {
 
   revalidatePath(`/admin/galleries/${galleryId}`);
 }
+
+export async function reorderMediaAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  const orderedIds = String(formData.get("orderedIds") || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  if (!galleryId || orderedIds.length === 0) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  for (let i = 0; i < orderedIds.length; i += 1) {
+    await admin
+      .from("media_assets")
+      .update({ sort_order: i + 1 })
+      .eq("gallery_id", galleryId)
+      .eq("id", orderedIds[i]);
+  }
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+}
