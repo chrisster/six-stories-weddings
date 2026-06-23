@@ -56,7 +56,6 @@ export function LoginForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none ring-0 transition focus:border-foreground/50"
-          placeholder="studio@sixstoriesstudio.com"
         />
       </div>
 
@@ -71,7 +70,6 @@ export function LoginForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none ring-0 transition focus:border-foreground/50"
-          placeholder="••••••••"
         />
       </div>
 
