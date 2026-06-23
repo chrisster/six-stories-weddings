@@ -16,23 +16,86 @@ type PublicGalleryProps = {
   allowDownloads: boolean;
 };
 
+type SortOption = "date" | "name" | "section";
+
 export function PublicGallery({ assets, allowDownloads }: PublicGalleryProps) {
   const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("section");
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>("");
+
+  const sections = useMemo(() => {
+    const sectionSet = new Set<string>();
+    assets.forEach((asset) => {
+      sectionSet.add(asset.sectionName || "Moments");
+    });
+    return Array.from(sectionSet).sort();
+  }, [assets]);
 
   const groupedAssets = useMemo(() => {
+    let sorted = [...assets];
+
+    // Filter by section
+    if (selectedSectionFilter) {
+      sorted = sorted.filter((a) => a.sectionName === selectedSectionFilter);
+    }
+
+    // Sort
+    if (sortBy === "name") {
+      sorted.sort((a, b) => {
+        const nameA = a.id.split("/").pop() || "";
+        const nameB = b.id.split("/").pop() || "";
+        return nameA.localeCompare(nameB);
+      });
+    }
+
+    // Group by section
     const grouped = new Map<string, PublicAsset[]>();
-    assets.forEach((asset) => {
+    sorted.forEach((asset) => {
       const key = asset.sectionName || "Moments";
       const current = grouped.get(key) || [];
       grouped.set(key, [...current, asset]);
     });
     return grouped;
-  }, [assets]);
+  }, [assets, sortBy, selectedSectionFilter]);
 
   const activeAsset = assets.find((asset) => asset.id === activeAssetId) || null;
 
   return (
     <>
+      {/* Controls */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm text-muted-foreground">Sort:</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="h-9 rounded-lg border border-border/50 bg-white px-3 text-sm"
+          >
+            <option value="section">By section</option>
+            <option value="name">By name</option>
+            <option value="date">By date added</option>
+          </select>
+        </div>
+
+        {sections.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-sm text-muted-foreground">Filter:</label>
+            <select
+              value={selectedSectionFilter}
+              onChange={(e) => setSelectedSectionFilter(e.target.value)}
+              className="h-9 rounded-lg border border-border/50 bg-white px-3 text-sm"
+            >
+              <option value="">All sections</option>
+              {sections.map((section) => (
+                <option key={section} value={section}>
+                  {section}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       <div className="space-y-10">
         {[...groupedAssets.entries()].map(([sectionName, sectionAssets]) => (
           <section key={sectionName} className="space-y-4">

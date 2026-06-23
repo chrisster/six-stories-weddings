@@ -233,3 +233,79 @@ export async function addDemoMediaAction(formData: FormData) {
 
   revalidatePath(`/admin/galleries/${galleryId}`);
 }
+
+export async function deleteMediaAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const mediaId = String(formData.get("mediaId") || "").trim();
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  if (!mediaId || !galleryId) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  // Remove from gallery if it's the cover
+  await admin
+    .from("galleries")
+    .update({ cover_media_id: null })
+    .eq("cover_media_id", mediaId);
+
+  // Delete the media asset
+  await admin.from("media_assets").delete().eq("id", mediaId);
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+}
+
+export async function bulkDeleteMediaAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  const mediaIds = String(formData.get("mediaIds") || "")
+    .split(",")
+    .filter((id) => id.length > 0);
+  const sectionId = String(formData.get("sectionId") || "").trim() || null;
+  const deleteAll = formData.get("deleteAll") === "true";
+
+  if (!galleryId) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  let query = admin.from("media_assets").delete().eq("gallery_id", galleryId);
+
+  if (deleteAll) {
+    // Delete all media in gallery
+    await query;
+  } else if (sectionId) {
+    // Delete all media in section
+    await admin.from("media_assets").delete().eq("section_id", sectionId);
+  } else if (mediaIds.length > 0) {
+    // Delete selected media
+    await admin.from("media_assets").delete().in("id", mediaIds);
+  }
+
+  // Clear cover media if it no longer exists
+  const { data: remaining } = await admin
+    .from("media_assets")
+    .select("id")
+    .eq("gallery_id", galleryId)
+    .limit(1);
+
+  if (!remaining || remaining.length === 0) {
+    await admin.from("galleries").update({ cover_media_id: null }).eq("id", galleryId);
+  }
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+}

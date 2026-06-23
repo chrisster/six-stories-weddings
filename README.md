@@ -73,27 +73,19 @@ Seed output includes demo gallery credentials:
 - `/admin/galleries/[id]`
 - `/g/[gallerySlug]`
 
-## Cloud Deployment (Vercel + Subdomain)
+## Cloud Deployment (Vercel + Plesk Subdomain)
 
-1. Push repository to GitHub.
-2. Import repo in Vercel.
-3. Add production environment variables in Vercel project settings.
-4. Set `APP_URL` to your production domain, for example:
+If your app is already live on Vercel and you want to replace the `*.vercel.app` URL with your own subdomain (for example `weddings.sixstoriesstudio.com`), do this in order:
 
-- `https://weddings.sixstoriesstudio.com`
-- or `https://studio.sixstoriesstudio.com`
-
-5. In Supabase Auth settings:
-
-- Site URL: production `APP_URL`
-- Redirect URLs: add `https://weddings.sixstoriesstudio.com/*` and/or `https://studio.sixstoriesstudio.com/*`
-
-6. In your DNS provider:
-
-- Add CNAME for `weddings` (or `studio`) to Vercel target
-- Verify domain in Vercel
-
-7. Deploy.
+1. In **Vercel → Project → Settings → Domains**, add your subdomain (example: `weddings.sixstoriesstudio.com`).
+2. In **Plesk → Domains → sixstoriesstudio.com → Add Subdomain**, create the same subdomain (`weddings`).
+3. In **Plesk DNS settings**, add/update a **CNAME** record for that subdomain pointing to Vercel's target (typically `cname.vercel-dns.com`, or exactly what Vercel shows for your project).
+4. Back in Vercel, wait for domain verification to turn valid.
+5. In Vercel environment variables, set `APP_URL=https://weddings.sixstoriesstudio.com`.
+6. In Supabase Auth settings:
+   - Site URL: `https://weddings.sixstoriesstudio.com`
+   - Redirect URLs: `https://weddings.sixstoriesstudio.com/*`
+7. Redeploy the project from Vercel so all runtime config uses the custom domain.
 
 ## Notes
 

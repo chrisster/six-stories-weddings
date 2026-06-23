@@ -5,10 +5,10 @@ import { notFound } from "next/navigation";
 import {
   addDemoMediaAction,
   createGallerySectionAction,
-  setCoverMediaAction,
-  updateGallerySettingsAction,
-  uploadMediaAction,
 } from "@/app/admin/galleries/[id]/actions";
+import { MediaUploader } from "@/components/gallery/media-uploader";
+import { MediaManager } from "@/components/gallery/media-manager";
+import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
 import { getGalleryById } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
@@ -129,59 +129,20 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
 
       <section className="soft-panel p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Upload Media</h3>
-        <form action={uploadMediaAction} className="grid gap-3 sm:grid-cols-[1fr_220px_auto]" encType="multipart/form-data">
-          <input type="hidden" name="galleryId" value={detail.gallery.id} />
-          <input
-            type="file"
-            name="files"
-            accept="image/*,video/*"
-            multiple
-            required
-            className="h-10 rounded-xl border border-border px-3 py-2 text-sm"
-          />
-          <select name="sectionId" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
-            <option value="">No section</option>
-            {detail.sections.map((section) => (
-              <option key={section.id} value={section.id}>
-                {section.name}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">
-            Upload
-          </button>
-        </form>
+        <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} />
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {mediaWithUrl.length === 0 ? (
-          <article className="soft-panel col-span-full p-6 text-sm text-muted-foreground">
-            No media yet. Upload files above or click <strong>Add demo image</strong> to verify gallery rendering.
-          </article>
-        ) : null}
-        {mediaWithUrl.map((asset) => (
-          <article key={asset.id} className="soft-panel overflow-hidden">
-            <div className="relative aspect-[4/3] bg-muted/50">
-              {asset.mediaType === "photo" ? (
-                <Image src={asset.url} alt="Gallery asset" fill className="object-cover" unoptimized />
-              ) : (
-                <video src={asset.url} controls className="size-full object-cover" preload="metadata" />
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-2 p-3">
-              <p className="text-xs text-muted-foreground">
-                {asset.mediaType} {asset.isCover ? "· cover" : ""} {asset.broken ? "· signed URL fallback" : ""}
-              </p>
-              <form action={setCoverMediaAction}>
-                <input type="hidden" name="galleryId" value={detail.gallery.id} />
-                <input type="hidden" name="mediaId" value={asset.id} />
-                <button type="submit" className="rounded-full border border-border px-3 py-1 text-xs">
-                  Set cover
-                </button>
-              </form>
-            </div>
-          </article>
-        ))}
+      <section className="space-y-4">
+        <div className="soft-panel p-5">
+          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Media Library</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Manage, sort, and delete media assets from your gallery.
+          </p>
+        </div>
+        
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <MediaManager media={mediaWithUrl} sections={detail.sections} galleryId={detail.gallery.id} />
+        </div>
       </section>
     </div>
   );
