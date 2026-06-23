@@ -54,15 +54,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
 
   return (
     <div className="space-y-6">
-
       <section className="soft-panel p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase">Project</p>
             <h2 className="title-cinematic mt-2 text-3xl font-semibold">{project.title}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {formatDateDDMMYY(project.eventDate)} · {project.projectType}
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">{formatDateDDMMYY(project.eventDate)}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{project.projectType}</p>
             {(project as any).referral ? (
               <p className="mt-1 text-sm text-muted-foreground">Referred by {(project as any).referral}</p>
             ) : null}
@@ -79,105 +77,189 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <DeleteProjectButton projectId={project.id} projectTitle={project.title} />
           </div>
         </div>
+
+        <div className="mt-5">
+          <p className="quiet-label mb-3">Financials</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+              <input
+                form="edit-wedding-form"
+                name="budgetTotal"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={project.budgetTotal}
+                className="mt-2 h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
+              />
+            </div>
+            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Paid</p>
+              <input
+                form="edit-wedding-form"
+                name="amountPaid"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={project.amountPaid}
+                className="mt-2 h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
+              />
+            </div>
+            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Remaining</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{currency(project.amountRemaining)}</p>
+            </div>
+            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Status</p>
+              <select
+                form="edit-wedding-form"
+                name="status"
+                defaultValue={project.status}
+                className="mt-2 h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
+              >
+                <option value="draft">Draft</option>
+                <option value="negotiating">Negotiating</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="post_production">Post production</option>
+                <option value="declined">Declined</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        <article className="soft-panel p-5 lg:col-span-2">
-          <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Clients</h3>
-          <ul className="space-y-3">
-            {project.clients.map((client) => (
-              <li key={client.id} className="rounded-xl border border-border/80 bg-white/80 px-3 py-3">
-                <form action={updateClientAction} className="grid gap-2 sm:grid-cols-3">
-                  <input type="hidden" name="projectId" value={project.id} />
-                  <input type="hidden" name="clientId" value={client.id} />
-                  <input name="fullName" defaultValue={client.fullName} required className="h-10 rounded-xl border border-border px-3 text-sm" />
-                  <input name="email" type="email" defaultValue={client.email || ""} placeholder="Email" className="h-10 rounded-xl border border-border px-3 text-sm" />
-                  <input name="phone" defaultValue={client.phone || ""} placeholder="Phone" className="h-10 rounded-xl border border-border px-3 text-sm" />
-                  <div className="flex gap-2 sm:col-span-3">
-                    <button type="submit" className="h-9 rounded-xl border border-border px-3 text-sm">Save</button>
-                    <button type="submit" formAction={removeClientFromProjectAction} className="h-9 rounded-xl border border-red-200 px-3 text-sm text-red-600 hover:border-red-400">Remove</button>
-                  </div>
-                </form>
-              </li>
-            ))}
-          </ul>
-          <details className="mt-4 rounded-xl border border-border/80">
-            <summary className="cursor-pointer select-none px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground">+ Add client</summary>
-            <div className="p-3">
+      <section className="soft-panel overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 px-5 py-4">
+          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Clients</h3>
+          <details>
+            <summary className="cursor-pointer list-none rounded-xl border border-foreground bg-foreground px-3 py-2 text-sm text-background">
+              Add client
+            </summary>
+            <div className="mt-3 rounded-xl border border-border bg-white p-3">
               <form action={addClientToProjectAction} className="grid gap-2 sm:grid-cols-3">
                 <input type="hidden" name="projectId" value={project.id} />
                 <input name="fullName" placeholder="Full name" required className="h-10 rounded-xl border border-border px-3 text-sm" />
                 <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border px-3 text-sm" />
                 <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border px-3 text-sm" />
-                <button type="submit" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-3 sm:justify-self-start">Add client</button>
+                <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-3 text-sm text-background sm:col-span-3 sm:justify-self-start">
+                  Add client
+                </button>
               </form>
             </div>
           </details>
-        </article>
+        </div>
 
-        <article className="soft-panel p-5">
-          <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Budget</h3>
-          <div className="space-y-2 text-sm">
-            <p className="flex items-center justify-between"><span>Total</span><span className="font-medium">{currency(project.budgetTotal)}</span></p>
-            <p className="flex items-center justify-between"><span>Paid</span><span className="font-medium">{currency(project.amountPaid)}</span></p>
-            <p className="flex items-center justify-between"><span>Remaining</span><span className="font-medium">{currency(project.amountRemaining)}</span></p>
-            <p className="flex items-center justify-between"><span>Status</span><span className="font-medium capitalize">{project.status}</span></p>
-          </div>
-        </article>
+        {project.clients.length > 0 ? (
+          <>
+            <div className="hidden border-b border-border/80 bg-zinc-50 px-5 py-3 text-xs tracking-[0.12em] text-muted-foreground uppercase sm:grid sm:grid-cols-[1.2fr_0.8fr_1.4fr_1fr_auto]">
+              <p>Name</p>
+              <p>Type</p>
+              <p>Email</p>
+              <p>Notes</p>
+              <p className="text-right">Action</p>
+            </div>
+            <ul>
+              {project.clients.map((client) => (
+                <li key={client.id} className="border-b border-border/70 px-5 py-4 last:border-0">
+                  <div className="grid items-start gap-3 sm:grid-cols-[1.2fr_0.8fr_1.4fr_1fr_auto]">
+                    <p className="text-sm font-medium text-foreground">{client.fullName}</p>
+                    <span className="inline-flex h-6 w-fit items-center rounded-md bg-sky-100 px-2 text-xs text-sky-800">
+                      Client
+                    </span>
+                    <p className="text-sm text-muted-foreground">{client.email || "-"}</p>
+                    <p className="text-sm text-muted-foreground">{client.notes || "-"}</p>
+                    <details className="justify-self-start sm:justify-self-end">
+                      <summary className="cursor-pointer list-none rounded-xl border border-border bg-white px-3 py-1.5 text-sm text-foreground">
+                        Edit
+                      </summary>
+                      <div className="mt-3 rounded-xl border border-border/80 bg-zinc-50 p-3">
+                        <form action={updateClientAction} className="grid gap-2 sm:grid-cols-3">
+                          <input type="hidden" name="projectId" value={project.id} />
+                          <input type="hidden" name="clientId" value={client.id} />
+                          <input name="fullName" defaultValue={client.fullName} required className="h-10 rounded-xl border border-border px-3 text-sm" />
+                          <input name="email" type="email" defaultValue={client.email || ""} className="h-10 rounded-xl border border-border px-3 text-sm" />
+                          <input name="phone" defaultValue={client.phone || ""} className="h-10 rounded-xl border border-border px-3 text-sm" />
+                          <div className="flex gap-2 sm:col-span-3">
+                            <button type="submit" className="h-9 rounded-xl border border-border px-3 text-sm">Save</button>
+                            <button type="submit" formAction={removeClientFromProjectAction} className="h-9 rounded-xl border border-red-200 px-3 text-sm text-red-600 hover:border-red-400">Remove</button>
+                          </div>
+                        </form>
+                      </div>
+                    </details>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="px-5 py-6 text-sm text-muted-foreground">No clients yet.</p>
+        )}
       </section>
 
       <section className="soft-panel p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Edit Project Details</h3>
+          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Details</h3>
           {!hasSupabaseEnv ? <p className="text-xs text-muted-foreground">Read-only in demo mode.</p> : null}
         </div>
         <form id="edit-wedding-form" action={updateProjectAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input type="hidden" name="projectId" value={project.id} />
-          <input name="title" required defaultValue={project.title} className="h-10 rounded-xl border border-border px-3 text-sm" />
-          <input name="eventDate" type="text" required defaultValue={toDisplayDate(project.eventDate)} placeholder="DD-MM-YYYY" className="h-10 rounded-xl border border-border px-3 text-sm" />
-          <select name="projectType" defaultValue={project.projectType} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
-            <option value="Wedding">Wedding</option>
-            <option value="Wedding Photography + Film">Wedding Photography + Film</option>
-            <option value="Wedding Photography">Wedding Photography</option>
-            <option value="Wedding Film">Wedding Film</option>
-            <option value="Baptism">Baptism</option>
-            <option value="Baptism Photography + Film">Baptism Photography + Film</option>
-            <option value="Baptism Photography">Baptism Photography</option>
-            <option value="Baptism Film">Baptism Film</option>
-          </select>
-          <select name="status" defaultValue={project.status} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
-            <option value="draft">Draft</option>
-            <option value="negotiating">Negotiating</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="post_production">Post production</option>
-            <option value="declined">Declined</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <select name="editingStatus" defaultValue={project.editingStatus} className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
-            <option value="not_started">Not started</option>
-            <option value="in_progress">In progress</option>
-            <option value="review">Review</option>
-            <option value="completed">Completed</option>
-          </select>
-          <input name="budgetTotal" type="number" min="0" step="0.01" defaultValue={project.budgetTotal} className="h-10 rounded-xl border border-border px-3 text-sm" />
-          <input name="amountPaid" type="number" min="0" step="0.01" defaultValue={project.amountPaid} className="h-10 rounded-xl border border-border px-3 text-sm" />
-          <input name="referral" defaultValue={project.referral || ""} placeholder="Referred by" className="h-10 rounded-xl border border-border px-3 text-sm" />
-          <input name="notes" defaultValue={project.notes || ""} placeholder="Notes" className="h-10 rounded-xl border border-border px-3 text-sm sm:col-span-2" />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Project title</label>
+            <input name="title" required defaultValue={project.title} className="h-10 w-full rounded-xl border border-border px-3 text-sm" />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Event date</label>
+            <input name="eventDate" type="text" required defaultValue={toDisplayDate(project.eventDate)} placeholder="DD-MM-YYYY" className="h-10 w-full rounded-xl border border-border px-3 text-sm" />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Event type</label>
+            <select name="projectType" defaultValue={project.projectType} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
+              <option value="Wedding">Wedding</option>
+              <option value="Wedding Photography + Film">Wedding Photography + Film</option>
+              <option value="Wedding Photography">Wedding Photography</option>
+              <option value="Wedding Film">Wedding Film</option>
+              <option value="Baptism">Baptism</option>
+              <option value="Baptism Photography + Film">Baptism Photography + Film</option>
+              <option value="Baptism Photography">Baptism Photography</option>
+              <option value="Baptism Film">Baptism Film</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Editing status</label>
+            <select name="editingStatus" defaultValue={project.editingStatus} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
+              <option value="not_started">Not started</option>
+              <option value="in_progress">In progress</option>
+              <option value="review">Review</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Referral</label>
+            <input name="referral" defaultValue={project.referral || ""} className="h-10 w-full rounded-xl border border-border px-3 text-sm" />
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2 xl:col-span-4">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Notes</label>
+            <textarea name="notes" defaultValue={project.notes || ""} rows={3} className="w-full rounded-xl border border-border px-3 py-2 text-sm" />
+          </div>
         </form>
       </section>
 
-      <div className="flex justify-end">
-        <button type="submit" form="edit-wedding-form" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Save</button>
-      </div>
-
       <section className="soft-panel p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {project.crewAssignments.map((assignment) => (
-              <li key={assignment.id} className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
-                <div>
-                  <p className="font-medium">{assignment.crewMember.fullName}</p>
-                  <p className="text-xs text-muted-foreground capitalize">
+              <li key={assignment.id} className="rounded-xl border border-border/70 bg-zinc-50 px-4 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{assignment.crewMember.fullName}</p>
+                    <p className="text-xs text-muted-foreground capitalize">
                     {assignment.assignmentRole} · {assignment.crewMember.roleType} ·{" "}
                     {assignment.participantType === "freelancer" ? (
                       <span className="text-amber-600">
@@ -186,21 +268,22 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                     ) : (
                       "In-house"
                     )}
-                  </p>
+                    </p>
+                  </div>
+                  {(assignment as any).participantType === "freelancer" ? (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Freelancer{(assignment as any).freelancerBudget ? ` €${(assignment as any).freelancerBudget}` : ""}</span>
+                  ) : null}
+                  <form action={removeCrewFromProjectAction}>
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input type="hidden" name="assignmentId" value={assignment.id} />
+                    <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">Remove</button>
+                  </form>
                 </div>
-                {(assignment as any).participantType === "freelancer" ? (
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Freelancer{(assignment as any).freelancerBudget ? ` €${(assignment as any).freelancerBudget}` : ""}</span>
-                ) : null}
-                <form action={removeCrewFromProjectAction}>
-                  <input type="hidden" name="projectId" value={project.id} />
-                  <input type="hidden" name="assignmentId" value={assignment.id} />
-                  <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">Remove</button>
-                </form>
               </li>
             ))}
           </ul>
           {availableCrew.length > 0 ? (
-            <form action={addCrewToProjectAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto_auto]">
+            <form action={addCrewToProjectAction} className="mt-4 grid gap-3 rounded-xl border border-border/80 bg-zinc-50 p-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_180px_180px_auto]">
               <input type="hidden" name="projectId" value={project.id} />
               <select name="crewMemberId" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
                 <option value="">Select crew member</option>
@@ -214,7 +297,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
                 <option value="freelancer">Freelancer</option>
               </select>
               <input name="freelancerFee" type="number" min="0" step="0.01" placeholder="Fee (freelancer)" className="h-10 rounded-xl border border-border px-3 text-sm" />
-              <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm">Add</button>
+              <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Add crew</button>
             </form>
           ) : (
             <p className="mt-3 text-xs text-muted-foreground">
@@ -228,13 +311,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
             <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Tasks</h3>
             <Link href="/admin/tasks" className="text-xs text-muted-foreground hover:text-foreground">View all →</Link>
           </div>
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {project.tasks.map((task) => {
               const assignee = task.assigneeId
                 ? project.crewAssignments.find((a) => a.crewMemberId === task.assigneeId)?.crewMember.fullName
                 : null;
               return (
-              <li key={task.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 px-3 py-2">
+              <li key={task.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-zinc-50 px-3 py-3">
                 <div className="min-w-0">
                   <p className={`text-sm font-medium ${task.status === "done" ? "line-through opacity-40" : ""}`}>{task.title}</p>
                   <div className="mt-0.5 flex items-center gap-2">
@@ -263,7 +346,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               );
             })}
           </ul>
-          <form action={createTaskAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 p-3 sm:grid-cols-[1fr_auto_auto_auto]">
+          <form action={createTaskAction} className="mt-4 grid gap-2 rounded-xl border border-border/80 bg-zinc-50 p-3 sm:grid-cols-[1fr_auto_auto_auto]">
             <input type="hidden" name="projectId" value={project.id} />
             <input name="title" placeholder="New task..." required className="h-10 rounded-xl border border-border px-3 text-sm" />
             <select name="assigneeId" className="h-10 rounded-xl border border-border bg-white px-2 text-sm">
@@ -273,9 +356,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
               ))}
             </select>
             <input name="dueDate" type="date" className="h-10 rounded-xl border border-border px-3 text-sm" />
-            <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm">Add</button>
+            <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Add task</button>
           </form>
       </section>
+
+      <div className="flex justify-end">
+        <button type="submit" form="edit-wedding-form" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Save</button>
+      </div>
     </div>
   );
 }
