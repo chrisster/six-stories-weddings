@@ -90,44 +90,52 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
         </form>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-border/80 bg-white/80">
+      <section>
         {filtered.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">No projects found.</p>
+          <div className="rounded-2xl border border-border/80 bg-white/80 px-4 py-12 text-center">
+            <p className="text-sm text-muted-foreground">No projects found.</p>
+          </div>
         ) : (
-          <table className="w-full min-w-[680px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Project</th>
-                <th className="px-4 py-3">Clients</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Services</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((project) => (
-                <tr key={project.id} className="border-b border-border/70 last:border-b-0 hover:bg-muted/20">
-                  <td className="px-4 py-3 align-top text-sm text-muted-foreground">{formatDateDDMMYY(project.eventDate)}</td>
-                  <td className="px-4 py-3 align-top">
-                    <Link href={`/admin/projects/${project.id}`} className="font-medium hover:underline">
-                      {project.title}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted-foreground">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((project) => (
+              <Link
+                key={project.id}
+                href={`/admin/projects/${project.id}`}
+                className="group rounded-2xl border border-border/70 bg-white/85 p-6 shadow-sm transition hover:border-foreground/30 hover:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.25)]"
+              >
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
+                    {project.title}
+                  </h3>
+                  <span
+                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs capitalize leading-tight ${statusBadge(project.status)}`}
+                  >
+                    {statusLabel(project.status)}
+                  </span>
+                </div>
+
+                <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">
                     {project.clients.map((c) => c.fullName).join(" & ") || "—"}
-                  </td>
-                  <td className="px-4 py-3 align-top">
-                    <span
-                      className={`inline-block rounded-lg px-2 py-0.5 text-xs capitalize ${statusBadge(project.status)}`}
-                    >
-                      {statusLabel(project.status)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 align-top text-muted-foreground">{project.projectType || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </p>
+                  <p className="text-xs">
+                    <span className="inline-block w-12 text-muted-foreground">Date:</span>
+                    {formatDateDDMMYY(project.eventDate)}
+                  </p>
+                  {project.projectType && (
+                    <p className="text-xs">
+                      <span className="inline-block w-12 text-muted-foreground">Type:</span>
+                      {project.projectType}
+                    </p>
+                  )}
+                </div>
+
+                <div className="text-xs text-muted-foreground group-hover:text-foreground/70">
+                  View details →
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
       </section>
     </div>
