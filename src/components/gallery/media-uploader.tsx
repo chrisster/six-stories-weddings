@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { uploadMediaAction } from "@/app/admin/galleries/[id]/actions";
+import { useRouter } from "next/navigation";
 
 type UploadProgress = {
   fileIndex: number;
@@ -9,6 +9,7 @@ type UploadProgress = {
   progress: number;
   status: "uploading" | "completed" | "failed";
   error?: string;
+  file: File;
 };
 
 type MediaUploaderProps = {
@@ -17,6 +18,7 @@ type MediaUploaderProps = {
 };
 
 export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
@@ -29,54 +31,102 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
     setProgress([]);
   };
 
-  const handleUpload = async () => {
-    if (selectedFiles.length === 0) return;
+  async function uploadSingleFile(item: UploadProgress): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/admin/galleries/upload");
 
-    setIsUploading(true);
-    const newProgress: UploadProgress[] = selectedFiles.map((file, index) => ({
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return;
+        }
+
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setProgress((prev) =>
+          prev.map((entry) =>
+            entry.fileIndex === item.fileIndex ? { ...entry, progress: percent } : entry,
+          ),
+        );
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setProgress((prev) =>
+            prev.map((entry) =>
+              entry.fileIndex === item.fileIndex
+                ? { ...entry, status: "completed", progress: 100, error: undefined }
+                : entry,
+            ),
+          );
+          resolve();
+          return;
+        }
+
+        let message = "Upload failed.";
+        try {
+          const parsed = JSON.parse(xhr.responseText) as { error?: string };
+          if (parsed.error) {
+            message = parsed.error;
+          }
+        } catch {
+          message = "An unexpected response was received from the server.";
+        }
+
+        setProgress((prev) =>
+          prev.map((entry) =>
+            entry.fileIndex === item.fileIndex
+              ? { ...entry, status: "failed", error: message }
+              : entry,
+          ),
+        );
+        reject(new Error(message));
+      };
+
+      xhr.onerror = () => {
+        const message = "Network error while uploading.";
+        setProgress((prev) =>
+          prev.map((entry) =>
+            entry.fileIndex === item.fileIndex
+              ? { ...entry, status: "failed", error: message }
+              : entry,
+          ),
+        );
+        reject(new Error(message));
+      };
+
+      const formData = new FormData();
+      formData.append("galleryId", galleryId);
+      formData.append("file", item.file);
+      if (selectedSectionId) {
+        formData.append("sectionId", selectedSectionId);
+      }
+
+      xhr.send(formData);
+    });
+  }
+
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0 || isUploading) {
+      return;
+    }
+
+    const queued: UploadProgress[] = selectedFiles.map((file, index) => ({
       fileIndex: index,
       fileName: file.name,
       progress: 0,
       status: "uploading",
+      file,
     }));
-    setProgress(newProgress);
 
-    const formData = new FormData();
-    formData.append("galleryId", galleryId);
-    if (selectedSectionId) {
-      formData.append("sectionId", selectedSectionId);
-    }
-    selectedFiles.forEach((file) => {
-      formData.append("files", file);
-    });
+    setIsUploading(true);
+    setProgress(queued);
 
     try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress((prev) =>
-          prev.map((p) =>
-            p.status === "uploading"
-              ? { ...p, progress: Math.min(p.progress + Math.random() * 30, 90) }
-              : p,
-          ),
-        );
-      }, 300);
+      for (const item of queued) {
+        await uploadSingleFile(item);
+      }
 
-      // Execute the server action
-      const result = await uploadMediaAction(formData);
-
-      clearInterval(progressInterval);
-
-      // Mark all as completed
-      setProgress((prev) =>
-        prev.map((p) => ({
-          ...p,
-          status: "completed",
-          progress: 100,
-        })),
-      );
-
-      // Reset after a short delay
+      router.refresh();
       setTimeout(() => {
         setSelectedFiles([]);
         setProgress([]);
@@ -84,24 +134,34 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
-      }, 1500);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Upload failed";
-      setProgress((prev) =>
-        prev.map((p) => ({
-          ...p,
-          status: "failed",
-          error: errorMessage,
-        })),
-      );
+      }, 800);
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleRetry = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+  const handleRetryFailed = async () => {
+    const failed = progress.filter((entry) => entry.status === "failed");
+    if (failed.length === 0 || isUploading) {
+      return;
+    }
+
+    setIsUploading(true);
+    setProgress((prev) =>
+      prev.map((entry) =>
+        entry.status === "failed"
+          ? { ...entry, status: "uploading", progress: 0, error: undefined }
+          : entry,
+      ),
+    );
+
+    try {
+      for (const item of failed) {
+        await uploadSingleFile(item);
+      }
+      router.refresh();
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -133,6 +193,7 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
             ))}
           </select>
           <button
+            type="button"
             onClick={handleUpload}
             disabled={selectedFiles.length === 0 || isUploading}
             className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background disabled:opacity-50"
@@ -180,8 +241,10 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
 
           {failedCount > 0 && (
             <button
-              onClick={handleRetry}
-              className="mt-3 text-xs text-foreground underline hover:no-underline"
+              type="button"
+              onClick={handleRetryFailed}
+              disabled={isUploading}
+              className="mt-3 text-xs text-foreground underline hover:no-underline disabled:opacity-50"
             >
               Retry failed uploads
             </button>
