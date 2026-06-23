@@ -89,7 +89,7 @@ Seed output includes demo gallery credentials:
 
 6. In your DNS provider:
 
-- Add a CNAME record for `admin` pointing to the Vercel target (e.g. `cname.vercel-dns.com`)
+- Add a CNAME record for `admin` pointing to the Vercel target shown in your project's Vercel Domains settings (typically something like `cname.vercel-dns.com` — use the exact value Vercel displays)
 - Verify and assign the domain in Vercel project settings (Domains tab)
 
 7. Deploy.

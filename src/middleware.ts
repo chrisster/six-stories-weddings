@@ -19,6 +19,9 @@ export async function middleware(request: NextRequest) {
   return proxy(request);
 }
 
+// Only run middleware on paths that need auth or domain-redirect logic.
+// Public gallery routes (/g/…) use their own cookie-based passcode protection
+// and are intentionally excluded from this matcher.
 export const config = {
   matcher: ["/", "/admin/:path*", "/login"],
 };
