@@ -317,16 +317,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Editing status</label>
-            <select name="editingStatus" defaultValue={project.editingStatus} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
-              <option value="not_started">Not started</option>
-              <option value="in_progress">In progress</option>
-              <option value="review">Review</option>
-              <option value="completed">Completed</option>
-            </select>
-          </div>
-
           <div className="space-y-1.5 sm:col-span-2">
             <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Referral</label>
             <input name="referral" defaultValue={project.referral || ""} className="h-10 w-full rounded-xl border border-border px-3 text-sm" />

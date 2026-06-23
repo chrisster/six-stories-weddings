@@ -5,7 +5,6 @@ export type ProjectStatus =
   | "post_production"
   | "cancelled"
   | "declined";
-export type EditingStatus = "not_started" | "in_progress" | "review" | "completed";
 
 export type Client = {
   id: string;
@@ -61,7 +60,6 @@ export type Project = {
   referral?: string | null;
   packageCategory?: string | null;
   status: ProjectStatus;
-  editingStatus: EditingStatus;
   completed: boolean;
   budgetTotal: number;
   amountPaid: number;

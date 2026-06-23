@@ -98,9 +98,6 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
         | "post_production"
         | "cancelled"
         | "declined") || "draft",
-    editingStatus:
-      (row.editing_status as "not_started" | "in_progress" | "review" | "completed") ||
-      "not_started",
     completed: Boolean(row.completed),
     budgetTotal: Number(row.budget_total || 0),
     amountPaid: Number(row.amount_paid || 0),

@@ -92,7 +92,6 @@ export async function createProjectAction(formData: FormData) {
 
   // Always create as draft initially
   const status = "draft";
-  const editingStatus = "not_started";
   const notes = String(formData.get("notes") || "").trim() || null;
   const budgetTotal = toNumber(formData.get("budgetTotal"));
   const amountPaid = toNumber(formData.get("amountPaid"));
@@ -155,7 +154,6 @@ export async function createProjectAction(formData: FormData) {
       month: eventDate.slice(0, 7),
       project_type: projectType,
       status,
-      editing_status: editingStatus,
       budget_total: budgetTotal,
       amount_paid: amountPaid,
       amount_remaining: amountRemaining,
@@ -312,7 +310,6 @@ export async function updateProjectAction(formData: FormData) {
   );
   const projectType = buildProjectType(eventType, services.length > 0 ? services : parsedFallback.services);
   const status = String(formData.get("status") || "draft").trim();
-  const editingStatus = String(formData.get("editingStatus") || "not_started").trim();
   const referral = String(formData.get("referral") || "").trim() || null;
   const notes = String(formData.get("notes") || "").trim() || null;
   const budgetTotal = toNumber(formData.get("budgetTotal"));
@@ -330,7 +327,6 @@ export async function updateProjectAction(formData: FormData) {
     month: eventDate ? eventDate.slice(0, 7) : null,
     project_type: projectType,
     status,
-    editing_status: editingStatus,
     referral,
     budget_total: budgetTotal,
     amount_paid: amountPaid,

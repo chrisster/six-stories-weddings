@@ -20,7 +20,6 @@ export const demoProject: Project = {
   referral: "Six Stories Studio",
   packageCategory: "Premium",
   status: "scheduled",
-  editingStatus: "in_progress",
   completed: false,
   budgetTotal: 3200,
   amountPaid: 1190.4,
