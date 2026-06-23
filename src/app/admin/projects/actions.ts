@@ -343,20 +343,6 @@ export async function updateProjectAction(formData: FormData) {
     .update(payload)
     .eq("id", projectId);
 
-  // Compatibility fallback for environments still using legacy status constraint.
-  if (error?.message?.includes("projects_status_check")) {
-    const legacyStatusMap: Record<string, string> = {
-      scheduled: "confirmed",
-      post_production: "confirmed",
-    };
-    const legacyStatus = legacyStatusMap[status] || status;
-    const retry = await admin
-      .from("projects")
-      .update({ ...payload, status: legacyStatus })
-      .eq("id", projectId);
-    error = retry.error;
-  }
-
   // Compatibility fallback for DBs where referral column has not been migrated yet.
   if (error?.message?.toLowerCase().includes("referral")) {
     const { referral: _ignored, ...payloadWithoutReferral } = payload;
