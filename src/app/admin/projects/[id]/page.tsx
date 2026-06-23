@@ -11,6 +11,7 @@ import {
 } from "@/app/admin/projects/actions";
 import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/app/admin/tasks/actions";
 import { DeleteProjectButton } from "@/components/admin/delete-project-button";
+import { ProjectSaveButton } from "@/components/admin/project-save-button";
 import { getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
@@ -427,7 +428,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       </section>
 
       <div className="flex justify-end">
-        <button type="submit" form="edit-wedding-form" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Save</button>
+        <ProjectSaveButton formId="edit-wedding-form" />
       </div>
     </div>
   );

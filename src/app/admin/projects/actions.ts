@@ -336,6 +336,7 @@ export async function updateProjectAction(formData: FormData) {
   revalidatePath(`/admin/projects/${projectId}`);
   revalidatePath("/admin/projects");
   revalidatePath("/admin");
+  redirect(`/admin/projects/${projectId}`);
 }
 
 export async function updateClientAction(formData: FormData) {
