@@ -18,7 +18,7 @@ import { formatDateDDMMYY } from "@/lib/utils";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ save?: string }>;
+  searchParams: Promise<{ save?: string; reason?: string }>;
 };
 
 type ServiceType = "photo" | "film";
@@ -106,7 +106,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
 
       {query.save === "error" ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          Could not save project. Please check fields and try again.
+          {query.reason === "date"
+            ? "Could not save project: invalid date format. Use DD-MM-YYYY."
+            : "Could not save project. Please check fields and try again."}
         </div>
       ) : null}
 

@@ -12,6 +12,25 @@ function toNumber(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeEventDate(rawDate: string): string {
+  const trimmed = rawDate.trim();
+  if (!trimmed) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+    return `${trimmed.slice(6)}-${trimmed.slice(3, 5)}-${trimmed.slice(0, 2)}`;
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+    return `${trimmed.slice(6)}-${trimmed.slice(3, 5)}-${trimmed.slice(0, 2)}`;
+  }
+
+  return "";
+}
+
 function slugify(input: string) {
   return input
     .toLowerCase()
@@ -278,11 +297,11 @@ export async function updateProjectAction(formData: FormData) {
   }
 
   const title = String(formData.get("title") || "").trim();
-  // Accept DD-MM-YYYY (display format) and convert to YYYY-MM-DD for storage
   const rawDate = String(formData.get("eventDate") || "").trim();
-  const eventDate = /^\d{2}-\d{2}-\d{4}$/.test(rawDate)
-    ? `${rawDate.slice(6)}-${rawDate.slice(3, 5)}-${rawDate.slice(0, 2)}`
-    : rawDate;
+  const eventDate = normalizeEventDate(rawDate);
+  if (!eventDate) {
+    redirect(`/admin/projects/${projectId}?save=error&reason=date`);
+  }
   const fallbackProjectType = String(formData.get("projectType") || "").trim();
   const parsedFallback = parseLegacyProjectType(fallbackProjectType || "Wedding");
   const eventType = normalizeEventType(String(formData.get("eventType") || parsedFallback.eventType));
@@ -305,22 +324,48 @@ export async function updateProjectAction(formData: FormData) {
     return;
   }
 
-  const { error } = await admin
+  const payload = {
+    title,
+    event_date: eventDate,
+    month: eventDate ? eventDate.slice(0, 7) : null,
+    project_type: projectType,
+    status,
+    editing_status: editingStatus,
+    referral,
+    budget_total: budgetTotal,
+    amount_paid: amountPaid,
+    amount_remaining: amountRemaining,
+    notes,
+  };
+
+  let { error } = await admin
     .from("projects")
-    .update({
-      title,
-      event_date: eventDate,
-      month: eventDate ? eventDate.slice(0, 7) : null,
-      project_type: projectType,
-      status,
-      editing_status: editingStatus,
-      referral,
-      budget_total: budgetTotal,
-      amount_paid: amountPaid,
-      amount_remaining: amountRemaining,
-      notes,
-    })
+    .update(payload)
     .eq("id", projectId);
+
+  // Compatibility fallback for environments still using legacy status constraint.
+  if (error?.message?.includes("projects_status_check")) {
+    const legacyStatusMap: Record<string, string> = {
+      scheduled: "confirmed",
+      post_production: "confirmed",
+    };
+    const legacyStatus = legacyStatusMap[status] || status;
+    const retry = await admin
+      .from("projects")
+      .update({ ...payload, status: legacyStatus })
+      .eq("id", projectId);
+    error = retry.error;
+  }
+
+  // Compatibility fallback for DBs where referral column has not been migrated yet.
+  if (error?.message?.toLowerCase().includes("referral")) {
+    const { referral: _ignored, ...payloadWithoutReferral } = payload;
+    const retry = await admin
+      .from("projects")
+      .update(payloadWithoutReferral)
+      .eq("id", projectId);
+    error = retry.error;
+  }
 
   if (error) {
     console.error("updateProjectAction failed", {
@@ -330,7 +375,7 @@ export async function updateProjectAction(formData: FormData) {
       eventDate,
       projectType,
     });
-    redirect(`/admin/projects/${projectId}?save=error`);
+    redirect(`/admin/projects/${projectId}?save=error&reason=server`);
   }
 
   revalidatePath(`/admin/projects/${projectId}`);
