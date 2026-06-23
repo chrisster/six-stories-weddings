@@ -148,19 +148,20 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
       </section>
 
       <section className="admin-surface p-5">
-        <h3 className="quiet-label mb-3">Upload Media</h3>
-        <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} />
-      </section>
+        <h3 className="title-cinematic text-xl font-semibold">Files</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Upload, organize, set covers, and manage all media for this gallery.
+        </p>
 
-      <section className="space-y-4">
-        <div className="admin-surface p-5">
-          <h3 className="quiet-label">Media Library</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Organize media by scenes, set covers, and remove files as needed.
-          </p>
+        <div className="mt-5 border-t border-border/70 pt-5">
+          <p className="quiet-label mb-3">Upload Media</p>
+          <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} />
         </div>
 
-        <MediaManager media={mediaWithUrl} sections={detail.sections} galleryId={detail.gallery.id} />
+        <div className="mt-5 border-t border-border/70 pt-5">
+          <p className="quiet-label mb-3">Media Library</p>
+          <MediaManager media={mediaWithUrl} sections={detail.sections} galleryId={detail.gallery.id} />
+        </div>
       </section>
     </div>
   );

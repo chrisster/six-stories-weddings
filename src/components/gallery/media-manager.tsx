@@ -180,7 +180,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
 
   if (mediaState.length === 0) {
     return (
-      <div className="admin-surface p-6 text-sm text-muted-foreground">
+      <div className="text-sm text-muted-foreground">
         No media yet. Upload files above or click <strong>Add demo image</strong> to verify
         gallery rendering.
       </div>
@@ -190,7 +190,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="admin-surface flex flex-wrap items-center justify-between gap-3 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -259,7 +259,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
         </div>
       </div>
 
-      <div className="admin-surface flex flex-wrap gap-2 p-3">
+      <div className="flex flex-wrap gap-2 border-t border-border/70 pt-4">
         {[...groupedAndSorted.keys()].map((sectionName) => (
           <a
             key={sectionName}
@@ -280,7 +280,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
             <div
               id={`section-${sectionName.toLowerCase().replace(/\s+/g, "-")}`}
               key={sectionName}
-              className="admin-surface space-y-3 p-4"
+              className="space-y-3 border-t border-border/70 pt-5"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
