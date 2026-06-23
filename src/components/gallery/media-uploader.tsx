@@ -25,6 +25,41 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedSectionId, setSelectedSectionId] = useState<string>("");
 
+  async function prepareFileForUpload(file: File): Promise<File> {
+    // Vercel serverless request bodies can fail on larger payloads.
+    // Compress only large images client-side to improve reliability.
+    const MAX_SAFE_BYTES = 4 * 1024 * 1024;
+    if (!file.type.startsWith("image/") || file.size <= MAX_SAFE_BYTES) {
+      return file;
+    }
+
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    const maxDimension = 2800;
+    const ratio = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
+    canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return file;
+    }
+
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((value) => resolve(value), "image/jpeg", 0.86);
+    });
+
+    if (!blob) {
+      return file;
+    }
+
+    const base = file.name.replace(/\.[^/.]+$/, "");
+    return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+  }
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     setSelectedFiles(files);
@@ -69,7 +104,12 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
             message = parsed.error;
           }
         } catch {
-          message = "An unexpected response was received from the server.";
+          const snippet = xhr.responseText?.slice(0, 120).replace(/\s+/g, " ") || "No response body.";
+          if (xhr.status === 413) {
+            message = "File is too large for this upload path. Try a smaller/compressed image.";
+          } else {
+            message = `Unexpected server response (${xhr.status}): ${snippet}`;
+          }
         }
 
         setProgress((prev) =>
@@ -110,7 +150,9 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
       return;
     }
 
-    const queued: UploadProgress[] = selectedFiles.map((file, index) => ({
+    const prepared = await Promise.all(selectedFiles.map((file) => prepareFileForUpload(file)));
+
+    const queued: UploadProgress[] = prepared.map((file, index) => ({
       fileIndex: index,
       fileName: file.name,
       progress: 0,

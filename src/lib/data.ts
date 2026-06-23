@@ -125,7 +125,43 @@ export async function getProjects() {
     return [demoProject];
   }
 
-  // Fetch galleries and cover images for all projects
+  const projectIds = data.map((row) => String(row.id));
+
+  const { data: galleries } = await admin
+    .from("galleries")
+    .select("id, project_id, cover_media_id")
+    .in("project_id", projectIds);
+
+  const galleryByProjectId = new Map<string, { id: string; coverMediaId?: string | null }>();
+  (galleries || []).forEach((row) => {
+    galleryByProjectId.set(String(row.project_id), {
+      id: String(row.id),
+      coverMediaId: (row.cover_media_id as string | null) || null,
+    });
+  });
+
+  const galleryIds = (galleries || []).map((row) => String(row.id));
+  const mediaByGalleryId = new Map<string, Array<{ id: string; storagePath: string; sortOrder: number }>>();
+
+  if (galleryIds.length > 0) {
+    const { data: media } = await admin
+      .from("media_assets")
+      .select("id, gallery_id, storage_path, sort_order")
+      .in("gallery_id", galleryIds)
+      .order("sort_order", { ascending: true });
+
+    (media || []).forEach((row) => {
+      const key = String(row.gallery_id);
+      const current = mediaByGalleryId.get(key) || [];
+      current.push({
+        id: String(row.id),
+        storagePath: String(row.storage_path),
+        sortOrder: Number(row.sort_order || 0),
+      });
+      mediaByGalleryId.set(key, current);
+    });
+  }
+
   const projectsWithCovers = await Promise.all(
     data.map(async (row) => {
       const normalized = {
@@ -133,38 +169,21 @@ export async function getProjects() {
         clients: ((row.clients as { client: Record<string, unknown> }[]) || []).map((c) => c.client),
       };
 
-      // Fetch first media asset from gallery for this project
-      let coverImageUrl: string | null = null;
-      try {
-        const { data: galleries } = await admin
-          .from("galleries")
-          .select(
-            `
-          id,
-          project_id,
-          media_assets(storage_path)
-        `,
-          )
-          .eq("project_id", String(row.id))
-          .limit(1)
-          .single();
+      const gallery = galleryByProjectId.get(String(row.id));
+      const galleryMedia = gallery ? mediaByGalleryId.get(gallery.id) || [] : [];
 
-        if (galleries) {
-          const mediaAssets = (galleries as Record<string, unknown>).media_assets as
-            | Array<{ storage_path: string }>
-            | null;
-          if (mediaAssets && mediaAssets.length > 0) {
-            const storagePath = mediaAssets[0].storage_path;
-            try {
-              coverImageUrl = await getSignedMediaUrl(storagePath, 60 * 60 * 24 * 7); // 7-day signed URL
-            } catch {
-              // If signing fails, use the storage path as-is (might be a public URL)
-              coverImageUrl = storagePath;
-            }
-          }
+      const preferred =
+        (gallery?.coverMediaId
+          ? galleryMedia.find((asset) => asset.id === gallery.coverMediaId)
+          : null) || galleryMedia[0] || null;
+
+      let coverImageUrl: string | null = null;
+      if (preferred) {
+        try {
+          coverImageUrl = await getSignedMediaUrl(preferred.storagePath, 60 * 60 * 24 * 7);
+        } catch {
+          coverImageUrl = preferred.storagePath;
         }
-      } catch {
-        // Silently fail if gallery fetch fails
       }
 
       return normalizeProject(normalized as unknown as Record<string, unknown>, coverImageUrl);

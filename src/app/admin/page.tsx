@@ -103,15 +103,15 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                 href={`/admin/projects/${project.id}`}
                 className="group overflow-hidden rounded-2xl border border-border/70 bg-white/85 shadow-sm transition hover:border-foreground/30 hover:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.25)]"
               >
-                {project.coverImageUrl && (
-                  <div className="relative h-40 w-full overflow-hidden bg-muted">
+                <div className="relative h-40 w-full overflow-hidden bg-zinc-200">
+                  {project.coverImageUrl ? (
                     <img
                       src={project.coverImageUrl}
                       alt={project.title}
                       className="h-full w-full object-cover transition group-hover:scale-105"
                     />
-                  </div>
-                )}
+                  ) : null}
+                </div>
                 <div className="p-6">
                   <div className="mb-3 flex items-start justify-between gap-2">
                     <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
