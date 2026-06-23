@@ -24,7 +24,7 @@ export function AdminNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-col gap-1">
+    <nav className="flex flex-col gap-1.5">
       {links.map((link) => {
         const isActive =
           link.href === "/admin"
@@ -37,13 +37,13 @@ export function AdminNav() {
             key={link.href}
             href={link.href}
             className={cn(
-              "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition",
+              "inline-flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition",
               isActive
-                ? "border-foreground bg-foreground text-background"
-                : "border-transparent bg-transparent hover:border-border hover:bg-white/60",
+                ? "border-border bg-muted/60 text-foreground"
+                : "border-transparent bg-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground",
             )}
           >
-            <Icon className="size-4" />
+            <Icon className="size-4" strokeWidth={1.8} />
             {link.label}
           </Link>
         );

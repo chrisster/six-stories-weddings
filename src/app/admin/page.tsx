@@ -49,12 +49,12 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
         <MetricCard label="Unconfirmed" value={String(metrics.unconfirmedProjects)} />
       </section>
 
-      <section className="soft-panel p-4">
+      <section className="admin-surface p-4">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="title-cinematic text-2xl font-semibold">Projects</h2>
           <Link
             href="/admin/projects/new"
-            className="h-9 rounded-xl border border-foreground bg-foreground px-4 py-2 text-sm text-background"
+            className="h-9 rounded-xl border border-foreground bg-foreground px-4 py-2 text-sm text-background transition hover:opacity-90"
           >
             Add project
           </Link>
@@ -92,7 +92,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
 
       <section>
         {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-border/80 bg-white/80 px-4 py-12 text-center">
+          <div className="admin-surface px-4 py-12 text-center">
             <p className="text-sm text-muted-foreground">No projects found.</p>
           </div>
         ) : (
@@ -101,14 +101,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
               <Link
                 key={project.id}
                 href={`/admin/projects/${project.id}`}
-                className="group overflow-hidden rounded-2xl border border-border/70 bg-white/85 shadow-sm transition hover:border-foreground/30 hover:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.25)]"
+                className="group overflow-hidden rounded-2xl border border-border/80 bg-white shadow-sm transition hover:border-foreground/30 hover:shadow-[0_16px_38px_-24px_rgba(0,0,0,0.42)]"
               >
                 <div className="relative h-40 w-full overflow-hidden bg-zinc-200">
                   {project.coverImageUrl ? (
                     <img
                       src={project.coverImageUrl}
                       alt={project.title}
-                      className="h-full w-full object-cover transition group-hover:scale-105"
+                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                     />
                   ) : null}
                 </div>

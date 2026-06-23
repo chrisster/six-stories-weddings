@@ -35,8 +35,8 @@ export default async function PublicGalleryPage({ params }: PublicGalleryPagePro
   if (passcodeLocked) {
     return (
       <main className="container-editorial py-16">
-        <section className="mx-auto w-full max-w-md rounded-3xl border border-border/80 bg-white/85 p-8 shadow-sm">
-          <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">Private Gallery</p>
+        <section className="mx-auto w-full max-w-md rounded-3xl border border-border/90 bg-white p-8 shadow-sm">
+          <p className="quiet-label">Private Gallery</p>
           <h1 className="title-cinematic mt-3 text-4xl font-semibold">{detail.gallery.title}</h1>
           <p className="mt-2 text-sm text-muted-foreground">Enter the passcode to view your wedding gallery.</p>
 
@@ -59,24 +59,24 @@ export default async function PublicGalleryPage({ params }: PublicGalleryPagePro
 
   return (
     <main>
-      <section className="relative overflow-hidden border-b border-border/60">
+      <section className="relative overflow-hidden border-b border-border/70">
         <div className="absolute inset-0">
           {cover && cover.mediaType === "photo" ? (
             <Image src={cover.url} alt="Gallery cover" fill className="object-cover" unoptimized />
           ) : (
             <div className="size-full bg-[linear-gradient(135deg,#181818,#2b2b2b)]" />
           )}
-          <div className="absolute inset-0 bg-black/35" />
+          <div className="absolute inset-0 bg-black/42" />
         </div>
 
         <div className="container-editorial relative py-24 text-white sm:py-32">
-          <p className="text-xs tracking-[0.28em] uppercase">Six Stories Studio</p>
-          <h1 className="title-cinematic mt-3 text-5xl font-semibold sm:text-6xl">{detail.gallery.title}</h1>
+          <p className="text-[10px] tracking-[0.32em] uppercase text-white/90">Six Stories Studio</p>
+          <h1 className="title-cinematic mt-4 text-5xl font-semibold sm:text-6xl">{detail.gallery.title}</h1>
           <p className="mt-3 max-w-lg text-sm text-white/90 sm:text-base">{detail.project.title}</p>
         </div>
       </section>
 
-      <section className="container-editorial py-10">
+      <section className="container-editorial py-12">
         <PublicGallery assets={media} allowDownloads={detail.gallery.allowDownloads} />
       </section>
     </main>

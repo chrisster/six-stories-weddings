@@ -63,13 +63,13 @@ export function PublicGallery({ assets, allowDownloads }: PublicGalleryProps) {
   return (
     <>
       {/* Controls */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-white px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm text-muted-foreground">Sort:</label>
+          <label className="quiet-label">Sort</label>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="h-9 rounded-lg border border-border/50 bg-white px-3 text-sm"
+            className="h-9 rounded-lg border border-border/70 bg-white px-3 text-sm"
           >
             <option value="section">By section</option>
             <option value="name">By name</option>
@@ -79,11 +79,11 @@ export function PublicGallery({ assets, allowDownloads }: PublicGalleryProps) {
 
         {sections.length > 1 && (
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-sm text-muted-foreground">Filter:</label>
+            <label className="quiet-label">Filter</label>
             <select
               value={selectedSectionFilter}
               onChange={(e) => setSelectedSectionFilter(e.target.value)}
-              className="h-9 rounded-lg border border-border/50 bg-white px-3 text-sm"
+              className="h-9 rounded-lg border border-border/70 bg-white px-3 text-sm"
             >
               <option value="">All sections</option>
               {sections.map((section) => (
@@ -96,24 +96,27 @@ export function PublicGallery({ assets, allowDownloads }: PublicGalleryProps) {
         )}
       </div>
 
-      <div className="space-y-10">
+      <div className="space-y-12">
         {[...groupedAssets.entries()].map(([sectionName, sectionAssets]) => (
           <section key={sectionName} className="space-y-4">
-            <h3 className="title-cinematic text-3xl font-semibold">{sectionName}</h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="flex items-center gap-3">
+              <h3 className="title-cinematic text-3xl font-semibold">{sectionName}</h3>
+              <span className="text-xs text-muted-foreground">{sectionAssets.length} items</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {sectionAssets.map((asset) => (
                 <button
                   key={asset.id}
                   type="button"
                   onClick={() => setActiveAssetId(asset.id)}
-                  className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border/70 bg-muted/50"
+                  className="group relative aspect-[4/3] overflow-hidden rounded-md border border-border/60 bg-muted/40"
                 >
                   {asset.mediaType === "photo" ? (
                     <Image
                       src={asset.url}
                       alt="Wedding media"
                       fill
-                      className="object-cover transition duration-300 group-hover:scale-105"
+                      className="object-cover transition duration-300 group-hover:scale-[1.03]"
                       unoptimized
                     />
                   ) : (
