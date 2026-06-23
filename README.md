@@ -86,12 +86,14 @@ Use this when moving from `https://six-stories-weddings-*.vercel.app` to a brand
 
 ### Do the rest in order (production correctness)
 
+No local rebuild is needed if the app is already built on Vercel.
+
 5. In **Vercel → Settings → Environment Variables**, set:
    - `APP_URL=https://weddings.sixstoriesstudio.com`
 6. In **Supabase → Authentication → URL Configuration**, set:
    - Site URL: `https://weddings.sixstoriesstudio.com`
    - Redirect URLs: `https://weddings.sixstoriesstudio.com/*`
-7. Redeploy from Vercel (or trigger a new production deployment).
+7. Trigger a new deployment in Vercel so the updated env/domain settings are applied.
 8. Smoke test:
    - Open home, `/admin`, and one gallery link on the custom domain.
    - Confirm auth redirects stay on `weddings.sixstoriesstudio.com` (not `*.vercel.app`).
