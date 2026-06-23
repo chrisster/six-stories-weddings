@@ -9,6 +9,7 @@ import {
 } from "@/lib/demo-data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getSignedMediaUrl } from "@/lib/storage";
 import type { Contact, CrewMember, Gallery, GalleryDetail, Project } from "@/lib/types";
 
 type DashboardMetrics = {
@@ -21,7 +22,7 @@ type DashboardMetrics = {
   totalRemaining: number;
 };
 
-function normalizeProject(row: Record<string, unknown>): Project {
+function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string | null): Project {
   const clients = ((row.clients as Record<string, unknown>[] | null) || []).map((c) => ({
     id: String(c.id),
     fullName: String(c.full_name || ""),
@@ -89,6 +90,7 @@ function normalizeProject(row: Record<string, unknown>): Project {
     amountPaid: Number(row.amount_paid || 0),
     amountRemaining: Number(row.amount_remaining || 0),
     notes: row.notes as string | null,
+    coverImageUrl: coverImageUrl || null,
     clients,
     crewAssignments,
     tasks,
@@ -123,14 +125,53 @@ export async function getProjects() {
     return [demoProject];
   }
 
-  return data.map((row) => {
-    const normalized = {
-      ...row,
-      clients: ((row.clients as { client: Record<string, unknown> }[]) || []).map((c) => c.client),
-    };
+  // Fetch galleries and cover images for all projects
+  const projectsWithCovers = await Promise.all(
+    data.map(async (row) => {
+      const normalized = {
+        ...row,
+        clients: ((row.clients as { client: Record<string, unknown> }[]) || []).map((c) => c.client),
+      };
 
-    return normalizeProject(normalized as unknown as Record<string, unknown>);
-  });
+      // Fetch first media asset from gallery for this project
+      let coverImageUrl: string | null = null;
+      try {
+        const { data: galleries } = await admin
+          .from("galleries")
+          .select(
+            `
+          id,
+          project_id,
+          media_assets(storage_path)
+        `,
+          )
+          .eq("project_id", String(row.id))
+          .limit(1)
+          .single();
+
+        if (galleries) {
+          const mediaAssets = (galleries as Record<string, unknown>).media_assets as
+            | Array<{ storage_path: string }>
+            | null;
+          if (mediaAssets && mediaAssets.length > 0) {
+            const storagePath = mediaAssets[0].storage_path;
+            try {
+              coverImageUrl = await getSignedMediaUrl(storagePath, 60 * 60 * 24 * 7); // 7-day signed URL
+            } catch {
+              // If signing fails, use the storage path as-is (might be a public URL)
+              coverImageUrl = storagePath;
+            }
+          }
+        }
+      } catch {
+        // Silently fail if gallery fetch fails
+      }
+
+      return normalizeProject(normalized as unknown as Record<string, unknown>, coverImageUrl);
+    }),
+  );
+
+  return projectsWithCovers;
 }
 
 export async function getProjectById(projectId: string) {

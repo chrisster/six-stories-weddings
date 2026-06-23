@@ -61,6 +61,7 @@ export type Project = {
   amountPaid: number;
   amountRemaining: number;
   notes?: string | null;
+  coverImageUrl?: string | null;
   clients: Client[];
   crewAssignments: CrewAssignment[];
   tasks: ProjectTask[];

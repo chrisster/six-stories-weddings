@@ -101,37 +101,48 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
               <Link
                 key={project.id}
                 href={`/admin/projects/${project.id}`}
-                className="group rounded-2xl border border-border/70 bg-white/85 p-6 shadow-sm transition hover:border-foreground/30 hover:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.25)]"
+                className="group overflow-hidden rounded-2xl border border-border/70 bg-white/85 shadow-sm transition hover:border-foreground/30 hover:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.25)]"
               >
-                <div className="mb-3 flex items-start justify-between gap-2">
-                  <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
-                    {project.title}
-                  </h3>
-                  <span
-                    className={`shrink-0 rounded-lg px-2.5 py-1 text-xs capitalize leading-tight ${statusBadge(project.status)}`}
-                  >
-                    {statusLabel(project.status)}
-                  </span>
-                </div>
+                {project.coverImageUrl && (
+                  <div className="relative h-40 w-full overflow-hidden bg-muted">
+                    <img
+                      src={project.coverImageUrl}
+                      alt={project.title}
+                      className="h-full w-full object-cover transition group-hover:scale-105"
+                    />
+                  </div>
+                )}
+                <div className="p-6">
+                  <div className="mb-3 flex items-start justify-between gap-2">
+                    <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
+                      {project.title}
+                    </h3>
+                    <span
+                      className={`shrink-0 rounded-lg px-2.5 py-1 text-xs capitalize leading-tight ${statusBadge(project.status)}`}
+                    >
+                      {statusLabel(project.status)}
+                    </span>
+                  </div>
 
-                <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground">
-                    {project.clients.map((c) => c.fullName).join(" & ") || "—"}
-                  </p>
-                  <p className="text-xs">
-                    <span className="inline-block w-12 text-muted-foreground">Date:</span>
-                    {formatDateDDMMYY(project.eventDate)}
-                  </p>
-                  {project.projectType && (
-                    <p className="text-xs">
-                      <span className="inline-block w-12 text-muted-foreground">Type:</span>
-                      {project.projectType}
+                  <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">
+                      {project.clients.map((c) => c.fullName).join(" & ") || "—"}
                     </p>
-                  )}
-                </div>
+                    <p className="text-xs">
+                      <span className="inline-block w-12 text-muted-foreground">Date:</span>
+                      {formatDateDDMMYY(project.eventDate)}
+                    </p>
+                    {project.projectType && (
+                      <p className="text-xs">
+                        <span className="inline-block w-12 text-muted-foreground">Type:</span>
+                        {project.projectType}
+                      </p>
+                    )}
+                  </div>
 
-                <div className="text-xs text-muted-foreground group-hover:text-foreground/70">
-                  View details →
+                  <div className="text-xs text-muted-foreground group-hover:text-foreground/70">
+                    View details →
+                  </div>
                 </div>
               </Link>
             ))}
