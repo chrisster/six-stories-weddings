@@ -24,6 +24,14 @@ type DashboardMetrics = {
 };
 
 function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string | null): Project {
+  const rawStatus = String(row.status || "draft").trim();
+  const mappedStatus =
+    rawStatus === "confirmed"
+      ? "scheduled"
+      : rawStatus === "unconfirmed"
+        ? "draft"
+        : rawStatus;
+
   const clients = ((row.clients as Record<string, unknown>[] | null) || []).map((c) => ({
     id: String(c.id),
     fullName: String(c.full_name || ""),
@@ -83,7 +91,7 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
     referral: row.referral as string | null,
     packageCategory: row.package_category as string | null,
     status:
-      (row.status as
+      (mappedStatus as
         | "draft"
         | "negotiating"
         | "scheduled"

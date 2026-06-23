@@ -26,6 +26,7 @@ export async function createProjectAction(formData: FormData) {
     return;
   }
 
+  const manualTitle = String(formData.get("title") || "").trim();
   const eventDate = String(formData.get("eventDate") || "").trim();
 
   // Services + event type → project_type string
@@ -92,7 +93,8 @@ export async function createProjectAction(formData: FormData) {
     .map((entry) => [entry.firstName, entry.lastName].filter(Boolean).join(" ").trim())
     .filter(Boolean)
     .slice(0, 2);
-  const title = coupleNames.length > 0 ? coupleNames.join(" & ") : "Untitled Couple";
+  const generatedTitle = coupleNames.length > 0 ? coupleNames.join(" & ") : "Untitled Couple";
+  const title = manualTitle || generatedTitle;
 
   const admin = createAdminClient();
   if (!admin) {

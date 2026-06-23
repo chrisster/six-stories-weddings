@@ -139,11 +139,16 @@ export function NewWeddingForm({
       <section className="soft-panel space-y-4 p-5">
         <p className="text-xs tracking-[0.2em] text-muted-foreground uppercase">01 — Project</p>
 
-        <div className="rounded-xl border border-border/70 bg-white/70 px-3 py-2 text-xs text-muted-foreground">
-          Project name is auto-generated from the first two client names.
-        </div>
-
         <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label className={labelCls}>Project Title *</label>
+            <input
+              name="title"
+              required
+              placeholder="e.g. Joost & Stav"
+              className={inputCls}
+            />
+          </div>
           <div className="space-y-1">
             <label className={labelCls}>Event Date *</label>
             <input name="eventDate" type="date" required className={inputCls} />

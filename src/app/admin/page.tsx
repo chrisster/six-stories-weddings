@@ -1,13 +1,15 @@
 import Link from "next/link";
 
+import { ProjectsControls } from "@/components/admin/projects-controls";
 import { getDashboardMetrics, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type AdminPageProps = {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; sort?: string }>;
 };
 
 function statusLabel(status: string) {
+  if (status === "post_production") return "post production";
   return status.replace("_", " ");
 }
 
@@ -18,13 +20,13 @@ function statusBadge(status: string) {
     negotiating: "bg-sky-100 text-sky-800",
     draft: "bg-zinc-100 text-zinc-600",
     cancelled: "bg-rose-100 text-rose-700",
-    declined: "bg-red-100 text-red-700",
+    declined: "bg-orange-100 text-orange-700",
   };
   return map[status] || "bg-muted text-muted-foreground";
 }
 
 const statusPills = [
-  { key: "all", label: "Total", cls: "border-zinc-300 bg-zinc-100 text-zinc-700" },
+  { key: "all", label: "Total", cls: "border-amber-300 bg-amber-100 text-amber-800" },
   { key: "draft", label: "Draft", cls: "border-zinc-300 bg-zinc-100 text-zinc-700" },
   { key: "negotiating", label: "Negotiating", cls: "border-sky-300 bg-sky-100 text-sky-700" },
   { key: "scheduled", label: "Scheduled", cls: "border-emerald-300 bg-emerald-100 text-emerald-700" },
@@ -34,23 +36,20 @@ const statusPills = [
     cls: "border-indigo-300 bg-indigo-100 text-indigo-700",
   },
   { key: "cancelled", label: "Cancelled", cls: "border-rose-300 bg-rose-100 text-rose-700" },
-  { key: "declined", label: "Declined", cls: "border-red-300 bg-red-100 text-red-700" },
+  { key: "declined", label: "Declined", cls: "border-orange-300 bg-orange-100 text-orange-700" },
 ] as const;
 
-function serviceTags(projectType: string): string[] {
+function eventTypeText(projectType: string): string {
   const type = projectType.toLowerCase();
-  const tags: string[] = [];
-  if (type.includes("photo")) tags.push("Photography");
-  if (type.includes("film") || type.includes("video")) tags.push("Film");
-  if (type.includes("baptism")) tags.push("Baptism");
-  if (type.includes("wedding")) tags.push("Wedding");
-  return [...new Set(tags)];
+  if (type.includes("baptism")) return "Baptism";
+  return "Wedding";
 }
 
 export default async function AdminOverviewPage({ searchParams }: AdminPageProps) {
   const params = await searchParams;
   const q = (params.q || "").toLowerCase();
   const statusFilter = params.status || "all";
+  const sort = params.sort || "date_desc";
 
   const [metrics, projects] = await Promise.all([getDashboardMetrics(), getProjects()]);
 
@@ -61,6 +60,12 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
       project.clients.some((c) => c.fullName.toLowerCase().includes(q));
     const matchesStatus = statusFilter === "all" || project.status === statusFilter;
     return matchesText && matchesStatus;
+  }).sort((a, b) => {
+    if (sort === "name_asc") return a.title.localeCompare(b.title);
+    if (sort === "name_desc") return b.title.localeCompare(a.title);
+    if (sort === "date_asc") return a.eventDate.localeCompare(b.eventDate);
+    if (sort === "status_asc") return a.status.localeCompare(b.status);
+    return b.eventDate.localeCompare(a.eventDate);
   });
 
   const statusCounts: Record<string, number> = {
@@ -76,7 +81,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   return (
     <div className="space-y-5">
       <section className="admin-surface p-4">
-        <p className="quiet-label mb-3">Project Statuses</p>
+        <p className="quiet-label mb-3">Overview</p>
         <div className="flex flex-wrap gap-2">
           {statusPills.map((pill) => (
             <span
@@ -100,31 +105,13 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           </Link>
         </div>
 
-        <form className="mb-4 grid gap-3">
-          <input
-            type="search"
-            name="q"
-            defaultValue={params.q}
-            placeholder="Search by couple"
-            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-          />
-
-          <div className="flex flex-wrap gap-2">
-            {statusPills.map((pill) => (
-              <button
-                key={pill.key}
-                type="submit"
-                name="status"
-                value={pill.key}
-                className={`rounded-full border px-3 py-1 text-sm transition ${pill.cls} ${
-                  statusFilter === pill.key ? "ring-1 ring-foreground/35" : "opacity-85 hover:opacity-100"
-                }`}
-              >
-                {pill.label} ({statusCounts[pill.key] || 0})
-              </button>
-            ))}
-          </div>
-        </form>
+        <ProjectsControls
+          initialQuery={params.q || ""}
+          initialStatus={statusFilter}
+          initialSort={sort}
+          statusPills={[...statusPills]}
+          statusCounts={statusCounts}
+        />
 
         {filtered.length === 0 ? (
           <div className="px-4 py-12 text-center">
@@ -149,14 +136,9 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                 </div>
                 <div className="p-6">
                   <div className="mb-3 flex items-start justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
-                        {project.clients[0]?.fullName || "Groom"}
-                      </h3>
-                      <p className="title-cinematic text-base leading-snug text-foreground/85">
-                        {project.clients[1]?.fullName || "Bride"}
-                      </p>
-                    </div>
+                    <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
+                      {project.title}
+                    </h3>
                     <span
                       className={`shrink-0 rounded-lg px-2.5 py-1 text-xs capitalize leading-tight ${statusBadge(project.status)}`}
                     >
@@ -166,13 +148,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
 
                   <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
                     <p className="text-xs text-foreground/80">{formatDateDDMMYY(project.eventDate)}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {serviceTags(project.projectType).map((tag) => (
-                        <span key={tag} className="rounded-full border border-border bg-white px-2 py-0.5 text-[11px] text-foreground/80">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
+                    <p className="text-xs text-muted-foreground">{eventTypeText(project.projectType)}</p>
                   </div>
 
                   <div className="text-xs text-muted-foreground group-hover:text-foreground/70">
