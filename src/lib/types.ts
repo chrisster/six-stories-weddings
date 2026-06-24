@@ -108,6 +108,7 @@ export type MediaAsset = {
   mediaType: "photo" | "video";
   sortOrder: number;
   isCover: boolean;
+  originalName?: string | null;
 };
 
 export type GalleryDetail = {

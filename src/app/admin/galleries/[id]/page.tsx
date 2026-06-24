@@ -9,7 +9,7 @@ import {
 import { MediaUploader } from "@/components/gallery/media-uploader";
 import { MediaManager } from "@/components/gallery/media-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
-import { getGalleryById } from "@/lib/data";
+import { getGalleryById, getGalleryFavorites } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
@@ -40,6 +40,12 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   );
 
   const cover = mediaWithUrl.find((asset) => asset.isCover) || mediaWithUrl[0] || null;
+
+  const favorites = await getGalleryFavorites(detail.gallery.id);
+  const favoritedMedia = mediaWithUrl
+    .filter((asset) => favorites.counts[asset.id])
+    .sort((a, b) => (favorites.counts[b.id] || 0) - (favorites.counts[a.id] || 0));
+
   return (
     <div className="space-y-6">
       <section className="admin-surface overflow-hidden">
@@ -145,6 +151,49 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
             </button>
           </form>
         </article>
+      </section>
+
+      <section className="admin-surface p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="title-cinematic text-xl font-semibold">Client Favorites</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Photos your clients hearted in the gallery, most-loved first.
+            </p>
+          </div>
+          <div className="flex gap-2 text-center">
+            <div className="rounded-xl border border-border/70 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Favorited</p>
+              <p className="mt-1 font-medium">{favoritedMedia.length}</p>
+            </div>
+            <div className="rounded-xl border border-border/70 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Clients</p>
+              <p className="mt-1 font-medium">{favorites.guests}</p>
+            </div>
+          </div>
+        </div>
+
+        {favoritedMedia.length === 0 ? (
+          <p className="mt-5 border-t border-border/70 pt-5 text-sm text-muted-foreground">
+            No favorites yet. They will appear here once clients heart photos in the gallery.
+          </p>
+        ) : (
+          <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border/70 pt-5 sm:grid-cols-4 md:grid-cols-6">
+            {favoritedMedia.map((asset) => (
+              <div key={asset.id} className="group relative aspect-square overflow-hidden rounded-xl bg-zinc-200">
+                {asset.mediaType === "photo" ? (
+                  <Image src={asset.url} alt="Favorited media" fill className="object-cover" unoptimized />
+                ) : (
+                  <video src={asset.url} className="h-full w-full object-cover" preload="metadata" />
+                )}
+                <span className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
+                  <span className="text-rose-400">&#9829;</span>
+                  {favorites.counts[asset.id]}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="admin-surface p-5">

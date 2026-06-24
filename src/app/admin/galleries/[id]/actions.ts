@@ -144,6 +144,7 @@ export async function uploadMediaAction(formData: FormData) {
       storage_provider: "supabase",
       storage_bucket: getBucketName(),
       storage_path: storagePath,
+      original_name: file.name,
       media_type: file.type.startsWith("video/") ? "video" : "photo",
       sort_order: sortOrder,
       is_cover: false,

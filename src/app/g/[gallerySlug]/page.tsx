@@ -26,6 +26,7 @@ export default async function PublicGalleryPage({ params }: PublicGalleryPagePro
       ...asset,
       url: await getSignedMediaUrl(asset.storagePath),
       sectionName: sectionById.get(asset.sectionId || "") || "Moments",
+      fileName: asset.originalName || `IMG-${asset.id.slice(0, 6).toUpperCase()}`,
     })),
   );
 
@@ -60,6 +61,8 @@ export default async function PublicGalleryPage({ params }: PublicGalleryPagePro
     <main className="min-h-screen bg-white">
       <PublicGallery
         assets={media}
+        galleryId={detail.gallery.id}
+        gallerySlug={gallerySlug}
         allowDownloads={detail.gallery.allowDownloads}
         coupleNames={detail.project.title || detail.gallery.title}
         eventDate={detail.project.eventDate}

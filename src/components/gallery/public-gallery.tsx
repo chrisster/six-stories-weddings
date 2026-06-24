@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Share2, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Heart, Share2, X } from "lucide-react";
 
 import { formatDateLong } from "@/lib/utils";
 
@@ -12,10 +12,13 @@ type PublicAsset = {
   sectionName: string;
   mediaType: "photo" | "video";
   url: string;
+  fileName?: string;
 };
 
 type PublicGalleryProps = {
   assets: PublicAsset[];
+  galleryId: string;
+  gallerySlug: string;
   allowDownloads: boolean;
   coupleNames: string;
   eventDate?: string | null;
@@ -36,8 +39,15 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function displayName(name?: string) {
+  if (!name) return "";
+  return name.replace(/\.[^./]+$/, "");
+}
+
 export function PublicGallery({
   assets,
+  galleryId: _galleryId,
+  gallerySlug,
   allowDownloads,
   coupleNames,
   eventDate,
@@ -45,6 +55,55 @@ export function PublicGallery({
   studioName = "Six Stories",
   sectionOrder = [],
 }: PublicGalleryProps) {
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const sessionRef = useRef<string>("");
+
+  // Establish a per-browser guest identity (the passcode unlock is the client
+  // "login"; this id ties favorites to that visitor) and load saved favorites.
+  useEffect(() => {
+    let id = "";
+    try {
+      id = localStorage.getItem("ss_guest_session") || "";
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem("ss_guest_session", id);
+      }
+    } catch {
+      id = "";
+    }
+    sessionRef.current = id;
+    if (!id) return;
+
+    fetch(`/g/${gallerySlug}/favorites?session=${encodeURIComponent(id)}`)
+      .then((response) => response.json())
+      .then((data: { favorites?: string[] }) => setFavorites(new Set(data.favorites || [])))
+      .catch(() => {});
+  }, [gallerySlug]);
+
+  const toggleFavorite = useCallback(
+    (assetId: string) => {
+      const session = sessionRef.current;
+      if (!session) return;
+
+      setFavorites((previous) => {
+        const willFavorite = !previous.has(assetId);
+        const nextSet = new Set(previous);
+        if (willFavorite) nextSet.add(assetId);
+        else nextSet.delete(assetId);
+
+        fetch(`/g/${gallerySlug}/favorites`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mediaAssetId: assetId, session, favorited: willFavorite }),
+        }).catch(() => {});
+
+        return nextSet;
+      });
+    },
+    [gallerySlug],
+  );
+
   const grouped = useMemo<GroupedSection[]>(() => {
     const map = new Map<string, PublicAsset[]>();
     assets.forEach((asset) => {
@@ -63,7 +122,17 @@ export function PublicGallery({
     return orderedKeys.map((name) => ({ name, items: map.get(name) || [] }));
   }, [assets, sectionOrder]);
 
-  const flatOrdered = useMemo(() => grouped.flatMap((group) => group.items), [grouped]);
+  const displayedGroups = useMemo<GroupedSection[]>(() => {
+    if (!favoritesOnly) return grouped;
+    return grouped
+      .map((group) => ({ name: group.name, items: group.items.filter((item) => favorites.has(item.id)) }))
+      .filter((group) => group.items.length > 0);
+  }, [grouped, favoritesOnly, favorites]);
+
+  const flatOrdered = useMemo(
+    () => displayedGroups.flatMap((group) => group.items),
+    [displayedGroups],
+  );
 
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [activeSection, setActiveSection] = useState<string>(grouped[0]?.name || "");
@@ -134,7 +203,7 @@ export function PublicGallery({
     });
 
     return () => observer.disconnect();
-  }, [grouped]);
+  }, [displayedGroups]);
 
   const scrollToSection = useCallback((name: string) => {
     const element = sectionRefs.current[name];
@@ -166,16 +235,17 @@ export function PublicGallery({
 
   const activeAsset = activeIndex !== null ? flatOrdered[activeIndex] : null;
   const dateLong = formatDateLong(eventDate);
+  const favoriteCount = favorites.size;
 
   return (
     <div className="bg-white text-foreground">
       {/* ---------- HERO ---------- */}
-      <header className="px-4 pt-10 pb-6 sm:pt-14">
+      <header className="flex min-h-screen flex-col justify-center px-4 py-12 sm:py-16">
         <p className="title-cinematic text-center text-sm uppercase tracking-[0.42em] text-foreground/80 sm:text-base">
           {studioName}
         </p>
 
-        <div className="mt-10 flex flex-col items-center gap-6 md:mt-14 md:flex-row md:items-center md:justify-center md:gap-10">
+        <div className="mt-12 flex flex-1 flex-col items-center justify-center gap-6 md:mt-0 md:flex-row md:gap-10">
           <p className="hidden self-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground md:block md:[writing-mode:vertical-rl] md:rotate-180">
             Photographed by {studioName} Studio
           </p>
@@ -219,8 +289,13 @@ export function PublicGallery({
           <div className="flex flex-1 items-center gap-4 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
               type="button"
-              onClick={scrollToGallery}
-              className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground transition hover:text-foreground"
+              onClick={() => {
+                setFavoritesOnly(false);
+                scrollToGallery();
+              }}
+              className={`text-[11px] uppercase tracking-[0.22em] transition hover:text-foreground ${
+                favoritesOnly ? "text-muted-foreground" : "text-foreground"
+              }`}
             >
               Gallery
             </button>
@@ -228,15 +303,31 @@ export function PublicGallery({
               <button
                 key={group.name}
                 type="button"
-                onClick={() => scrollToSection(group.name)}
+                onClick={() => {
+                  setFavoritesOnly(false);
+                  scrollToSection(group.name);
+                }}
                 className={`text-[11px] uppercase tracking-[0.22em] transition hover:text-foreground ${
-                  activeSection === group.name ? "text-foreground" : "text-muted-foreground"
+                  !favoritesOnly && activeSection === group.name ? "text-foreground" : "text-muted-foreground"
                 }`}
               >
                 {group.name}
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setFavoritesOnly((value) => !value)}
+            aria-pressed={favoritesOnly}
+            aria-label="Show favorites"
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] uppercase tracking-[0.18em] transition ${
+              favoritesOnly ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Heart className={`size-4 ${favoritesOnly ? "fill-current" : ""}`} />
+            {favoriteCount > 0 ? <span>{favoriteCount}</span> : null}
+          </button>
 
           <button
             type="button"
@@ -251,22 +342,36 @@ export function PublicGallery({
 
       {/* ---------- SECTIONS ---------- */}
       <div ref={galleryStartRef} className="px-2 pb-20 sm:px-4">
-        {grouped.map((group, index) => (
-          <section
-            key={group.name}
-            data-section={group.name}
-            id={`sec-${slugify(group.name)}-${index}`}
-            ref={(element) => {
-              sectionRefs.current[group.name] = element;
-            }}
-            className="scroll-mt-20"
-          >
-            <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
-              {group.name}
-            </h2>
-            <JustifiedGrid items={group.items} onSelect={openAt} />
-          </section>
-        ))}
+        {favoritesOnly && displayedGroups.length === 0 ? (
+          <div className="py-24 text-center">
+            <Heart className="mx-auto size-8 text-muted-foreground" />
+            <p className="mt-4 text-sm text-muted-foreground">
+              No favorites yet. Tap the heart on any photo to save it here.
+            </p>
+          </div>
+        ) : (
+          displayedGroups.map((group, index) => (
+            <section
+              key={group.name}
+              data-section={group.name}
+              id={`sec-${slugify(group.name)}-${index}`}
+              ref={(element) => {
+                sectionRefs.current[group.name] = element;
+              }}
+              className="scroll-mt-20"
+            >
+              <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
+                {group.name}
+              </h2>
+              <JustifiedGrid
+                items={group.items}
+                favorites={favorites}
+                onSelect={openAt}
+                onToggleFavorite={toggleFavorite}
+              />
+            </section>
+          ))
+        )}
       </div>
 
       {/* ---------- LIGHTBOX ---------- */}
@@ -274,8 +379,7 @@ export function PublicGallery({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/95"
           onClick={close}
-        >
-          <button
+        >          <button
             type="button"
             onClick={close}
             aria-label="Close"
@@ -312,30 +416,60 @@ export function PublicGallery({
           ) : null}
 
           <div
-            className="flex max-h-[92vh] w-full max-w-6xl items-center justify-center px-4"
+            className="flex max-h-[92vh] w-full max-w-6xl items-center justify-center px-4 pb-20"
             onClick={(event) => event.stopPropagation()}
           >
             {activeAsset.mediaType === "photo" ? (
               <img
                 src={activeAsset.url}
-                alt="Selected media"
-                className="max-h-[92vh] w-auto max-w-full object-contain"
+                alt={displayName(activeAsset.fileName)}
+                className="max-h-[84vh] w-auto max-w-full object-contain"
               />
             ) : (
-              <video src={activeAsset.url} controls autoPlay className="max-h-[92vh] w-auto max-w-full" />
+              <video src={activeAsset.url} controls autoPlay className="max-h-[84vh] w-auto max-w-full" />
             )}
           </div>
 
-          {allowDownloads ? (
-            <a
-              href={activeAsset.url}
-              download
-              onClick={(event) => event.stopPropagation()}
-              className="absolute bottom-5 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs uppercase tracking-[0.2em] text-white/90 backdrop-blur transition hover:bg-white/20"
-            >
-              <Download className="size-4" /> Download
-            </a>
-          ) : null}
+          {/* Filename + action bar */}
+          <div
+            className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-3 bg-gradient-to-t from-black/70 to-transparent pb-6 pt-10"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {activeAsset.fileName ? (
+              <p className="text-xs uppercase tracking-[0.28em] text-white/80">
+                {displayName(activeAsset.fileName)}
+              </p>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggleFavorite(activeAsset.id)}
+                aria-label={favorites.has(activeAsset.id) ? "Remove favorite" : "Add favorite"}
+                aria-pressed={favorites.has(activeAsset.id)}
+                className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/90 backdrop-blur transition hover:bg-white/20"
+              >
+                <Heart className={`size-4 ${favorites.has(activeAsset.id) ? "fill-rose-500 text-rose-500" : ""}`} />
+              </button>
+              {allowDownloads ? (
+                <a
+                  href={activeAsset.url}
+                  download
+                  aria-label="Download"
+                  className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/90 backdrop-blur transition hover:bg-white/20"
+                >
+                  <Download className="size-4" />
+                </a>
+              ) : null}
+              <button
+                type="button"
+                onClick={share}
+                aria-label="Share"
+                className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/90 backdrop-blur transition hover:bg-white/20"
+              >
+                <Share2 className="size-4" />
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
@@ -348,10 +482,12 @@ export function PublicGallery({
 
 type JustifiedGridProps = {
   items: PublicAsset[];
+  favorites: Set<string>;
   onSelect: (assetId: string) => void;
+  onToggleFavorite: (assetId: string) => void;
 };
 
-function JustifiedGrid({ items, onSelect }: JustifiedGridProps) {
+function JustifiedGrid({ items, favorites, onSelect, onToggleFavorite }: JustifiedGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [ratios, setRatios] = useState<Record<string, number>>({});
@@ -416,39 +552,67 @@ function JustifiedGrid({ items, onSelect }: JustifiedGridProps) {
     <div ref={containerRef} className="w-full">
       {rows.map((row, rowIndex) => (
         <div key={rowIndex} className="flex" style={{ gap, marginBottom: gap }}>
-          {row.items.map(({ asset, w, h }) => (
-            <button
-              key={asset.id}
-              type="button"
-              onClick={() => onSelect(asset.id)}
-              style={{ width: w, height: h }}
-              className="group relative shrink-0 overflow-hidden bg-muted/40"
-            >
-              {asset.mediaType === "photo" ? (
-                <img
-                  src={asset.url}
-                  alt=""
-                  loading="lazy"
-                  onLoad={(event) =>
-                    handleRatio(
-                      asset.id,
-                      event.currentTarget.naturalWidth / event.currentTarget.naturalHeight,
-                    )
-                  }
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
-                />
-              ) : (
-                <video
-                  src={asset.url}
-                  preload="metadata"
-                  onLoadedMetadata={(event) =>
-                    handleRatio(asset.id, event.currentTarget.videoWidth / event.currentTarget.videoHeight)
-                  }
-                  className="h-full w-full object-cover"
-                />
-              )}
-            </button>
-          ))}
+          {row.items.map(({ asset, w, h }) => {
+            const isFavorite = favorites.has(asset.id);
+            return (
+              <div
+                key={asset.id}
+                style={{ width: w, height: h }}
+                className="group relative shrink-0 overflow-hidden bg-muted/40"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelect(asset.id)}
+                  className="block h-full w-full"
+                >
+                  {asset.mediaType === "photo" ? (
+                    <img
+                      src={asset.url}
+                      alt={displayName(asset.fileName)}
+                      loading="lazy"
+                      onLoad={(event) =>
+                        handleRatio(
+                          asset.id,
+                          event.currentTarget.naturalWidth / event.currentTarget.naturalHeight,
+                        )
+                      }
+                      className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                    />
+                  ) : (
+                    <video
+                      src={asset.url}
+                      preload="metadata"
+                      onLoadedMetadata={(event) =>
+                        handleRatio(asset.id, event.currentTarget.videoWidth / event.currentTarget.videoHeight)
+                      }
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                </button>
+
+                {/* Filename overlay (hover) */}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end bg-gradient-to-t from-black/55 to-transparent p-2.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                  {asset.fileName ? (
+                    <span className="truncate text-[10px] uppercase tracking-[0.18em] text-white/90">
+                      {displayName(asset.fileName)}
+                    </span>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onToggleFavorite(asset.id)}
+                  aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
+                  aria-pressed={isFavorite}
+                  className={`absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55 ${
+                    isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  }`}
+                >
+                  <Heart className={`size-4 ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

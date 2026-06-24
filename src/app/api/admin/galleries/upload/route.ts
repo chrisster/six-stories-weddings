@@ -59,6 +59,7 @@ export async function POST(request: Request) {
       storage_provider: "supabase",
       storage_bucket: getBucketName(),
       storage_path: storagePath,
+      original_name: file.name,
       media_type: file.type.startsWith("video/") ? "video" : "photo",
       sort_order: (latestAsset?.sort_order || 0) + 1,
       is_cover: false,

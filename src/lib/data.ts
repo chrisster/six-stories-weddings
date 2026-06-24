@@ -368,6 +368,7 @@ export async function getGalleryById(galleryId: string): Promise<GalleryDetail |
       mediaType: (row.media_type as "photo" | "video") || "photo",
       sortOrder: Number(row.sort_order || 0),
       isCover: Boolean(row.is_cover),
+      originalName: (row.original_name as string | null) || null,
     })),
   };
 }
@@ -398,6 +399,34 @@ export async function getPublicGalleryBySlug(slug: string) {
   }
 
   return getGalleryById(String(galleryRow.id));
+}
+
+export async function getGalleryFavorites(
+  galleryId: string,
+): Promise<{ counts: Record<string, number>; total: number; guests: number }> {
+  if (!hasSupabaseEnv) {
+    return { counts: {}, total: 0, guests: 0 };
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return { counts: {}, total: 0, guests: 0 };
+  }
+
+  const { data } = await admin
+    .from("gallery_favorites")
+    .select("media_asset_id, guest_session_id")
+    .eq("gallery_id", galleryId);
+
+  const counts: Record<string, number> = {};
+  const guests = new Set<string>();
+  (data || []).forEach((row) => {
+    const id = String(row.media_asset_id);
+    counts[id] = (counts[id] || 0) + 1;
+    guests.add(String(row.guest_session_id));
+  });
+
+  return { counts, total: (data || []).length, guests: guests.size };
 }
 
 export async function getCrewMembers(): Promise<CrewMember[]> {
