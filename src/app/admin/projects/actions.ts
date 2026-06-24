@@ -12,6 +12,38 @@ function toNumber(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function parsePayments(formData: FormData): Array<{ date: string; amount: number; note?: string }> {
+  const dates = formData.getAll("paymentDate").map((value) => String(value || "").trim());
+  const amounts = formData.getAll("paymentAmount").map((value) => Number(String(value || "0")));
+  const notes = formData.getAll("paymentNote").map((value) => String(value || "").trim());
+
+  const maxLen = Math.max(dates.length, amounts.length, notes.length);
+  const payments: Array<{ date: string; amount: number; note?: string }> = [];
+
+  for (let index = 0; index < maxLen; index += 1) {
+    const rawDate = dates[index] || "";
+    const date = normalizeEventDate(rawDate);
+    const amount = amounts[index];
+    const note = notes[index] || "";
+
+    if (!rawDate && (!Number.isFinite(amount) || amount <= 0) && !note) {
+      continue;
+    }
+
+    if (!date || !Number.isFinite(amount) || amount <= 0) {
+      continue;
+    }
+
+    payments.push({
+      date,
+      amount,
+      note: note || undefined,
+    });
+  }
+
+  return payments;
+}
+
 function normalizeEventDate(rawDate: string): string {
   const trimmed = rawDate.trim();
   if (!trimmed) return "";
@@ -93,8 +125,12 @@ export async function createProjectAction(formData: FormData) {
   // Always create as draft initially
   const status = "draft";
   const notes = String(formData.get("notes") || "").trim() || null;
-  const budgetTotal = toNumber(formData.get("budgetTotal"));
-  const amountPaid = toNumber(formData.get("amountPaid"));
+  const offerAmount = toNumber(formData.get("offerAmount")) || toNumber(formData.get("budgetTotal"));
+  const payments = parsePayments(formData);
+  const amountPaidInput = toNumber(formData.get("amountPaid"));
+  const paymentsTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const amountPaid = payments.length > 0 ? paymentsTotal : amountPaidInput;
+  const budgetTotal = offerAmount;
   const amountRemaining = Math.max(0, budgetTotal - amountPaid);
 
   // Structured client + crew data from client component
@@ -154,9 +190,11 @@ export async function createProjectAction(formData: FormData) {
       month: eventDate.slice(0, 7),
       project_type: projectType,
       status,
+      offer_amount: offerAmount,
       budget_total: budgetTotal,
       amount_paid: amountPaid,
       amount_remaining: amountRemaining,
+      payments_json: payments,
       notes,
     })
     .select("id, title")
@@ -312,8 +350,12 @@ export async function updateProjectAction(formData: FormData) {
   const status = String(formData.get("status") || "draft").trim();
   const referral = String(formData.get("referral") || "").trim() || null;
   const notes = String(formData.get("notes") || "").trim() || null;
-  const budgetTotal = toNumber(formData.get("budgetTotal"));
-  const amountPaid = toNumber(formData.get("amountPaid"));
+  const offerAmount = toNumber(formData.get("offerAmount")) || toNumber(formData.get("budgetTotal"));
+  const payments = parsePayments(formData);
+  const amountPaidInput = toNumber(formData.get("amountPaid"));
+  const paymentsTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const amountPaid = payments.length > 0 ? paymentsTotal : amountPaidInput;
+  const budgetTotal = offerAmount;
   const amountRemaining = Math.max(0, budgetTotal - amountPaid);
 
   const admin = createAdminClient();
@@ -328,9 +370,11 @@ export async function updateProjectAction(formData: FormData) {
     project_type: projectType,
     status,
     referral,
+    offer_amount: offerAmount,
     budget_total: budgetTotal,
     amount_paid: amountPaid,
     amount_remaining: amountRemaining,
+    payments_json: payments,
     notes,
   };
 
@@ -339,14 +383,31 @@ export async function updateProjectAction(formData: FormData) {
     .update(payload)
     .eq("id", projectId);
 
-  // Compatibility fallback for DBs where referral column has not been migrated yet.
-  if (error?.message?.toLowerCase().includes("referral")) {
-    const { referral: _ignored, ...payloadWithoutReferral } = payload;
-    const retry = await admin
-      .from("projects")
-      .update(payloadWithoutReferral)
-      .eq("id", projectId);
-    error = retry.error;
+  // Compatibility fallback for DBs where newer columns have not been migrated yet.
+  if (error) {
+    const lower = error.message.toLowerCase();
+    let payloadWithoutOptional: Record<string, unknown> = { ...payload };
+
+    if (lower.includes("referral")) {
+      const { referral: _ignored, ...rest } = payloadWithoutOptional;
+      payloadWithoutOptional = rest;
+    }
+    if (lower.includes("offer_amount")) {
+      const { offer_amount: _ignored, ...rest } = payloadWithoutOptional;
+      payloadWithoutOptional = rest;
+    }
+    if (lower.includes("payments_json")) {
+      const { payments_json: _ignored, ...rest } = payloadWithoutOptional;
+      payloadWithoutOptional = rest;
+    }
+
+    if (Object.keys(payloadWithoutOptional).length !== Object.keys(payload).length) {
+      const retry = await admin
+        .from("projects")
+        .update(payloadWithoutOptional)
+        .eq("id", projectId);
+      error = retry.error;
+    }
   }
 
   if (error) {

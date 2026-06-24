@@ -10,6 +10,43 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedMediaUrl } from "@/lib/storage";
 import type { Contact, CrewMember, Gallery, GalleryDetail, Project } from "@/lib/types";
 
+function normalizePaymentDate(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+    return `${trimmed.slice(6)}-${trimmed.slice(3, 5)}-${trimmed.slice(0, 2)}`;
+  }
+  return "";
+}
+
+function normalizePayments(raw: unknown): Array<{ date: string; amount: number; note?: string }> {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.reduce<Array<{ date: string; amount: number; note?: string }>>((acc, entry) => {
+    if (!entry || typeof entry !== "object") {
+      return acc;
+    }
+
+    const candidate = entry as Record<string, unknown>;
+    const date = normalizePaymentDate(String(candidate.date || ""));
+    const amount = Number(candidate.amount || 0);
+    const note = String(candidate.note || "").trim();
+    if (!date || !Number.isFinite(amount) || amount <= 0) {
+      return acc;
+    }
+
+    acc.push({
+      date,
+      amount,
+      note: note || undefined,
+    });
+    return acc;
+  }, []);
+}
+
 type DashboardMetrics = {
   totalProjects: number;
   draftProjects: number;
@@ -82,6 +119,12 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
       notes: deliverable.notes as string | null,
     }));
 
+  const offerAmount = Number((row.offer_amount ?? row.budget_total) || 0);
+  const payments = normalizePayments(row.payments_json);
+  const paymentsTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const amountPaid = Number((row.amount_paid ?? paymentsTotal) || 0);
+  const amountRemaining = Math.max(0, Number(row.amount_remaining ?? offerAmount - amountPaid));
+
   return {
     id: String(row.id),
     title: String(row.title || ""),
@@ -99,9 +142,11 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
         | "cancelled"
         | "declined") || "draft",
     completed: Boolean(row.completed),
-    budgetTotal: Number(row.budget_total || 0),
-    amountPaid: Number(row.amount_paid || 0),
-    amountRemaining: Number(row.amount_remaining || 0),
+      offerAmount,
+      budgetTotal: offerAmount,
+      amountPaid,
+      amountRemaining,
+      payments,
     notes: row.notes as string | null,
     coverImageUrl: coverImageUrl || null,
     clients,

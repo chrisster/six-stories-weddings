@@ -92,6 +92,10 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
   const [galleries, crewMembers] = await Promise.all([getGalleries(), getCrewMembers()]);
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
   const projectTypeParts = parseProjectType(project.projectType);
+  const paymentsForForm = Array.from({ length: 3 }, (_, index) => project.payments[index] || null);
+  const amountPaidFromPayments = project.payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const displayedAmountPaid = project.payments.length > 0 ? amountPaidFromPayments : project.amountPaid;
+  const displayedRemaining = Math.max(0, project.offerAmount - displayedAmountPaid);
 
   const assignedIds = new Set(project.crewAssignments.map((a) => a.crewMemberId));
   const availableCrew = crewMembers.filter((m) => !assignedIds.has(m.id));
@@ -146,55 +150,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
           </div>
         </div>
 
-        <div className="mt-5">
-          <p className="quiet-label mb-3">Financials</p>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
-              <input
-                form="edit-wedding-form"
-                name="budgetTotal"
-                type="number"
-                min="0"
-                step="0.01"
-                defaultValue={project.budgetTotal}
-                className="mt-2 h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
-              />
-            </div>
-            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Paid</p>
-              <input
-                form="edit-wedding-form"
-                name="amountPaid"
-                type="number"
-                min="0"
-                step="0.01"
-                defaultValue={project.amountPaid}
-                className="mt-2 h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
-              />
-            </div>
-            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Remaining</p>
-              <p className="mt-2 text-2xl font-semibold text-foreground">{currency(project.amountRemaining)}</p>
-            </div>
-            <div className="rounded-2xl border border-border/80 bg-zinc-50 p-3">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Status</p>
-              <select
-                form="edit-wedding-form"
-                name="status"
-                defaultValue={project.status}
-                className="mt-2 h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
-              >
-                <option value="draft">Draft</option>
-                <option value="negotiating">Negotiating</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="post_production">Post production</option>
-                <option value="declined">Declined</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
-          </div>
-        </div>
       </section>
 
       <section className="soft-panel overflow-hidden p-0">
@@ -292,6 +247,18 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
           </div>
 
           <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Project status</label>
+            <select name="status" defaultValue={project.status} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm">
+              <option value="draft">Draft</option>
+              <option value="negotiating">Negotiating</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="post_production">Post production</option>
+              <option value="declined">Declined</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
             <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Services</label>
             <div className="flex h-10 items-center gap-4 rounded-xl border border-border bg-white px-3 text-sm">
               <label className="inline-flex items-center gap-2 text-sm">
@@ -327,6 +294,71 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
             <textarea name="notes" defaultValue={project.notes || ""} rows={3} className="w-full rounded-xl border border-border px-3 py-2 text-sm" />
           </div>
         </form>
+      </section>
+
+      <section className="soft-panel p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Financials</h3>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-border/80 bg-zinc-50 px-3 py-1 text-xs text-muted-foreground">
+              Paid {currency(displayedAmountPaid)}
+            </span>
+            <span className="rounded-full border border-border/80 bg-zinc-50 px-3 py-1 text-xs text-muted-foreground">
+              Remaining {currency(displayedRemaining)}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Offer</label>
+            <input
+              form="edit-wedding-form"
+              name="offerAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={project.offerAmount}
+              className="h-10 w-full rounded-xl border border-border px-3 text-sm"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Payments</p>
+            <div className="mt-2 space-y-2">
+              {paymentsForForm.map((payment, index) => (
+                <div key={index} className="grid gap-2 rounded-xl border border-border/80 bg-zinc-50 p-3 sm:grid-cols-[160px_140px_minmax(0,1fr)]">
+                  <input
+                    form="edit-wedding-form"
+                    name="paymentDate"
+                    type="text"
+                    defaultValue={payment ? toDisplayDate(payment.date) : ""}
+                    placeholder="DD-MM-YYYY"
+                    className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+                  />
+                  <input
+                    form="edit-wedding-form"
+                    name="paymentAmount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={payment?.amount || ""}
+                    placeholder="Amount"
+                    className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+                  />
+                  <input
+                    form="edit-wedding-form"
+                    name="paymentNote"
+                    type="text"
+                    defaultValue={payment?.note || ""}
+                    placeholder="Note"
+                    className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="soft-panel p-5">

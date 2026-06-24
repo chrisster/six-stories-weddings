@@ -21,9 +21,27 @@ export const demoProject: Project = {
   packageCategory: "Premium",
   status: "scheduled",
   completed: false,
+  offerAmount: 3200,
   budgetTotal: 3200,
   amountPaid: 1190.4,
   amountRemaining: 2009.6,
+  payments: [
+    {
+      date: "2026-03-10",
+      amount: 600,
+      note: "Booking retainer",
+    },
+    {
+      date: "2026-04-18",
+      amount: 390.4,
+      note: "Second installment",
+    },
+    {
+      date: "2026-05-21",
+      amount: 200,
+      note: "Pre-event top-up",
+    },
+  ],
   notes: "Luxury island wedding. Couple requested cinematic edit with warm tones.",
   clients: [
     {

@@ -51,6 +51,12 @@ export type Deliverable = {
   notes?: string | null;
 };
 
+export type ProjectPayment = {
+  date: string;
+  amount: number;
+  note?: string;
+};
+
 export type Project = {
   id: string;
   title: string;
@@ -61,9 +67,11 @@ export type Project = {
   packageCategory?: string | null;
   status: ProjectStatus;
   completed: boolean;
+  offerAmount: number;
   budgetTotal: number;
   amountPaid: number;
   amountRemaining: number;
+  payments: ProjectPayment[];
   notes?: string | null;
   coverImageUrl?: string | null;
   clients: Client[];
