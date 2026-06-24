@@ -1,16 +1,17 @@
-import { createRequire } from "node:module";
 import { Readable, Writable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
-import { getPublicGalleryBySlug } from "@/lib/data";
-import { getSignedMediaUrl } from "@/lib/storage";
-import type { MediaAsset } from "@/lib/types";
-
-const require = createRequire(import.meta.url);
+// archiver is a CommonJS module; keep it out of the ESM bundle via
+// serverExternalPackages in next.config.ts so Node loads it natively.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const archiver = require("archiver") as (
   format: string,
   options?: import("archiver").ArchiverOptions,
 ) => import("archiver").Archiver;
+
+import { getPublicGalleryBySlug } from "@/lib/data";
+import { getSignedMediaUrl } from "@/lib/storage";
+import type { MediaAsset } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
