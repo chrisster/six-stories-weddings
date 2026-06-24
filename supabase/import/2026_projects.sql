@@ -85,16 +85,16 @@ begin
     values ('Chris', 'photographer', true) returning id into v_chris;
   end if;
 
-  select id into v_ares from public.crew_members where full_name = 'Ares' limit 1;
+  select id into v_ares from public.crew_members where full_name = 'Aristomenis' limit 1;
   if v_ares is null then
     insert into public.crew_members (full_name, role_type, active)
-    values ('Ares', 'videographer', true) returning id into v_ares;
+    values ('Aristomenis', 'videographer', true) returning id into v_ares;
   end if;
 
-  select id into v_vicky from public.crew_members where full_name = 'Vicky' limit 1;
+  select id into v_vicky from public.crew_members where full_name = 'Vicky Kopaila' limit 1;
   if v_vicky is null then
     insert into public.crew_members (full_name, role_type, active)
-    values ('Vicky', 'videographer', true) returning id into v_vicky;
+    values ('Vicky Kopaila', 'videographer', true) returning id into v_vicky;
   end if;
 
   select id into v_theofilos from public.crew_members where full_name = 'Theofilos' limit 1;
