@@ -71,7 +71,6 @@ export function PublicGallery({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
   const sessionRef = useRef<string>("");
 
   // Establish a per-browser guest identity (the passcode unlock is the client
@@ -133,65 +132,41 @@ export function PublicGallery({
     [gallerySlug],
   );
 
-  // Bundle multiple files into a single ZIP (fetched same-origin through the
-  // proxy so R2's missing CORS headers don't block it) and download when ready.
+  // Bundle multiple files into a single ZIP. The archive is streamed from the
+  // server (so the whole gallery never has to fit in browser memory) and the
+  // browser downloads it natively via a hidden form post.
   const downloadMany = useCallback(
-    async (list: PublicAsset[]) => {
+    (list: PublicAsset[]) => {
       if (list.length === 0) return;
       setDownloading(true);
-      setDownloadProgress({ done: 0, total: list.length });
-      try {
-        const JSZip = (await import("jszip")).default;
-        const zip = new JSZip();
-        const used = new Set<string>();
 
-        for (let i = 0; i < list.length; i += 1) {
-          const asset = list[i];
-          try {
-            // eslint-disable-next-line no-await-in-loop
-            const response = await fetch(
-              `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}`,
-            );
-            if (response.ok) {
-              // eslint-disable-next-line no-await-in-loop
-              const blob = await response.blob();
-              let name = asset.fileName || `photo-${asset.id}`;
-              if (!/\.[a-z0-9]+$/i.test(name)) {
-                const ext = (blob.type.split("/")[1] || "jpg").split(";")[0];
-                name = `${name}.${ext}`;
-              }
-              let finalName = name;
-              let counter = 1;
-              while (used.has(finalName)) {
-                const dot = name.lastIndexOf(".");
-                finalName =
-                  dot > 0 ? `${name.slice(0, dot)}-${counter}${name.slice(dot)}` : `${name}-${counter}`;
-                counter += 1;
-              }
-              used.add(finalName);
-              zip.file(finalName, blob);
-            }
-          } catch {
-            // skip individual failures
-          }
-          setDownloadProgress({ done: i + 1, total: list.length });
-        }
-
-        const content = await zip.generateAsync({ type: "blob" });
-        const objectUrl = URL.createObjectURL(content);
-        const link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = `${(coupleNames || "gallery").replace(/[^\w\-]+/g, "-")}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(objectUrl);
-      } finally {
-        setDownloading(false);
-        setDownloadProgress(null);
+      let frame = document.getElementById("ss-zip-frame") as HTMLIFrameElement | null;
+      if (!frame) {
+        frame = document.createElement("iframe");
+        frame.id = "ss-zip-frame";
+        frame.name = "ss-zip-frame";
+        frame.style.display = "none";
+        document.body.appendChild(frame);
       }
+
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = `/g/${gallerySlug}/download-zip`;
+      form.target = "ss-zip-frame";
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "assets";
+      input.value = list.map((asset) => asset.id).join(",");
+      form.appendChild(input);
+      document.body.appendChild(form);
+      form.submit();
+      form.remove();
+
+      // The browser takes over the download once streaming begins; clear the
+      // preparing indicator shortly after.
+      window.setTimeout(() => setDownloading(false), 4000);
     },
-    [gallerySlug, coupleNames],
+    [gallerySlug],
   );
 
   const toggleSelect = useCallback((assetId: string) => {
@@ -335,9 +310,6 @@ export function PublicGallery({
   const activeAsset = activeIndex !== null ? flatOrdered[activeIndex] : null;
   const dateLong = formatDateLong(eventDate);
   const favoriteCount = favorites.size;
-  const zipLabel = downloadProgress
-    ? `Zipping ${downloadProgress.done}/${downloadProgress.total}…`
-    : "Preparing…";
 
   return (
     <div className="bg-white text-foreground">
@@ -464,7 +436,7 @@ export function PublicGallery({
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60 disabled:opacity-50"
                     >
                       <Download className="size-4" />
-                      {downloading ? zipLabel : `Download all (${flatOrdered.length})`}
+                      {downloading ? "Preparing…" : `Download all (${flatOrdered.length})`}
                     </button>
                     <button
                       type="button"
@@ -512,7 +484,7 @@ export function PublicGallery({
               className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
             >
               <Download className="size-3.5" />
-              {downloading ? zipLabel : "Download"}
+              {downloading ? "Preparing…" : "Download"}
             </button>
             <button
               type="button"
