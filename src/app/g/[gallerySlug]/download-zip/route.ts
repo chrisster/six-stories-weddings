@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import { getPublicGalleryBySlug } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
@@ -19,70 +20,85 @@ function slugifyName(value: string) {
 }
 
 async function buildZipResponse(gallerySlug: string, idsCsv: string | null) {
-  const detail = await getPublicGalleryBySlug(gallerySlug);
-  if (!detail || !detail.gallery.allowDownloads) {
-    return new Response("Not found", { status: 404 });
-  }
-
-  let assets: MediaAsset[] = detail.mediaAssets;
-  if (idsCsv) {
-    const ids = new Set(idsCsv.split(",").map((id) => id.trim()).filter(Boolean));
-    if (ids.size > 0) {
-      assets = assets.filter((asset) => ids.has(asset.id));
+  try {
+    const detail = await getPublicGalleryBySlug(gallerySlug);
+    if (!detail || !detail.gallery.allowDownloads) {
+      return new Response("Not found", { status: 404 });
     }
-  }
 
-  if (assets.length === 0) {
-    return new Response("No files", { status: 404 });
-  }
-
-  const archive = archiver("zip", { store: true });
-  archive.on("error", () => {
-    archive.destroy();
-  });
-
-  // Stream files into the archive one at a time to keep memory bounded.
-  (async () => {
-    const used = new Set<string>();
-    for (const asset of assets) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const signedUrl = await getSignedMediaUrl(asset.storagePath);
-        // eslint-disable-next-line no-await-in-loop
-        const upstream = await fetch(signedUrl);
-        if (!upstream.ok) continue;
-        // eslint-disable-next-line no-await-in-loop
-        const buffer = Buffer.from(await upstream.arrayBuffer());
-
-        const ext = asset.storagePath.split(".").pop() || "jpg";
-        let name = asset.originalName || `photo-${asset.id}`;
-        if (!/\.[a-z0-9]+$/i.test(name)) name = `${name}.${ext}`;
-
-        let finalName = name;
-        let counter = 1;
-        while (used.has(finalName)) {
-          const dot = name.lastIndexOf(".");
-          finalName =
-            dot > 0 ? `${name.slice(0, dot)}-${counter}${name.slice(dot)}` : `${name}-${counter}`;
-          counter += 1;
-        }
-        used.add(finalName);
-
-        archive.append(buffer, { name: finalName });
-      } catch {
-        // skip individual file failures
+    let assets: MediaAsset[] = detail.mediaAssets;
+    if (idsCsv) {
+      const ids = new Set(idsCsv.split(",").map((id) => id.trim()).filter(Boolean));
+      if (ids.size > 0) {
+        assets = assets.filter((asset) => ids.has(asset.id));
       }
     }
-    archive.finalize();
-  })();
 
-  const zipName = `${slugifyName(detail.project.title || detail.gallery.title)}.zip`;
-  const headers = new Headers();
-  headers.set("Content-Type", "application/zip");
-  headers.set("Content-Disposition", `attachment; filename="${zipName}"`);
-  headers.set("Cache-Control", "no-store");
+    if (assets.length === 0) {
+      return new Response("No files", { status: 404 });
+    }
 
-  return new Response(Readable.toWeb(archive) as unknown as ReadableStream, { headers });
+    const output = new PassThrough();
+    const archive = archiver("zip", { store: true });
+
+    archive.on("warning", () => {
+      // Skip non-fatal archive warnings so a single problematic entry does not
+      // kill the entire download.
+    });
+    archive.on("error", (error: Error) => {
+      output.destroy(error);
+    });
+    archive.pipe(output);
+
+    void (async () => {
+      const used = new Set<string>();
+      try {
+        for (const asset of assets) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const signedUrl = await getSignedMediaUrl(asset.storagePath);
+            // eslint-disable-next-line no-await-in-loop
+            const upstream = await fetch(signedUrl);
+            if (!upstream.ok || !upstream.body) continue;
+
+            const ext = asset.storagePath.split(".").pop() || "jpg";
+            let name = asset.originalName || `photo-${asset.id}`;
+            if (!/\.[a-z0-9]+$/i.test(name)) name = `${name}.${ext}`;
+
+            let finalName = name;
+            let counter = 1;
+            while (used.has(finalName)) {
+              const dot = name.lastIndexOf(".");
+              finalName =
+                dot > 0 ? `${name.slice(0, dot)}-${counter}${name.slice(dot)}` : `${name}-${counter}`;
+              counter += 1;
+            }
+            used.add(finalName);
+
+            archive.append(
+              Readable.fromWeb(upstream.body as unknown as NodeReadableStream),
+              { name: finalName },
+            );
+          } catch {
+            // skip individual file failures
+          }
+        }
+        await archive.finalize();
+      } catch (error) {
+        output.destroy(error instanceof Error ? error : new Error("ZIP stream failed"));
+      }
+    })();
+
+    const zipName = `${slugifyName(detail.project.title || detail.gallery.title)}.zip`;
+    const headers = new Headers();
+    headers.set("Content-Type", "application/zip");
+    headers.set("Content-Disposition", `attachment; filename="${zipName}"`);
+    headers.set("Cache-Control", "no-store");
+
+    return new Response(Readable.toWeb(output) as unknown as ReadableStream, { headers });
+  } catch {
+    return new Response("ZIP generation failed", { status: 500 });
+  }
 }
 
 export async function GET(
