@@ -71,6 +71,7 @@ export function PublicGallery({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
   const sessionRef = useRef<string>("");
 
   // Establish a per-browser guest identity (the passcode unlock is the client
@@ -118,36 +119,79 @@ export function PublicGallery({
     [gallerySlug],
   );
 
-  // Force an actual file download (instead of opening the signed URL in a new
-  // tab) by fetching the bytes and saving the blob with the original filename.
-  const downloadAsset = useCallback(async (asset: PublicAsset) => {
-    try {
-      const response = await fetch(asset.url);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
+  // Force an instant, same-origin download (no new tab / CORS issue) by routing
+  // the file through our own /download proxy with Content-Disposition.
+  const downloadAsset = useCallback(
+    (asset: PublicAsset) => {
       const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = asset.fileName || `photo-${asset.id}`;
+      link.href = `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}&download=1`;
+      link.rel = "noopener";
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch {
-      window.open(asset.url, "_blank");
-    }
-  }, []);
+    },
+    [gallerySlug],
+  );
 
+  // Bundle multiple files into a single ZIP (fetched same-origin through the
+  // proxy so R2's missing CORS headers don't block it) and download when ready.
   const downloadMany = useCallback(
     async (list: PublicAsset[]) => {
       if (list.length === 0) return;
       setDownloading(true);
-      for (const asset of list) {
-        // eslint-disable-next-line no-await-in-loop
-        await downloadAsset(asset);
+      setDownloadProgress({ done: 0, total: list.length });
+      try {
+        const JSZip = (await import("jszip")).default;
+        const zip = new JSZip();
+        const used = new Set<string>();
+
+        for (let i = 0; i < list.length; i += 1) {
+          const asset = list[i];
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const response = await fetch(
+              `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}`,
+            );
+            if (response.ok) {
+              // eslint-disable-next-line no-await-in-loop
+              const blob = await response.blob();
+              let name = asset.fileName || `photo-${asset.id}`;
+              if (!/\.[a-z0-9]+$/i.test(name)) {
+                const ext = (blob.type.split("/")[1] || "jpg").split(";")[0];
+                name = `${name}.${ext}`;
+              }
+              let finalName = name;
+              let counter = 1;
+              while (used.has(finalName)) {
+                const dot = name.lastIndexOf(".");
+                finalName =
+                  dot > 0 ? `${name.slice(0, dot)}-${counter}${name.slice(dot)}` : `${name}-${counter}`;
+                counter += 1;
+              }
+              used.add(finalName);
+              zip.file(finalName, blob);
+            }
+          } catch {
+            // skip individual failures
+          }
+          setDownloadProgress({ done: i + 1, total: list.length });
+        }
+
+        const content = await zip.generateAsync({ type: "blob" });
+        const objectUrl = URL.createObjectURL(content);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = `${(coupleNames || "gallery").replace(/[^\w\-]+/g, "-")}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+      } finally {
+        setDownloading(false);
+        setDownloadProgress(null);
       }
-      setDownloading(false);
     },
-    [downloadAsset],
+    [gallerySlug, coupleNames],
   );
 
   const toggleSelect = useCallback((assetId: string) => {
@@ -291,6 +335,9 @@ export function PublicGallery({
   const activeAsset = activeIndex !== null ? flatOrdered[activeIndex] : null;
   const dateLong = formatDateLong(eventDate);
   const favoriteCount = favorites.size;
+  const zipLabel = downloadProgress
+    ? `Zipping ${downloadProgress.done}/${downloadProgress.total}…`
+    : "Preparing…";
 
   return (
     <div className="bg-white text-foreground">
@@ -299,11 +346,11 @@ export function PublicGallery({
         <img
           src="/six-stories-logo.png"
           alt={studioName}
-          className="mx-auto h-9 w-auto sm:h-11"
+          className="mx-auto h-11 w-auto sm:h-14"
         />
 
-        <div className="mt-12 flex flex-1 flex-col items-center justify-center gap-6 md:mt-0 md:flex-row md:gap-10">
-          <div className="relative aspect-[3/4] w-[260px] max-w-[72vw] overflow-hidden bg-muted/40 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.5)] sm:w-[300px]">
+        <div className="mt-12 flex flex-1 flex-col items-center justify-center gap-6 md:mt-0 md:flex-row md:gap-12">
+          <div className="relative aspect-[3/4] w-[320px] max-w-[82vw] overflow-hidden bg-muted/40 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.5)] sm:w-[400px] md:w-[460px]">
             {coverUrl ? (
               <img src={coverUrl} alt={coupleNames} className="h-full w-full object-cover" />
             ) : (
@@ -312,7 +359,7 @@ export function PublicGallery({
           </div>
 
           <div className="text-center md:min-w-[160px] md:text-left">
-            <h1 className="title-cinematic text-2xl font-medium tracking-wide sm:text-3xl">{coupleNames}</h1>
+            <h1 className="title-cinematic text-2xl font-medium tracking-wide sm:text-4xl">{coupleNames}</h1>
             <div className="mx-auto my-4 h-px w-10 bg-foreground/30 md:mx-0" />
             {dateLong ? (
               <p className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">{dateLong}</p>
@@ -338,7 +385,7 @@ export function PublicGallery({
           <img
             src="/six-stories-logo.png"
             alt={studioName}
-            className="h-4 w-auto shrink-0 sm:h-5"
+            className="h-5 w-auto shrink-0 sm:h-6"
           />
 
           <div className="flex flex-1 items-center gap-4 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -417,7 +464,7 @@ export function PublicGallery({
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60 disabled:opacity-50"
                     >
                       <Download className="size-4" />
-                      {downloading ? "Downloading…" : `Download all (${flatOrdered.length})`}
+                      {downloading ? zipLabel : `Download all (${flatOrdered.length})`}
                     </button>
                     <button
                       type="button"
@@ -465,7 +512,7 @@ export function PublicGallery({
               className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
             >
               <Download className="size-3.5" />
-              {downloading ? "Downloading…" : "Download"}
+              {downloading ? zipLabel : "Download"}
             </button>
             <button
               type="button"
@@ -665,7 +712,7 @@ function JustifiedGrid({
   }, []);
 
   const gap = 6;
-  const targetRowHeight = width > 0 && width < 640 ? 255 : width < 1024 ? 360 : 450;
+  const targetRowHeight = width > 0 && width < 640 ? 300 : width < 1024 ? 430 : 540;
 
   const rows = useMemo(() => {
     if (!width) return [] as Array<{ items: Array<{ asset: PublicAsset; w: number; h: number }> }>;
@@ -771,9 +818,9 @@ function JustifiedGrid({
                         onDownload(asset);
                       }}
                       aria-label="Download photo"
-                      className="pointer-events-auto flex size-7 shrink-0 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/60"
+                      className="pointer-events-auto flex size-9 shrink-0 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/60"
                     >
-                      <Download className="size-3.5" />
+                      <Download className="size-4" />
                     </button>
                   ) : null}
                 </div>
@@ -794,11 +841,11 @@ function JustifiedGrid({
                     onClick={() => onToggleFavorite(asset.id)}
                     aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
                     aria-pressed={isFavorite}
-                    className={`absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55 ${
+                    className={`absolute right-2 top-2 flex size-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55 ${
                       isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                     }`}
                   >
-                    <Heart className={`size-4 ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
+                    <Heart className={`size-[18px] ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
                   </button>
                 )}
               </div>
