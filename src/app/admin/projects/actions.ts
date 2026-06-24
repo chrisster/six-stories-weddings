@@ -44,6 +44,24 @@ function parsePayments(formData: FormData): Array<{ date: string; amount: number
   return payments;
 }
 
+function stripMissingOptionalColumns(
+  payload: Record<string, unknown>,
+  message: string,
+): Record<string, unknown> {
+  const lower = message.toLowerCase();
+  const next = { ...payload };
+  let changed = false;
+
+  ["referral", "offer_amount", "payments_json"].forEach((column) => {
+    if (lower.includes(column) && column in next) {
+      delete next[column];
+      changed = true;
+    }
+  });
+
+  return changed ? next : payload;
+}
+
 function normalizeEventDate(rawDate: string): string {
   const trimmed = rawDate.trim();
   if (!trimmed) return "";
@@ -182,23 +200,43 @@ export async function createProjectAction(formData: FormData) {
     return;
   }
 
-  const { data: project, error: projectError } = await admin
-    .from("projects")
-    .insert({
-      title,
-      event_date: eventDate,
-      month: eventDate.slice(0, 7),
-      project_type: projectType,
-      status,
-      offer_amount: offerAmount,
-      budget_total: budgetTotal,
-      amount_paid: amountPaid,
-      amount_remaining: amountRemaining,
-      payments_json: payments,
-      notes,
-    })
-    .select("id, title")
-    .single();
+  let insertPayload: Record<string, unknown> = {
+    title,
+    event_date: eventDate,
+    month: eventDate.slice(0, 7),
+    project_type: projectType,
+    status,
+    offer_amount: offerAmount,
+    budget_total: budgetTotal,
+    amount_paid: amountPaid,
+    amount_remaining: amountRemaining,
+    payments_json: payments,
+    notes,
+  };
+
+  let project: { id: string; title: string } | null = null;
+  let projectError: { message: string } | null = null;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const result = await admin
+      .from("projects")
+      .insert(insertPayload)
+      .select("id, title")
+      .single();
+
+    project = (result.data as { id: string; title: string } | null) || null;
+    projectError = result.error ? { message: result.error.message } : null;
+
+    if (!projectError && project) {
+      break;
+    }
+
+    const nextPayload = stripMissingOptionalColumns(insertPayload, projectError?.message || "");
+    if (Object.keys(nextPayload).length === Object.keys(insertPayload).length) {
+      break;
+    }
+    insertPayload = nextPayload;
+  }
 
   if (projectError || !project) {
     throw new Error(projectError?.message || "Could not create project");
@@ -363,7 +401,7 @@ export async function updateProjectAction(formData: FormData) {
     return;
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     title,
     event_date: eventDate,
     month: eventDate ? eventDate.slice(0, 7) : null,
@@ -378,36 +416,25 @@ export async function updateProjectAction(formData: FormData) {
     notes,
   };
 
-  let { error } = await admin
-    .from("projects")
-    .update(payload)
-    .eq("id", projectId);
+  let updatePayload = { ...payload };
+  let error: { message: string } | null = null;
 
-  // Compatibility fallback for DBs where newer columns have not been migrated yet.
-  if (error) {
-    const lower = error.message.toLowerCase();
-    let payloadWithoutOptional: Record<string, unknown> = { ...payload };
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const result = await admin
+      .from("projects")
+      .update(updatePayload)
+      .eq("id", projectId);
 
-    if (lower.includes("referral")) {
-      const { referral: _ignored, ...rest } = payloadWithoutOptional;
-      payloadWithoutOptional = rest;
-    }
-    if (lower.includes("offer_amount")) {
-      const { offer_amount: _ignored, ...rest } = payloadWithoutOptional;
-      payloadWithoutOptional = rest;
-    }
-    if (lower.includes("payments_json")) {
-      const { payments_json: _ignored, ...rest } = payloadWithoutOptional;
-      payloadWithoutOptional = rest;
+    error = result.error ? { message: result.error.message } : null;
+    if (!error) {
+      break;
     }
 
-    if (Object.keys(payloadWithoutOptional).length !== Object.keys(payload).length) {
-      const retry = await admin
-        .from("projects")
-        .update(payloadWithoutOptional)
-        .eq("id", projectId);
-      error = retry.error;
+    const nextPayload = stripMissingOptionalColumns(updatePayload, error.message);
+    if (Object.keys(nextPayload).length === Object.keys(updatePayload).length) {
+      break;
     }
+    updatePayload = nextPayload;
   }
 
   if (error) {

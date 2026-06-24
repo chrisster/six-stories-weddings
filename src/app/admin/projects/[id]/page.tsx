@@ -11,6 +11,7 @@ import {
 } from "@/app/admin/projects/actions";
 import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/app/admin/tasks/actions";
 import { DeleteProjectButton } from "@/components/admin/delete-project-button";
+import { ProjectPaymentsFields } from "@/components/admin/project-payments-fields";
 import { ProjectSaveButton } from "@/components/admin/project-save-button";
 import { getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
@@ -92,7 +93,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
   const [galleries, crewMembers] = await Promise.all([getGalleries(), getCrewMembers()]);
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
   const projectTypeParts = parseProjectType(project.projectType);
-  const paymentsForForm = Array.from({ length: 3 }, (_, index) => project.payments[index] || null);
   const amountPaidFromPayments = project.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const displayedAmountPaid = project.payments.length > 0 ? amountPaidFromPayments : project.amountPaid;
   const displayedRemaining = Math.max(0, project.offerAmount - displayedAmountPaid);
@@ -325,38 +325,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
 
           <div className="sm:col-span-2">
             <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Payments</p>
-            <div className="mt-2 space-y-2">
-              {paymentsForForm.map((payment, index) => (
-                <div key={index} className="grid gap-2 rounded-xl border border-border/80 bg-zinc-50 p-3 sm:grid-cols-[160px_140px_minmax(0,1fr)]">
-                  <input
-                    form="edit-wedding-form"
-                    name="paymentDate"
-                    type="text"
-                    defaultValue={payment ? toDisplayDate(payment.date) : ""}
-                    placeholder="DD-MM-YYYY"
-                    className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-                  />
-                  <input
-                    form="edit-wedding-form"
-                    name="paymentAmount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    defaultValue={payment?.amount || ""}
-                    placeholder="Amount"
-                    className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-                  />
-                  <input
-                    form="edit-wedding-form"
-                    name="paymentNote"
-                    type="text"
-                    defaultValue={payment?.note || ""}
-                    placeholder="Note"
-                    className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-                  />
-                </div>
-              ))}
-            </div>
+            <ProjectPaymentsFields formId="edit-wedding-form" initialPayments={project.payments} />
           </div>
         </div>
       </section>
