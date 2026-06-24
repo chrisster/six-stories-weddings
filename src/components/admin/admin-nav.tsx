@@ -8,6 +8,7 @@ import {
   ContactRound,
   FolderKanban,
   ImageIcon,
+  Wallet,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const links = [
   { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/admin/galleries", label: "Galleries", icon: ImageIcon },
+  { href: "/admin/financials", label: "Financials", icon: Wallet },
 ];
 
 export function AdminNav() {
