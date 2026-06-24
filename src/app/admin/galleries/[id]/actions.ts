@@ -284,17 +284,27 @@ export async function bulkDeleteMediaAction(formData: FormData) {
     return;
   }
 
-  let query = admin.from("media_assets").delete().eq("gallery_id", galleryId);
-
   if (deleteAll) {
-    // Delete all media in gallery
-    await query;
+    // Clear the cover reference first, then remove every asset in the gallery.
+    await admin.from("galleries").update({ cover_media_id: null }).eq("id", galleryId);
+    await admin.from("media_assets").delete().eq("gallery_id", galleryId);
   } else if (sectionId) {
-    // Delete all media in section
-    await admin.from("media_assets").delete().eq("section_id", sectionId);
+    // Delete all media in a section.
+    await admin.from("galleries").update({ cover_media_id: null }).eq("id", galleryId);
+    await admin
+      .from("media_assets")
+      .delete()
+      .eq("gallery_id", galleryId)
+      .eq("section_id", sectionId);
   } else if (mediaIds.length > 0) {
-    // Delete selected media
-    await admin.from("media_assets").delete().in("id", mediaIds);
+    // Delete selected media. Chunk the ids so the request URL never exceeds
+    // the PostgREST / proxy length limit (which silently drops large batches).
+    const chunkSize = 100;
+    for (let i = 0; i < mediaIds.length; i += chunkSize) {
+      const chunk = mediaIds.slice(i, i + chunkSize);
+      // eslint-disable-next-line no-await-in-loop
+      await admin.from("media_assets").delete().eq("gallery_id", galleryId).in("id", chunk);
+    }
   }
 
   // Clear cover media if it no longer exists

@@ -141,7 +141,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     formData.append("mediaIds", Array.from(selectedIds).join(","));
 
     await bulkDeleteMediaAction(formData);
+    setMediaState((prev) => prev.filter((item) => !selectedIds.has(item.id)));
     setSelectedIds(new Set());
+    router.refresh();
   };
 
   const handleSetCoverSelected = async () => {
@@ -166,6 +168,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     formData.append("sectionId", sectionId);
 
     await bulkDeleteMediaAction(formData);
+    setMediaState((prev) => prev.filter((item) => item.sectionId !== sectionId));
+    setSelectedIds(new Set());
+    router.refresh();
   };
 
   const handleDeleteAll = async () => {
@@ -176,6 +181,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     formData.append("deleteAll", "true");
 
     await bulkDeleteMediaAction(formData);
+    setMediaState([]);
+    setSelectedIds(new Set());
+    router.refresh();
   };
 
   if (mediaState.length === 0) {
