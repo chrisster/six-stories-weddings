@@ -26,7 +26,7 @@ export default async function PublicGalleryPage({ params }: PublicGalleryPagePro
       ...asset,
       url: await getSignedMediaUrl(asset.storagePath),
       sectionName: sectionById.get(asset.sectionId || "") || "Moments",
-      fileName: asset.originalName || `IMG-${asset.id.slice(0, 6).toUpperCase()}`,
+      fileName: asset.originalName || "",
     })),
   );
 

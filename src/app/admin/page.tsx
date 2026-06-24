@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { Images } from "lucide-react";
 
 import { ProjectsControls } from "@/components/admin/projects-controls";
-import { getProjects } from "@/lib/data";
+import { getGalleries, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type AdminPageProps = {
@@ -71,6 +72,8 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const period = params.period || "all";
 
   const projects = await getProjects();
+  const galleries = await getGalleries();
+  const galleryByProject = new Map(galleries.map((gallery) => [gallery.projectId, gallery]));
 
   const periodFiltered = projects.filter((project) => isWithinPeriod(project.eventDate, period));
 
@@ -145,44 +148,78 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((project) => (
-              <Link
-                key={project.id}
-                href={`/admin/projects/${project.id}`}
-                className="group overflow-hidden rounded-2xl border border-border/80 bg-white shadow-sm transition hover:border-foreground/30 hover:shadow-[0_16px_38px_-24px_rgba(0,0,0,0.42)]"
-              >
-                <div className="relative h-40 w-full overflow-hidden bg-zinc-200">
-                  {project.coverImageUrl ? (
-                    <img
-                      src={project.coverImageUrl}
-                      alt={project.title}
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                    />
-                  ) : null}
-                </div>
-                <div className="p-6">
-                  <div className="mb-3 flex items-start justify-between gap-2">
-                    <h3 className="title-cinematic text-lg font-semibold leading-snug group-hover:text-foreground">
-                      {project.title}
-                    </h3>
-                    <span
-                      className={`shrink-0 rounded-lg px-2.5 py-1 text-xs capitalize leading-tight ${statusBadge(project.status)}`}
-                    >
-                      {statusLabel(project.status)}
-                    </span>
+            {filtered.map((project) => {
+              const gallery = galleryByProject.get(project.id);
+              const galleryHref = gallery
+                ? gallery.isPublished
+                  ? `/g/${gallery.slug}`
+                  : `/admin/galleries/${gallery.id}`
+                : null;
+              return (
+                <div
+                  key={project.id}
+                  className="group relative overflow-hidden rounded-2xl border border-border/80 bg-white shadow-sm transition hover:border-foreground/30 hover:shadow-[0_16px_38px_-24px_rgba(0,0,0,0.42)]"
+                >
+                  <Link
+                    href={`/admin/projects/${project.id}`}
+                    aria-label={`Open ${project.title}`}
+                    className="absolute inset-0 z-[1]"
+                  />
+                  <div className="relative h-40 w-full overflow-hidden bg-zinc-200">
+                    {project.coverImageUrl ? (
+                      <img
+                        src={project.coverImageUrl}
+                        alt={project.title}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+                    ) : null}
                   </div>
+                  <div className="p-6">
+                    <div className="mb-3 flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h3 className="title-cinematic truncate text-lg font-semibold leading-snug group-hover:text-foreground">
+                          {project.title}
+                        </h3>
+                        {galleryHref ? (
+                          <Link
+                            href={galleryHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Preview gallery"
+                            aria-label="Preview gallery"
+                            className="relative z-[2] inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
+                          >
+                            <Images className="size-4" />
+                          </Link>
+                        ) : (
+                          <span
+                            title="No gallery yet"
+                            aria-label="No gallery yet"
+                            className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-dashed border-border/60 text-muted-foreground/40"
+                          >
+                            <Images className="size-4" />
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-lg px-2.5 py-1 text-xs capitalize leading-tight ${statusBadge(project.status)}`}
+                      >
+                        {statusLabel(project.status)}
+                      </span>
+                    </div>
 
-                  <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
-                    <p className="text-xs text-foreground/80">{formatDateDDMMYY(project.eventDate)}</p>
-                    <p className="text-xs text-muted-foreground">{eventTypeText(project.projectType)}</p>
-                  </div>
+                    <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
+                      <p className="text-xs text-foreground/80">{formatDateDDMMYY(project.eventDate)}</p>
+                      <p className="text-xs text-muted-foreground">{eventTypeText(project.projectType)}</p>
+                    </div>
 
-                  <div className="text-xs text-muted-foreground group-hover:text-foreground/70">
-                    View details →
+                    <div className="text-xs text-muted-foreground group-hover:text-foreground/70">
+                      View details →
+                    </div>
                   </div>
                 </div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

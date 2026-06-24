@@ -2,7 +2,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Heart, Share2, X } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Heart,
+  Share2,
+  X,
+} from "lucide-react";
 
 import { formatDateLong } from "@/lib/utils";
 
@@ -57,6 +67,10 @@ export function PublicGallery({
 }: PublicGalleryProps) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [downloading, setDownloading] = useState(false);
   const sessionRef = useRef<string>("");
 
   // Establish a per-browser guest identity (the passcode unlock is the client
@@ -103,6 +117,47 @@ export function PublicGallery({
     },
     [gallerySlug],
   );
+
+  // Force an actual file download (instead of opening the signed URL in a new
+  // tab) by fetching the bytes and saving the blob with the original filename.
+  const downloadAsset = useCallback(async (asset: PublicAsset) => {
+    try {
+      const response = await fetch(asset.url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = asset.fileName || `photo-${asset.id}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(asset.url, "_blank");
+    }
+  }, []);
+
+  const downloadMany = useCallback(
+    async (list: PublicAsset[]) => {
+      if (list.length === 0) return;
+      setDownloading(true);
+      for (const asset of list) {
+        // eslint-disable-next-line no-await-in-loop
+        await downloadAsset(asset);
+      }
+      setDownloading(false);
+    },
+    [downloadAsset],
+  );
+
+  const toggleSelect = useCallback((assetId: string) => {
+    setSelected((previous) => {
+      const nextSet = new Set(previous);
+      if (nextSet.has(assetId)) nextSet.delete(assetId);
+      else nextSet.add(assetId);
+      return nextSet;
+    });
+  }, []);
 
   const grouped = useMemo<GroupedSection[]>(() => {
     const map = new Map<string, PublicAsset[]>();
@@ -241,15 +296,13 @@ export function PublicGallery({
     <div className="bg-white text-foreground">
       {/* ---------- HERO ---------- */}
       <header className="flex min-h-screen flex-col justify-center px-4 py-12 sm:py-16">
-        <p className="title-cinematic text-center text-sm uppercase tracking-[0.42em] text-foreground/80 sm:text-base">
-          {studioName}
-        </p>
+        <img
+          src="/six-stories-logo.png"
+          alt={studioName}
+          className="mx-auto h-9 w-auto sm:h-11"
+        />
 
         <div className="mt-12 flex flex-1 flex-col items-center justify-center gap-6 md:mt-0 md:flex-row md:gap-10">
-          <p className="hidden self-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground md:block md:[writing-mode:vertical-rl] md:rotate-180">
-            Photographed by {studioName} Studio
-          </p>
-
           <div className="relative aspect-[3/4] w-[260px] max-w-[72vw] overflow-hidden bg-muted/40 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.5)] sm:w-[300px]">
             {coverUrl ? (
               <img src={coverUrl} alt={coupleNames} className="h-full w-full object-cover" />
@@ -282,9 +335,11 @@ export function PublicGallery({
       {/* ---------- STICKY NAV ---------- */}
       <nav className="sticky top-0 z-40 border-y border-border/70 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-screen-2xl items-center gap-4 px-4 py-3 sm:px-6">
-          <span className="title-cinematic shrink-0 text-xs uppercase tracking-[0.28em] text-foreground/80">
-            {studioName}
-          </span>
+          <img
+            src="/six-stories-logo.png"
+            alt={studioName}
+            className="h-4 w-auto shrink-0 sm:h-5"
+          />
 
           <div className="flex flex-1 items-center gap-4 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
@@ -329,6 +384,62 @@ export function PublicGallery({
             {favoriteCount > 0 ? <span>{favoriteCount}</span> : null}
           </button>
 
+          {allowDownloads ? (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setDownloadMenuOpen((value) => !value)}
+                aria-haspopup="menu"
+                aria-expanded={downloadMenuOpen}
+                aria-label="Download options"
+                className="flex items-center rounded-full p-2 text-muted-foreground transition hover:text-foreground"
+              >
+                <Download className="size-4" />
+              </button>
+
+              {downloadMenuOpen ? (
+                <>
+                  <button
+                    type="button"
+                    aria-hidden
+                    tabIndex={-1}
+                    onClick={() => setDownloadMenuOpen(false)}
+                    className="fixed inset-0 z-40 cursor-default"
+                  />
+                  <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-border/70 bg-white p-3 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]">
+                    <button
+                      type="button"
+                      disabled={downloading}
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        downloadMany(flatOrdered);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60 disabled:opacity-50"
+                    >
+                      <Download className="size-4" />
+                      {downloading ? "Downloading…" : `Download all (${flatOrdered.length})`}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        setSelected(new Set());
+                        setSelectMode(true);
+                      }}
+                      className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
+                    >
+                      <CheckCircle2 className="size-4" />
+                      Select photos to download
+                    </button>
+                    <p className="mt-2 border-t border-border/60 px-3 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+                      For single item downloads, use the download icon on each item.
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
           <button
             type="button"
             onClick={share}
@@ -339,6 +450,36 @@ export function PublicGallery({
           </button>
         </div>
       </nav>
+
+      {/* ---------- SELECTION BAR ---------- */}
+      {selectMode ? (
+        <div className="sticky top-[57px] z-30 flex items-center justify-between gap-3 border-b border-border/70 bg-foreground px-4 py-2.5 text-background sm:px-6">
+          <span className="text-[11px] uppercase tracking-[0.2em]">
+            {selected.size} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={selected.size === 0 || downloading}
+              onClick={() => downloadMany(flatOrdered.filter((asset) => selected.has(asset.id)))}
+              className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
+            >
+              <Download className="size-3.5" />
+              {downloading ? "Downloading…" : "Download"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectMode(false);
+                setSelected(new Set());
+              }}
+              className="rounded-full px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-background/80 transition hover:text-background"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* ---------- SECTIONS ---------- */}
       <div ref={galleryStartRef} className="px-2 pb-20 sm:px-4">
@@ -366,8 +507,13 @@ export function PublicGallery({
               <JustifiedGrid
                 items={group.items}
                 favorites={favorites}
+                allowDownloads={allowDownloads}
+                selectMode={selectMode}
+                selected={selected}
                 onSelect={openAt}
                 onToggleFavorite={toggleFavorite}
+                onToggleSelect={toggleSelect}
+                onDownload={downloadAsset}
               />
             </section>
           ))
@@ -451,14 +597,14 @@ export function PublicGallery({
                 <Heart className={`size-4 ${favorites.has(activeAsset.id) ? "fill-rose-500 text-rose-500" : ""}`} />
               </button>
               {allowDownloads ? (
-                <a
-                  href={activeAsset.url}
-                  download
+                <button
+                  type="button"
+                  onClick={() => downloadAsset(activeAsset)}
                   aria-label="Download"
                   className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/90 backdrop-blur transition hover:bg-white/20"
                 >
                   <Download className="size-4" />
-                </a>
+                </button>
               ) : null}
               <button
                 type="button"
@@ -483,11 +629,26 @@ export function PublicGallery({
 type JustifiedGridProps = {
   items: PublicAsset[];
   favorites: Set<string>;
+  allowDownloads: boolean;
+  selectMode: boolean;
+  selected: Set<string>;
   onSelect: (assetId: string) => void;
   onToggleFavorite: (assetId: string) => void;
+  onToggleSelect: (assetId: string) => void;
+  onDownload: (asset: PublicAsset) => void;
 };
 
-function JustifiedGrid({ items, favorites, onSelect, onToggleFavorite }: JustifiedGridProps) {
+function JustifiedGrid({
+  items,
+  favorites,
+  allowDownloads,
+  selectMode,
+  selected,
+  onSelect,
+  onToggleFavorite,
+  onToggleSelect,
+  onDownload,
+}: JustifiedGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [ratios, setRatios] = useState<Record<string, number>>({});
@@ -504,7 +665,7 @@ function JustifiedGrid({ items, favorites, onSelect, onToggleFavorite }: Justifi
   }, []);
 
   const gap = 6;
-  const targetRowHeight = width > 0 && width < 640 ? 170 : width < 1024 ? 240 : 300;
+  const targetRowHeight = width > 0 && width < 640 ? 255 : width < 1024 ? 360 : 450;
 
   const rows = useMemo(() => {
     if (!width) return [] as Array<{ items: Array<{ asset: PublicAsset; w: number; h: number }> }>;
@@ -554,6 +715,7 @@ function JustifiedGrid({ items, favorites, onSelect, onToggleFavorite }: Justifi
         <div key={rowIndex} className="flex" style={{ gap, marginBottom: gap }}>
           {row.items.map(({ asset, w, h }) => {
             const isFavorite = favorites.has(asset.id);
+            const isSelected = selected.has(asset.id);
             return (
               <div
                 key={asset.id}
@@ -562,7 +724,7 @@ function JustifiedGrid({ items, favorites, onSelect, onToggleFavorite }: Justifi
               >
                 <button
                   type="button"
-                  onClick={() => onSelect(asset.id)}
+                  onClick={() => (selectMode ? onToggleSelect(asset.id) : onSelect(asset.id))}
                   className="block h-full w-full"
                 >
                   {asset.mediaType === "photo" ? (
@@ -576,7 +738,9 @@ function JustifiedGrid({ items, favorites, onSelect, onToggleFavorite }: Justifi
                           event.currentTarget.naturalWidth / event.currentTarget.naturalHeight,
                         )
                       }
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                      className={`h-full w-full object-cover transition duration-500 group-hover:scale-[1.04] ${
+                        selectMode && !isSelected ? "opacity-70" : ""
+                      }`}
                     />
                   ) : (
                     <video
@@ -591,25 +755,52 @@ function JustifiedGrid({ items, favorites, onSelect, onToggleFavorite }: Justifi
                 </button>
 
                 {/* Filename overlay (hover) */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end bg-gradient-to-t from-black/55 to-transparent p-2.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/55 to-transparent p-2.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                   {asset.fileName ? (
                     <span className="truncate text-[10px] uppercase tracking-[0.18em] text-white/90">
                       {displayName(asset.fileName)}
                     </span>
+                  ) : (
+                    <span />
+                  )}
+                  {allowDownloads && !selectMode ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDownload(asset);
+                      }}
+                      aria-label="Download photo"
+                      className="pointer-events-auto flex size-7 shrink-0 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/60"
+                    >
+                      <Download className="size-3.5" />
+                    </button>
                   ) : null}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => onToggleFavorite(asset.id)}
-                  aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
-                  aria-pressed={isFavorite}
-                  className={`absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55 ${
-                    isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                  }`}
-                >
-                  <Heart className={`size-4 ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
-                </button>
+                {selectMode ? (
+                  <span
+                    className={`pointer-events-none absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border-2 transition ${
+                      isSelected
+                        ? "border-white bg-foreground text-background"
+                        : "border-white/80 bg-black/30 text-transparent"
+                    }`}
+                  >
+                    <Check className="size-3.5" />
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onToggleFavorite(asset.id)}
+                    aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
+                    aria-pressed={isFavorite}
+                    className={`absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55 ${
+                      isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    }`}
+                  >
+                    <Heart className={`size-4 ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
+                  </button>
+                )}
               </div>
             );
           })}
