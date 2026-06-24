@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { PassThrough, Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import { getPublicGalleryBySlug } from "@/lib/data";
@@ -38,17 +38,18 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null) {
       return new Response("No files", { status: 404 });
     }
 
-    const output = new PassThrough();
+    const { readable, writable } = new TransformStream<Uint8Array>();
     const archive = archiver("zip", { store: true });
+    const nodeWritable = Writable.fromWeb(writable);
 
     archive.on("warning", () => {
       // Skip non-fatal archive warnings so a single problematic entry does not
       // kill the entire download.
     });
     archive.on("error", (error: Error) => {
-      output.destroy(error);
+      nodeWritable.destroy(error);
     });
-    archive.pipe(output);
+    archive.pipe(nodeWritable);
 
     void (async () => {
       const used = new Set<string>();
@@ -85,7 +86,7 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null) {
         }
         await archive.finalize();
       } catch (error) {
-        output.destroy(error instanceof Error ? error : new Error("ZIP stream failed"));
+        nodeWritable.destroy(error instanceof Error ? error : new Error("ZIP stream failed"));
       }
     })();
 
@@ -95,7 +96,7 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null) {
     headers.set("Content-Disposition", `attachment; filename="${zipName}"`);
     headers.set("Cache-Control", "no-store");
 
-    return new Response(Readable.toWeb(output) as unknown as ReadableStream, { headers });
+    return new Response(readable, { headers });
   } catch {
     return new Response("ZIP generation failed", { status: 500 });
   }
