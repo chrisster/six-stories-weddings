@@ -133,40 +133,40 @@ export function PublicGallery({
   );
 
   // Bundle multiple files into a single ZIP. The archive is streamed from the
-  // server (so the whole gallery never has to fit in browser memory) and the
-  // browser downloads it natively via a hidden form post.
+  // server (so the whole gallery never has to fit in browser memory). Use a
+  // normal browser download/navigation flow here because hidden iframes are
+  // unreliable for attachment responses across browsers.
   const downloadMany = useCallback(
     (list: PublicAsset[]) => {
       if (list.length === 0) return;
       setDownloading(true);
 
-      let frame = document.getElementById("ss-zip-frame") as HTMLIFrameElement | null;
-      if (!frame) {
-        frame = document.createElement("iframe");
-        frame.id = "ss-zip-frame";
-        frame.name = "ss-zip-frame";
-        frame.style.display = "none";
-        document.body.appendChild(frame);
+      if (list.length === assets.length) {
+        const link = document.createElement("a");
+        link.href = `/g/${gallerySlug}/download-zip`;
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = `/g/${gallerySlug}/download-zip`;
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "assets";
+        input.value = list.map((asset) => asset.id).join(",");
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.requestSubmit();
+        form.remove();
       }
-
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = `/g/${gallerySlug}/download-zip`;
-      form.target = "ss-zip-frame";
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "assets";
-      input.value = list.map((asset) => asset.id).join(",");
-      form.appendChild(input);
-      document.body.appendChild(form);
-      form.submit();
-      form.remove();
 
       // The browser takes over the download once streaming begins; clear the
       // preparing indicator shortly after.
       window.setTimeout(() => setDownloading(false), 4000);
     },
-    [gallerySlug],
+    [assets.length, gallerySlug],
   );
 
   const toggleSelect = useCallback((assetId: string) => {
