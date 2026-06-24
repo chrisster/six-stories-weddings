@@ -14,3 +14,19 @@ export function formatDateDDMMYY(iso: string | null | undefined): string {
   }
   return iso;
 }
+
+/** Format an ISO date string (YYYY-MM-DD) to a long display format, e.g. "October 4, 2025" */
+export function formatDateLong(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const parts = iso.split("-");
+  if (parts.length !== 3) return iso;
+  const [y, m, d] = parts.map((value) => Number(value));
+  if (!y || !m || !d) return iso;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
