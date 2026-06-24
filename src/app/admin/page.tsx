@@ -17,6 +17,7 @@ function statusBadge(status: string) {
   const map: Record<string, string> = {
     scheduled: "bg-emerald-100 text-emerald-800",
     post_production: "bg-indigo-100 text-indigo-700",
+    completed: "bg-teal-100 text-teal-700",
     negotiating: "bg-sky-100 text-sky-800",
     draft: "bg-zinc-100 text-zinc-600",
     cancelled: "bg-rose-100 text-rose-700",
@@ -31,6 +32,7 @@ const statusKpis = [
   { key: "negotiating", label: "Negotiating" },
   { key: "scheduled", label: "Scheduled" },
   { key: "post_production", label: "Post-Production" },
+  { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
   { key: "declined", label: "Declined" },
 ] as const;
@@ -95,6 +97,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
     negotiating: periodFiltered.filter((project) => project.status === "negotiating").length,
     scheduled: periodFiltered.filter((project) => project.status === "scheduled").length,
     post_production: periodFiltered.filter((project) => project.status === "post_production").length,
+    completed: periodFiltered.filter((project) => project.status === "completed").length,
     cancelled: periodFiltered.filter((project) => project.status === "cancelled").length,
     declined: periodFiltered.filter((project) => project.status === "declined").length,
   };

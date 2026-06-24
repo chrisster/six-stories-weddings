@@ -53,6 +53,7 @@ type DashboardMetrics = {
   negotiatingProjects: number;
   scheduledProjects: number;
   postProductionProjects: number;
+  completedProjects: number;
   cancelledProjects: number;
   declinedProjects: number;
   totalBudget: number;
@@ -139,6 +140,7 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
         | "negotiating"
         | "scheduled"
         | "post_production"
+        | "completed"
         | "cancelled"
         | "declined") || "draft",
     completed: Boolean(row.completed),
@@ -265,6 +267,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     negotiatingProjects: projects.filter((project) => project.status === "negotiating").length,
     scheduledProjects: projects.filter((project) => project.status === "scheduled").length,
     postProductionProjects: projects.filter((project) => project.status === "post_production").length,
+    completedProjects: projects.filter((project) => project.status === "completed").length,
     cancelledProjects: projects.filter((project) => project.status === "cancelled").length,
     declinedProjects: projects.filter((project) => project.status === "declined").length,
     totalBudget: projects.reduce((total, project) => total + project.budgetTotal, 0),

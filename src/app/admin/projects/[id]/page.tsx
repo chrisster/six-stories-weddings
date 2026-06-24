@@ -253,6 +253,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
               <option value="negotiating">Negotiating</option>
               <option value="scheduled">Scheduled</option>
               <option value="post_production">Post production</option>
+              <option value="completed">Completed</option>
               <option value="declined">Declined</option>
               <option value="cancelled">Cancelled</option>
             </select>

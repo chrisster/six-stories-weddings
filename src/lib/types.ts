@@ -3,6 +3,7 @@ export type ProjectStatus =
   | "negotiating"
   | "scheduled"
   | "post_production"
+  | "completed"
   | "cancelled"
   | "declined";
 
