@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -616,4 +617,43 @@ export async function addClientToProjectAction(formData: FormData) {
   revalidatePath(`/admin/projects/${projectId}`);
   revalidatePath("/admin/projects");
   revalidatePath("/admin/contacts");
+}
+
+export async function setClientPortalPasswordAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const projectId = String(formData.get("projectId") || "").trim();
+  const fullName = String(formData.get("fullName") || "").trim() || null;
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("portalPassword") || "");
+
+  if (!projectId || !email || password.length < 8) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const { error } = await admin.from("client_portal_accounts").upsert(
+    {
+      email,
+      full_name: fullName,
+      password_hash: passwordHash,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "email" },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/admin/projects/${projectId}`);
+  revalidatePath("/portal");
 }

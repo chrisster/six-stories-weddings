@@ -6,6 +6,7 @@ import {
   addCrewToProjectAction,
   removeClientFromProjectAction,
   removeCrewFromProjectAction,
+  setClientPortalPasswordAction,
   updateClientAction,
   updateProjectAction,
 } from "@/app/admin/projects/actions";
@@ -13,7 +14,7 @@ import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/ap
 import { DeleteProjectButton } from "@/components/admin/delete-project-button";
 import { ProjectPaymentsFields } from "@/components/admin/project-payments-fields";
 import { ProjectSaveButton } from "@/components/admin/project-save-button";
-import { getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
+import { getClientPortalAccountsByEmails, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
 
@@ -92,6 +93,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
 
   const [galleries, crewMembers] = await Promise.all([getGalleries(), getCrewMembers()]);
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
+  const portalAccounts = await getClientPortalAccountsByEmails(
+    project.clients.map((client) => client.email || "").filter(Boolean),
+  );
   const projectTypeParts = parseProjectType(project.projectType);
   const amountPaidFromPayments = project.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const displayedAmountPaid = project.payments.length > 0 ? amountPaidFromPayments : project.amountPaid;
@@ -208,6 +212,46 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                             <button type="submit" formAction={removeClientFromProjectAction} className="h-9 rounded-xl border border-red-200 px-3 text-sm text-red-600 hover:border-red-400">Remove</button>
                           </div>
                         </form>
+
+                        {client.email ? (
+                          <div className="mt-4 border-t border-border/70 pt-4">
+                            {(() => {
+                              const portal = portalAccounts[client.email.toLowerCase()];
+                              return (
+                                <>
+                                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Portal access</p>
+                                  <p className="mt-1 text-sm text-muted-foreground">
+                                    {portal
+                                      ? portal.hasPassword
+                                        ? "Portal ready"
+                                        : "Account exists but no password is set yet"
+                                      : "No portal account yet"}
+                                  </p>
+                                  <form action={setClientPortalPasswordAction} className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                                    <input type="hidden" name="projectId" value={project.id} />
+                                    <input type="hidden" name="fullName" value={client.fullName} />
+                                    <input type="hidden" name="email" value={client.email || ""} />
+                                    <input
+                                      name="portalPassword"
+                                      type="password"
+                                      minLength={8}
+                                      required
+                                      placeholder="Set or reset portal password"
+                                      className="h-10 rounded-xl border border-border px-3 text-sm"
+                                    />
+                                    <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/30">
+                                      Save password
+                                    </button>
+                                  </form>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <p className="mt-4 border-t border-border/70 pt-4 text-sm text-muted-foreground">
+                            Add an email address to enable client portal access.
+                          </p>
+                        )}
                       </div>
                     </details>
                   </div>

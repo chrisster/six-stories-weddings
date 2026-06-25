@@ -22,3 +22,15 @@ export function getSupabaseEnv() {
 export function getAppUrl() {
   return process.env.APP_URL || "https://admin.sixstoriesstudio.com";
 }
+
+export function getClientPortalSecret() {
+  return process.env.CLIENT_PORTAL_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+}
+
+export function getGalleryEmailEnv() {
+  return {
+    apiKey: process.env.RESEND_API_KEY || "",
+    fromEmail: process.env.GALLERY_NOTIFICATIONS_FROM_EMAIL || "",
+    replyTo: process.env.GALLERY_NOTIFICATIONS_REPLY_TO || "",
+  };
+}

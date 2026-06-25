@@ -15,6 +15,14 @@ export type Client = {
   notes?: string | null;
 };
 
+export type ClientPortalAccountSummary = {
+  id: string;
+  email: string;
+  hasPassword: boolean;
+  isActive: boolean;
+  lastNotifiedAt?: string | null;
+};
+
 export type CrewMember = {
   id: string;
   fullName: string;
@@ -116,6 +124,26 @@ export type GalleryDetail = {
   project: Project;
   sections: GallerySection[];
   mediaAssets: MediaAsset[];
+};
+
+export type GalleryNotificationTemplate = {
+  emailSubject: string;
+  emailHeadline: string;
+  emailIntro: string;
+  emailBody: string;
+  buttonLabel: string;
+  shareNote: string;
+  heroImageUrl?: string | null;
+};
+
+export type PortalGallery = {
+  galleryId: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  projectTitle: string;
+  eventDate?: string | null;
+  coverUrl?: string | null;
 };
 
 export type ContactStatus =

@@ -6,9 +6,19 @@ import {
   demoProject,
 } from "@/lib/demo-data";
 import { hasSupabaseEnv } from "@/lib/env";
+import { buildDefaultGalleryNotificationTemplate } from "@/lib/gallery-notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignedMediaUrl } from "@/lib/storage";
-import type { Contact, CrewMember, Gallery, GalleryDetail, Project } from "@/lib/types";
+import type {
+  ClientPortalAccountSummary,
+  Contact,
+  CrewMember,
+  Gallery,
+  GalleryDetail,
+  GalleryNotificationTemplate,
+  PortalGallery,
+  Project,
+} from "@/lib/types";
 
 function normalizePaymentDate(raw: string): string {
   const trimmed = raw.trim();
@@ -427,6 +437,218 @@ export async function getGalleryFavorites(
   });
 
   return { counts, total: (data || []).length, guests: guests.size };
+}
+
+export async function getClientPortalAccountsByEmails(
+  emails: string[],
+): Promise<Record<string, ClientPortalAccountSummary>> {
+  const normalized = Array.from(
+    new Set(
+      emails
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+  if (!hasSupabaseEnv || normalized.length === 0) {
+    return {};
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return {};
+  }
+
+  const { data } = await admin
+    .from("client_portal_accounts")
+    .select("id, email, password_hash, is_active, last_notified_at")
+    .in("email", normalized);
+
+  const map: Record<string, ClientPortalAccountSummary> = {};
+  (data || []).forEach((row) => {
+    const email = String(row.email || "").toLowerCase();
+    if (!email) return;
+    map[email] = {
+      id: String(row.id),
+      email,
+      hasPassword: Boolean(row.password_hash),
+      isActive: Boolean(row.is_active),
+      lastNotifiedAt: (row.last_notified_at as string | null) || null,
+    };
+  });
+
+  return map;
+}
+
+export async function getGalleryNotificationTemplate(
+  galleryId: string,
+  fallback: { projectTitle: string; galleryTitle: string; heroImageUrl?: string | null },
+): Promise<GalleryNotificationTemplate> {
+  const defaults = buildDefaultGalleryNotificationTemplate(fallback);
+  if (!hasSupabaseEnv) {
+    return defaults;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return defaults;
+  }
+
+  const { data } = await admin
+    .from("gallery_notification_templates")
+    .select("email_subject, email_headline, email_intro, email_body, button_label, share_note, hero_image_url")
+    .eq("gallery_id", galleryId)
+    .maybeSingle();
+
+  if (!data) {
+    return defaults;
+  }
+
+  return {
+    emailSubject: (data.email_subject as string | null) || defaults.emailSubject,
+    emailHeadline: (data.email_headline as string | null) || defaults.emailHeadline,
+    emailIntro: (data.email_intro as string | null) || defaults.emailIntro,
+    emailBody: (data.email_body as string | null) || defaults.emailBody,
+    buttonLabel: (data.button_label as string | null) || defaults.buttonLabel,
+    shareNote: (data.share_note as string | null) || defaults.shareNote,
+    heroImageUrl: (data.hero_image_url as string | null) || defaults.heroImageUrl || null,
+  };
+}
+
+async function getClientIdsForEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized || !hasSupabaseEnv) {
+    return [] as Array<{ id: string; fullName: string }>;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return [] as Array<{ id: string; fullName: string }>;
+  }
+
+  const { data } = await admin
+    .from("clients")
+    .select("id, full_name")
+    .ilike("email", normalized);
+
+  return (data || []).map((row) => ({
+    id: String(row.id),
+    fullName: String(row.full_name || ""),
+  }));
+}
+
+export async function portalEmailCanAccessProject(email: string, projectId: string) {
+  const clients = await getClientIdsForEmail(email);
+  if (clients.length === 0) {
+    return false;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return false;
+  }
+
+  const { data } = await admin
+    .from("project_clients")
+    .select("id")
+    .eq("project_id", projectId)
+    .in("client_id", clients.map((client) => client.id))
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
+export async function getPortalGalleriesForEmail(email: string): Promise<PortalGallery[]> {
+  if (!hasSupabaseEnv) {
+    return [];
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return [];
+  }
+
+  const clients = await getClientIdsForEmail(email);
+  if (clients.length === 0) {
+    return [];
+  }
+
+  const clientIds = clients.map((client) => client.id);
+  const { data: projectLinks } = await admin
+    .from("project_clients")
+    .select("project_id")
+    .in("client_id", clientIds);
+
+  const projectIds = Array.from(new Set((projectLinks || []).map((row) => String(row.project_id))));
+  if (projectIds.length === 0) {
+    return [];
+  }
+
+  const [{ data: galleries }, { data: projects }] = await Promise.all([
+    admin
+      .from("galleries")
+      .select("id, project_id, slug, title, cover_media_id, is_published")
+      .in("project_id", projectIds)
+      .eq("is_published", true),
+    admin.from("projects").select("id, title, event_date").in("id", projectIds),
+  ]);
+
+  const publishedGalleries = galleries || [];
+  if (publishedGalleries.length === 0) {
+    return [];
+  }
+
+  const projectById = new Map(
+    (projects || []).map((row) => [String(row.id), { title: String(row.title || ""), eventDate: (row.event_date as string | null) || null }]),
+  );
+
+  const galleryIds = publishedGalleries.map((row) => String(row.id));
+  const { data: media } = await admin
+    .from("media_assets")
+    .select("id, gallery_id, storage_path, is_cover, sort_order")
+    .in("gallery_id", galleryIds)
+    .order("sort_order", { ascending: true });
+
+  const mediaByGalleryId = new Map<string, Array<{ id: string; storagePath: string; isCover: boolean }>>();
+  (media || []).forEach((row) => {
+    const galleryId = String(row.gallery_id);
+    const list = mediaByGalleryId.get(galleryId) || [];
+    list.push({
+      id: String(row.id),
+      storagePath: String(row.storage_path),
+      isCover: Boolean(row.is_cover),
+    });
+    mediaByGalleryId.set(galleryId, list);
+  });
+
+  return Promise.all(
+    publishedGalleries.map(async (row) => {
+      const galleryId = String(row.id);
+      const projectId = String(row.project_id);
+      const project = projectById.get(projectId);
+      const assets = mediaByGalleryId.get(galleryId) || [];
+      const cover = assets.find((asset) => asset.isCover) || assets[0] || null;
+      let coverUrl: string | null = null;
+      if (cover) {
+        try {
+          coverUrl = await getSignedMediaUrl(cover.storagePath, 60 * 60 * 24 * 7);
+        } catch {
+          coverUrl = null;
+        }
+      }
+
+      return {
+        galleryId,
+        projectId,
+        slug: String(row.slug || ""),
+        title: String(row.title || ""),
+        projectTitle: project?.title || String(row.title || ""),
+        eventDate: project?.eventDate || null,
+        coverUrl,
+      };
+    }),
+  );
 }
 
 export async function getCrewMembers(): Promise<CrewMember[]> {

@@ -5,6 +5,13 @@ import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
+import {
+  buildDefaultGalleryNotificationTemplate,
+  buildGalleryLinks,
+  renderGalleryNotificationEmail,
+  sendGalleryNotificationEmail,
+} from "@/lib/gallery-notifications";
+import { createPortalClaimToken } from "@/lib/portal-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureMediaBucket, getBucketName, uploadMediaToStorage } from "@/lib/storage";
 
@@ -76,7 +83,15 @@ export async function updateGallerySettingsAction(formData: FormData) {
   const galleryId = String(formData.get("galleryId") || "");
   const isPublished = formData.get("isPublished") === "on";
   const allowDownloads = formData.get("allowDownloads") === "on";
+  const notifyClients = formData.get("notifyClients") === "on";
   const passcode = String(formData.get("passcode") || "").trim();
+  const emailSubject = String(formData.get("emailSubject") || "").trim();
+  const emailHeadline = String(formData.get("emailHeadline") || "").trim();
+  const emailIntro = String(formData.get("emailIntro") || "").trim();
+  const emailBody = String(formData.get("emailBody") || "").trim();
+  const buttonLabel = String(formData.get("buttonLabel") || "").trim();
+  const shareNote = String(formData.get("shareNote") || "").trim();
+  const heroImageUrl = String(formData.get("heroImageUrl") || "").trim() || null;
 
   if (!galleryId) {
     return;
@@ -86,6 +101,28 @@ export async function updateGallerySettingsAction(formData: FormData) {
   if (!admin) {
     return;
   }
+
+  const { data: galleryRow } = await admin
+    .from("galleries")
+    .select("id, project_id, slug, title, is_published")
+    .eq("id", galleryId)
+    .maybeSingle();
+
+  if (!galleryRow) {
+    return;
+  }
+
+  const { data: projectRow } = await admin
+    .from("projects")
+    .select("title")
+    .eq("id", galleryRow.project_id)
+    .maybeSingle();
+
+  const defaultTemplate = buildDefaultGalleryNotificationTemplate({
+    projectTitle: String(projectRow?.title || galleryRow.title || ""),
+    galleryTitle: String(galleryRow.title || ""),
+    heroImageUrl,
+  });
 
   const payload: Record<string, unknown> = {
     is_published: isPublished,
@@ -98,7 +135,107 @@ export async function updateGallerySettingsAction(formData: FormData) {
 
   await admin.from("galleries").update(payload).eq("id", galleryId);
 
+  await admin.from("gallery_notification_templates").upsert(
+    {
+      gallery_id: galleryId,
+      email_subject: emailSubject || defaultTemplate.emailSubject,
+      email_headline: emailHeadline || defaultTemplate.emailHeadline,
+      email_intro: emailIntro || defaultTemplate.emailIntro,
+      email_body: emailBody || defaultTemplate.emailBody,
+      button_label: buttonLabel || defaultTemplate.buttonLabel,
+      share_note: shareNote || defaultTemplate.shareNote,
+      hero_image_url: heroImageUrl,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "gallery_id" },
+  );
+
+  if (!galleryRow.is_published && isPublished && notifyClients) {
+    const { data: projectClients } = await admin
+      .from("project_clients")
+      .select("client_id")
+      .eq("project_id", galleryRow.project_id);
+
+    const clientIds = Array.from(
+      new Set((projectClients || []).map((row) => String(row.client_id || "")).filter(Boolean)),
+    );
+
+    if (clientIds.length > 0) {
+      const { data: clients } = await admin
+        .from("clients")
+        .select("full_name, email")
+        .in("id", clientIds);
+
+      const byEmail = new Map<string, { fullName: string }>();
+      (clients || []).forEach((client) => {
+        const email = String(client.email || "").trim().toLowerCase();
+        if (!email || byEmail.has(email)) {
+          return;
+        }
+        byEmail.set(email, { fullName: String(client.full_name || "") });
+      });
+
+      const { galleryUrl, loginUrl } = buildGalleryLinks(String(galleryRow.slug));
+      for (const [email, recipient] of byEmail.entries()) {
+        const { data: account } = await admin
+          .from("client_portal_accounts")
+          .upsert(
+            {
+              email,
+              full_name: recipient.fullName || null,
+              is_active: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "email" },
+          )
+          .select("id, email, password_hash")
+          .single();
+
+        const claimUrl = account?.password_hash
+          ? null
+          : `${loginUrl.replace(/\/login$/, "/claim")}?token=${encodeURIComponent(createPortalClaimToken(email))}`;
+        const template = {
+          emailSubject: emailSubject || defaultTemplate.emailSubject,
+          emailHeadline: emailHeadline || defaultTemplate.emailHeadline,
+          emailIntro: emailIntro || defaultTemplate.emailIntro,
+          emailBody: emailBody || defaultTemplate.emailBody,
+          buttonLabel: buttonLabel || defaultTemplate.buttonLabel,
+          shareNote: shareNote || defaultTemplate.shareNote,
+          heroImageUrl,
+        };
+
+        const rendered = renderGalleryNotificationEmail({
+          template,
+          galleryUrl,
+          loginUrl,
+          claimUrl,
+          recipientName: recipient.fullName,
+        });
+
+        try {
+          await sendGalleryNotificationEmail({
+            to: email,
+            subject: template.emailSubject,
+            html: rendered.html,
+            text: rendered.text,
+          });
+
+          if (account?.id) {
+            await admin
+              .from("client_portal_accounts")
+              .update({ last_notified_at: new Date().toISOString() })
+              .eq("id", account.id);
+          }
+        } catch (error) {
+          console.error("Could not send gallery notification", { galleryId, email, error });
+        }
+      }
+    }
+  }
+
   revalidatePath(`/admin/galleries/${galleryId}`);
+  revalidatePath(`/g/${galleryRow.slug}`);
+  revalidatePath("/portal");
 }
 
 export async function uploadMediaAction(formData: FormData) {

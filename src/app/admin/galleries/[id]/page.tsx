@@ -9,7 +9,7 @@ import {
 import { MediaUploader } from "@/components/gallery/media-uploader";
 import { MediaManager } from "@/components/gallery/media-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
-import { getGalleryById, getGalleryFavorites } from "@/lib/data";
+import { getGalleryById, getGalleryFavorites, getGalleryNotificationTemplate } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
@@ -40,6 +40,11 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   );
 
   const cover = mediaWithUrl.find((asset) => asset.isCover) || mediaWithUrl[0] || null;
+  const notificationTemplate = await getGalleryNotificationTemplate(detail.gallery.id, {
+    projectTitle: detail.project.title,
+    galleryTitle: detail.gallery.title,
+    heroImageUrl: cover?.mediaType === "photo" ? cover.url : null,
+  });
 
   const favorites = await getGalleryFavorites(detail.gallery.id);
   const favoritedMedia = mediaWithUrl
@@ -122,6 +127,58 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
                 className="h-10 w-full rounded-xl border border-border px-3 text-sm"
                 placeholder="Leave empty to keep current"
               />
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-border/70 bg-zinc-50 p-4">
+              <div>
+                <p className="text-sm font-medium">Client portal notification</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  When publishing a draft gallery, you can email all linked client addresses and
+                  let them claim or use their portal access.
+                </p>
+              </div>
+
+              <label className="flex items-center justify-between rounded-xl border border-border bg-white px-3 py-2">
+                <span className="text-sm">Notify clients when this publish goes live</span>
+                <input name="notifyClients" type="checkbox" />
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label htmlFor="emailSubject" className="text-sm">Email subject</label>
+                  <input id="emailSubject" name="emailSubject" defaultValue={notificationTemplate.emailSubject} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="emailHeadline" className="text-sm">Headline</label>
+                  <input id="emailHeadline" name="emailHeadline" defaultValue={notificationTemplate.emailHeadline} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="buttonLabel" className="text-sm">Button label</label>
+                  <input id="buttonLabel" name="buttonLabel" defaultValue={notificationTemplate.buttonLabel} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label htmlFor="emailIntro" className="text-sm">Intro line</label>
+                  <input id="emailIntro" name="emailIntro" defaultValue={notificationTemplate.emailIntro} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label htmlFor="emailBody" className="text-sm">Email body</label>
+                  <textarea id="emailBody" name="emailBody" defaultValue={notificationTemplate.emailBody} rows={5} className="w-full rounded-2xl border border-border bg-white px-3 py-2 text-sm" />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label htmlFor="shareNote" className="text-sm">Footer note</label>
+                  <textarea id="shareNote" name="shareNote" defaultValue={notificationTemplate.shareNote} rows={3} className="w-full rounded-2xl border border-border bg-white px-3 py-2 text-sm" />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label htmlFor="heroImageUrl" className="text-sm">Hero image URL</label>
+                  <input id="heroImageUrl" name="heroImageUrl" defaultValue={notificationTemplate.heroImageUrl || ""} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" placeholder="Optional image URL for the email hero" />
+                </div>
+              </div>
             </div>
 
             <button type="submit" className="h-10 rounded-full border border-foreground bg-foreground px-4 text-sm text-background transition hover:opacity-90">

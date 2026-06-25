@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 
 import { PublicGallery } from "@/components/gallery/public-gallery";
 import { getPublicGalleryBySlug } from "@/lib/data";
+import { readPortalSession } from "@/lib/portal-auth";
+import { portalEmailCanAccessProject } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
 
 type PublicGalleryPageProps = {
@@ -18,7 +20,11 @@ export default async function PublicGalleryPage({ params }: PublicGalleryPagePro
 
   const cookieStore = await cookies();
   const passCookie = cookieStore.get(`gallery_access_${gallerySlug}`)?.value;
-  const passcodeLocked = detail.gallery.hasPasscode && passCookie !== "ok";
+  const portalSession = await readPortalSession();
+  const hasPortalAccess = portalSession
+    ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
+    : false;
+  const passcodeLocked = detail.gallery.hasPasscode && passCookie !== "ok" && !hasPortalAccess;
 
   const sectionById = new Map(detail.sections.map((section) => [section.id, section.name]));
   const media = await Promise.all(
