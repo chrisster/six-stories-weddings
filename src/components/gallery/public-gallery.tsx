@@ -4,7 +4,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -68,10 +67,13 @@ export function PublicGallery({
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [sharePreviewUrl, setSharePreviewUrl] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
   const sessionRef = useRef<string>("");
 
   // Establish a per-browser guest identity (the passcode unlock is the client
@@ -332,45 +334,52 @@ export function PublicGallery({
     [gallerySlug],
   );
 
-  const share = useCallback(async () => {
-    if (typeof navigator === "undefined") return;
+  const openSharePreview = useCallback((url: string) => {
+    setSharePreviewUrl(url);
+    setCopySuccess(false);
+  }, []);
+
+  const createFullGalleryShare = useCallback(async () => {
     setSharing(true);
+    setShareMenuOpen(false);
     try {
       const url = await createShareLink({ shareAll: true });
-      if (navigator.share) {
-        await navigator.share({ title: coupleNames, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-      }
+      openSharePreview(url);
     } catch {
-      // ignore cancellations / unsupported
+      // ignore errors for now
     } finally {
       setSharing(false);
     }
-  }, [coupleNames, createShareLink]);
+  }, [createShareLink, openSharePreview]);
 
   const shareSelection = useCallback(async () => {
-    if (selected.size === 0 || typeof navigator === "undefined") return;
+    if (selected.size === 0) return;
     setSharing(true);
 
     try {
       const ids = flatOrdered.filter((asset) => selected.has(asset.id)).map((asset) => asset.id);
       const url = await createShareLink({ shareAll: false, assetIds: ids });
-
-      if (navigator.share) {
-        await navigator.share({ title: `${coupleNames} selection`, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-      }
+      openSharePreview(url);
 
       setSelectMode(false);
       setSelected(new Set());
     } catch {
-      // ignore cancellations / unsupported
+      // ignore errors for now
     } finally {
       setSharing(false);
     }
-  }, [coupleNames, createShareLink, flatOrdered, selected]);
+  }, [createShareLink, flatOrdered, openSharePreview, selected]);
+
+  const copyShareLink = useCallback(async () => {
+    if (!sharePreviewUrl || typeof navigator === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(sharePreviewUrl);
+      setCopySuccess(true);
+      window.setTimeout(() => setCopySuccess(false), 1600);
+    } catch {
+      setCopySuccess(false);
+    }
+  }, [sharePreviewUrl]);
 
   const activeAsset = activeIndex !== null ? flatOrdered[activeIndex] : null;
   const dateLong = formatDateLong(eventDate);
@@ -503,18 +512,6 @@ export function PublicGallery({
                       <Download className="size-4" />
                       {downloading ? "Preparing…" : `Download all (${flatOrdered.length})`}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDownloadMenuOpen(false);
-                        setSelected(new Set());
-                        setSelectMode(true);
-                      }}
-                      className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
-                    >
-                      <CheckCircle2 className="size-4" />
-                      Select photos to download
-                    </button>
                     <p className="mt-2 border-t border-border/60 px-3 pt-2 text-[11px] leading-relaxed text-muted-foreground">
                       For single item downloads, use the download icon on each item.
                     </p>
@@ -524,15 +521,57 @@ export function PublicGallery({
             </div>
           ) : null}
 
-          <button
-            type="button"
-            onClick={share}
-            aria-label="Share gallery"
-            disabled={sharing}
-            className="shrink-0 rounded-full p-2 text-muted-foreground transition hover:text-foreground disabled:opacity-50"
-          >
-            <Share2 className="size-4" />
-          </button>
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setDownloadMenuOpen(false);
+                setShareMenuOpen((value) => !value);
+              }}
+              aria-haspopup="menu"
+              aria-expanded={shareMenuOpen}
+              aria-label="Share options"
+              disabled={sharing}
+              className="shrink-0 rounded-full p-2 text-muted-foreground transition hover:text-foreground disabled:opacity-50"
+            >
+              <Share2 className="size-4" />
+            </button>
+
+            {shareMenuOpen ? (
+              <>
+                <button
+                  type="button"
+                  aria-hidden
+                  tabIndex={-1}
+                  onClick={() => setShareMenuOpen(false)}
+                  className="fixed inset-0 z-40 cursor-default"
+                />
+                <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-border/70 bg-white p-3 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]">
+                  <button
+                    type="button"
+                    disabled={sharing}
+                    onClick={createFullGalleryShare}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60 disabled:opacity-50"
+                  >
+                    <Share2 className="size-4" />
+                    {sharing ? "Generating…" : "Share all the gallery"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShareMenuOpen(false);
+                      setSelected(new Set());
+                      setSelectMode(true);
+                    }}
+                    className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
+                  >
+                    <Check className="size-4" />
+                    Select photos to share
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
       </nav>
 
@@ -571,6 +610,62 @@ export function PublicGallery({
             >
               Cancel
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {sharePreviewUrl ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 px-4"
+          onClick={() => setSharePreviewUrl(null)}
+        >
+          <div
+            className="w-full max-w-xl rounded-3xl border border-border/70 bg-white p-6 shadow-[0_24px_80px_-35px_rgba(0,0,0,0.45)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Share Link</p>
+                <h3 className="title-cinematic mt-2 text-2xl font-semibold">Link Ready</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSharePreviewUrl(null)}
+                className="rounded-full p-2 text-muted-foreground transition hover:text-foreground"
+                aria-label="Close share link preview"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <p className="mt-3 text-sm text-muted-foreground">
+              Click the field or button to copy this share link.
+            </p>
+
+            <button
+              type="button"
+              onClick={copyShareLink}
+              className="mt-4 w-full rounded-2xl border border-border bg-muted/40 px-3 py-3 text-left text-xs text-foreground hover:bg-muted/60"
+            >
+              <span className="block truncate">{sharePreviewUrl}</span>
+            </button>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSharePreviewUrl(null)}
+                className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={copyShareLink}
+                className="rounded-full border border-foreground bg-foreground px-4 py-2 text-sm text-background transition hover:opacity-90"
+              >
+                {copySuccess ? "Copied" : "Click to copy"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -702,7 +797,7 @@ export function PublicGallery({
               ) : null}
               <button
                 type="button"
-                onClick={share}
+                onClick={createFullGalleryShare}
                 aria-label="Share"
                 className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/90 backdrop-blur transition hover:bg-white/20"
               >
