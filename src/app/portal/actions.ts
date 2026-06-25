@@ -14,6 +14,8 @@ export async function portalLoginAction(formData: FormData) {
 
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
+  const nextPath = String(formData.get("next") || "").trim();
+  const safeNextPath = nextPath.startsWith("/") ? nextPath : "/portal";
 
   if (!email || !password) {
     redirect("/portal/login?error=Enter your email and password.");
@@ -45,7 +47,7 @@ export async function portalLoginAction(formData: FormData) {
     .eq("id", account.id);
 
   await createPortalSession(String(account.id), String(account.email));
-  redirect("/portal");
+  redirect(safeNextPath);
 }
 
 export async function portalLogoutAction() {

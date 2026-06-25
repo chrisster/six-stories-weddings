@@ -1,6 +1,8 @@
 import { Zip, ZipPassThrough } from "fflate";
 
-import { getPublicGalleryBySlug } from "@/lib/data";
+import { getCurrentUser } from "@/lib/auth";
+import { getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import { readPortalSession } from "@/lib/portal-auth";
 import { getSignedMediaUrl } from "@/lib/storage";
 import type { MediaAsset } from "@/lib/types";
 
@@ -11,13 +13,38 @@ function slugifyName(value: string) {
   return value.replace(/[^\w\-]+/g, "-").replace(/^-+|-+$/g, "") || "gallery";
 }
 
-async function buildZipResponse(gallerySlug: string, idsCsv: string | null) {
+async function buildZipResponse(gallerySlug: string, idsCsv: string | null, token: string | null) {
   const detail = await getPublicGalleryBySlug(gallerySlug);
   if (!detail || !detail.gallery.allowDownloads) {
     return new Response("Not found", { status: 404 });
   }
 
+  const adminUser = await getCurrentUser();
+  const portalSession = await readPortalSession();
+  const hasPortalAccess = portalSession
+    ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
+    : false;
+
+  let guestAssetIds: string[] | null = null;
+  let hasGuestAccess = false;
+  if (token) {
+    const access = await getGuestAccessByToken(token);
+    if (access && access.galleryId === detail.gallery.id) {
+      hasGuestAccess = true;
+      guestAssetIds = access.mediaAssetIds;
+    }
+  }
+
+  if (!adminUser && !hasPortalAccess && !hasGuestAccess) {
+    return new Response("Unauthorized", { status: 403 });
+  }
+
   let assets: MediaAsset[] = detail.mediaAssets;
+  if (guestAssetIds && guestAssetIds.length > 0) {
+    const allowed = new Set(guestAssetIds);
+    assets = assets.filter((asset) => allowed.has(asset.id));
+  }
+
   if (idsCsv) {
     const ids = new Set(idsCsv.split(",").map((id) => id.trim()).filter(Boolean));
     if (ids.size > 0) {
@@ -104,8 +131,10 @@ export async function GET(
   { params }: { params: Promise<{ gallerySlug: string }> },
 ) {
   const { gallerySlug } = await params;
-  const idsCsv = new URL(request.url).searchParams.get("assets");
-  return buildZipResponse(gallerySlug, idsCsv);
+  const url = new URL(request.url);
+  const idsCsv = url.searchParams.get("assets");
+  const token = url.searchParams.get("token");
+  return buildZipResponse(gallerySlug, idsCsv, token);
 }
 
 export async function POST(
@@ -115,5 +144,6 @@ export async function POST(
   const { gallerySlug } = await params;
   const formData = await request.formData();
   const idsCsv = String(formData.get("assets") || "") || null;
-  return buildZipResponse(gallerySlug, idsCsv);
+  const token = String(formData.get("token") || "") || null;
+  return buildZipResponse(gallerySlug, idsCsv, token);
 }

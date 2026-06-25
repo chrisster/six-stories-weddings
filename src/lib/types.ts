@@ -154,6 +154,8 @@ export type GuestGalleryLink = {
   isActive: boolean;
   accessCount: number;
   lastAccessedAt?: string | null;
+  shareScope: "full" | "selection";
+  mediaAssetIds?: string[] | null;
 };
 
 export type ContactStatus =

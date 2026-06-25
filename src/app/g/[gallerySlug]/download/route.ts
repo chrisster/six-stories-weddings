@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getPublicGalleryBySlug } from "@/lib/data";
+import { getCurrentUser } from "@/lib/auth";
+import { getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import { readPortalSession } from "@/lib/portal-auth";
 import { getSignedMediaUrl } from "@/lib/storage";
 
 // Streams a gallery media file through our own origin so the browser can
@@ -12,6 +14,7 @@ export async function GET(
   const { gallerySlug } = await params;
   const assetId = request.nextUrl.searchParams.get("asset") || "";
   const forceDownload = request.nextUrl.searchParams.get("download") === "1";
+  const token = request.nextUrl.searchParams.get("token") || "";
 
   if (!assetId) {
     return new NextResponse("Missing asset", { status: 400 });
@@ -22,9 +25,33 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
+  const adminUser = await getCurrentUser();
+  const portalSession = await readPortalSession();
+  const hasPortalAccess = portalSession
+    ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
+    : false;
+
+  let guestAssetIds: string[] | null = null;
+  let hasGuestAccess = false;
+  if (token) {
+    const access = await getGuestAccessByToken(token);
+    if (access && access.galleryId === detail.gallery.id) {
+      hasGuestAccess = true;
+      guestAssetIds = access.mediaAssetIds;
+    }
+  }
+
+  if (!adminUser && !hasPortalAccess && !hasGuestAccess) {
+    return new NextResponse("Unauthorized", { status: 403 });
+  }
+
   const asset = detail.mediaAssets.find((item) => item.id === assetId);
   if (!asset) {
     return new NextResponse("Not found", { status: 404 });
+  }
+
+  if (guestAssetIds && guestAssetIds.length > 0 && !guestAssetIds.includes(asset.id)) {
+    return new NextResponse("Forbidden", { status: 403 });
   }
 
   const signedUrl = await getSignedMediaUrl(asset.storagePath);

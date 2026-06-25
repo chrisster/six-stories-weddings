@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import {
   demoContacts,
   demoCrewMembersList,
@@ -15,6 +17,7 @@ import type {
   CrewMember,
   Gallery,
   GalleryDetail,
+  GuestGalleryLink,
   GalleryNotificationTemplate,
   PortalGallery,
   Project,
@@ -712,6 +715,7 @@ export async function createGuestLink(
   galleryId: string,
   createdBy: string,
   expiresAt?: Date,
+  mediaAssetIds?: string[],
 ): Promise<{ token: string; id: string } | null> {
   if (!hasSupabaseEnv) {
     return null;
@@ -722,10 +726,8 @@ export async function createGuestLink(
     return null;
   }
 
-  // Generate random 32-char alphanumeric token
-  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)))
-    .map((b) => ((b % 36) < 10 ? b % 10 : String.fromCharCode(97 + (b % 26))).toString())
-    .join("");
+  const token = randomBytes(24).toString("base64url");
+  const hasSelection = Array.isArray(mediaAssetIds) && mediaAssetIds.length > 0;
 
   const { data, error } = await admin
     .from("guest_gallery_links")
@@ -734,6 +736,8 @@ export async function createGuestLink(
       token,
       created_by: createdBy,
       expires_at: expiresAt?.toISOString() || null,
+      share_scope: hasSelection ? "selection" : "full",
+      media_asset_ids: hasSelection ? mediaAssetIds : null,
     })
     .select()
     .single();
@@ -748,7 +752,7 @@ export async function createGuestLink(
   };
 }
 
-export async function getGuestLinksByGallery(galleryId: string) {
+export async function getGuestLinksByGallery(galleryId: string): Promise<GuestGalleryLink[]> {
   if (!hasSupabaseEnv) {
     return [];
   }
@@ -760,7 +764,7 @@ export async function getGuestLinksByGallery(galleryId: string) {
 
   const { data } = await admin
     .from("guest_gallery_links")
-    .select("id, token, created_at, expires_at, is_active, access_count, last_accessed_at")
+    .select("id, token, created_at, expires_at, is_active, access_count, last_accessed_at, share_scope, media_asset_ids")
     .eq("gallery_id", galleryId)
     .order("created_at", { ascending: false });
 
@@ -772,10 +776,17 @@ export async function getGuestLinksByGallery(galleryId: string) {
     isActive: Boolean(row.is_active),
     accessCount: Number(row.access_count || 0),
     lastAccessedAt: (row.last_accessed_at as string | null) || null,
+    shareScope: (row.share_scope as "full" | "selection" | null) || "full",
+    mediaAssetIds: Array.isArray(row.media_asset_ids)
+      ? row.media_asset_ids.map((id) => String(id))
+      : null,
   }));
 }
 
-export async function getGalleryByGuestToken(token: string) {
+export async function getGuestAccessByToken(token: string): Promise<{
+  galleryId: string;
+  mediaAssetIds: string[] | null;
+} | null> {
   if (!hasSupabaseEnv) {
     return null;
   }
@@ -787,7 +798,7 @@ export async function getGalleryByGuestToken(token: string) {
 
   const { data, error } = await admin
     .from("guest_gallery_links")
-    .select("gallery_id, is_active, expires_at, access_count")
+    .select("gallery_id, is_active, expires_at, access_count, media_asset_ids")
     .eq("token", token)
     .maybeSingle();
 
@@ -809,7 +820,34 @@ export async function getGalleryByGuestToken(token: string) {
     })
     .eq("token", token);
 
-  return getGalleryById(String(data.gallery_id));
+  return {
+    galleryId: String(data.gallery_id),
+    mediaAssetIds: Array.isArray(data.media_asset_ids)
+      ? data.media_asset_ids.map((id) => String(id))
+      : null,
+  };
+}
+
+export async function getGalleryByGuestToken(token: string) {
+  const access = await getGuestAccessByToken(token);
+  if (!access) {
+    return null;
+  }
+
+  const detail = await getGalleryById(access.galleryId);
+  if (!detail) {
+    return null;
+  }
+
+  if (!access.mediaAssetIds || access.mediaAssetIds.length === 0) {
+    return detail;
+  }
+
+  const allowed = new Set(access.mediaAssetIds);
+  return {
+    ...detail,
+    mediaAssets: detail.mediaAssets.filter((asset) => allowed.has(asset.id)),
+  };
 }
 
 export async function revokeGuestLink(linkId: string): Promise<boolean> {

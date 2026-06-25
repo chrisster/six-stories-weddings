@@ -80,7 +80,6 @@ export function renderGalleryNotificationEmail({
         ${formatParagraphs(template.emailBody)}
         <p style="margin:22px 0 0;color:#474747;font-size:14px;line-height:1.75;">${escapeHtml(template.shareNote)}</p>
         <p style="margin:18px 0 0;color:#5e5a54;font-size:13px;line-height:1.6;">Portal login: <a href="${escapeHtml(loginUrl)}" style="color:#3652a6;">${escapeHtml(loginUrl)}</a></p>
-        <p style="margin:10px 0 0;color:#5e5a54;font-size:13px;line-height:1.6;">Direct gallery link: <a href="${escapeHtml(galleryUrl)}" style="color:#3652a6;">${escapeHtml(galleryUrl)}</a></p>
       </div>
     </div>
   `;
@@ -91,7 +90,6 @@ export function renderGalleryNotificationEmail({
     template.emailBody,
     template.shareNote,
     `Portal login: ${loginUrl}`,
-    `Gallery: ${galleryUrl}`,
     claimUrl ? `Claim access: ${claimUrl}` : null,
   ]
     .filter(Boolean)

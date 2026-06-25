@@ -11,6 +11,7 @@ import {
   renderGalleryNotificationEmail,
   sendGalleryNotificationEmail,
 } from "@/lib/gallery-notifications";
+import { createGuestLink, revokeGuestLink } from "@/lib/data";
 import { createPortalClaimToken } from "@/lib/portal-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureMediaBucket, getBucketName, uploadMediaToStorage } from "@/lib/storage";
@@ -500,7 +501,13 @@ export async function createGuestLinkAction(formData: FormData) {
 
   const galleryId = String(formData.get("galleryId") || "").trim();
   const createdBy = String(formData.get("createdBy") || "admin").trim();
-  const expiresInDays = formData.get("expiresInDays") ? parseInt(String(formData.get("expiresInDays")), 10) : null;
+  const expiresInDays = formData.get("expiresInDays")
+    ? parseInt(String(formData.get("expiresInDays")), 10)
+    : null;
+  const mediaAssetIds = String(formData.get("mediaAssetIds") || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 
   if (!galleryId) {
     return { error: "Missing gallery ID" };
@@ -511,34 +518,35 @@ export async function createGuestLinkAction(formData: FormData) {
     return { error: "Failed to create admin client" };
   }
 
-  const expiresAt = expiresInDays ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000) : null;
+  const expiresAt = expiresInDays
+    ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
+    : undefined;
 
-  // Generate random 32-char alphanumeric token
-  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)))
-    .map((b) => ((b % 36) < 10 ? b % 10 : String.fromCharCode(97 + (b % 26))).toString())
-    .join("");
+  const created = await createGuestLink(
+    galleryId,
+    createdBy,
+    expiresAt,
+    mediaAssetIds.length > 0 ? mediaAssetIds : undefined,
+  );
 
-  const { data, error } = await admin
-    .from("guest_gallery_links")
-    .insert({
-      gallery_id: galleryId,
-      token,
-      created_by: createdBy,
-      expires_at: expiresAt?.toISOString() || null,
-    })
-    .select()
-    .single();
-
-  if (error || !data) {
+  if (!created) {
     return { error: "Failed to create guest link" };
   }
+
+  const { data: gallery } = await admin
+    .from("galleries")
+    .select("slug")
+    .eq("id", galleryId)
+    .maybeSingle();
+
+  const slug = String(gallery?.slug || "");
 
   revalidatePath(`/admin/galleries/${galleryId}`);
 
   return {
     success: true,
-    token,
-    link: `/g/gallery?token=${encodeURIComponent(token)}`,
+    token: created.token,
+    link: slug ? `/g/${slug}?token=${encodeURIComponent(created.token)}` : null,
   };
 }
 
@@ -554,17 +562,8 @@ export async function revokeGuestLinkAction(formData: FormData) {
     return { error: "Missing link ID or gallery ID" };
   }
 
-  const admin = createAdminClient();
-  if (!admin) {
-    return { error: "Failed to create admin client" };
-  }
-
-  const { error } = await admin
-    .from("guest_gallery_links")
-    .update({ is_active: false })
-    .eq("id", linkId);
-
-  if (error) {
+  const revoked = await revokeGuestLink(linkId);
+  if (!revoked) {
     return { error: "Failed to revoke guest link" };
   }
 

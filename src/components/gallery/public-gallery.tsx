@@ -71,6 +71,7 @@ export function PublicGallery({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const sessionRef = useRef<string>("");
 
   // Establish a per-browser guest identity (the passcode unlock is the client
@@ -122,8 +123,10 @@ export function PublicGallery({
   // the file through our own /download proxy with Content-Disposition.
   const downloadAsset = useCallback(
     (asset: PublicAsset) => {
+      const token = new URLSearchParams(window.location.search).get("token");
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
       const link = document.createElement("a");
-      link.href = `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}&download=1`;
+      link.href = `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}&download=1${tokenParam}`;
       link.rel = "noopener";
       document.body.appendChild(link);
       link.click();
@@ -140,10 +143,12 @@ export function PublicGallery({
     (list: PublicAsset[]) => {
       if (list.length === 0) return;
       setDownloading(true);
+      const token = new URLSearchParams(window.location.search).get("token");
+      const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
 
       if (list.length === assets.length) {
         const link = document.createElement("a");
-        link.href = `/g/${gallerySlug}/download-zip`;
+        link.href = `/g/${gallerySlug}/download-zip${tokenQuery}`;
         link.rel = "noopener";
         document.body.appendChild(link);
         link.click();
@@ -151,12 +156,19 @@ export function PublicGallery({
       } else {
         const form = document.createElement("form");
         form.method = "POST";
-        form.action = `/g/${gallerySlug}/download-zip`;
+        form.action = `/g/${gallerySlug}/download-zip${tokenQuery}`;
         const input = document.createElement("input");
         input.type = "hidden";
         input.name = "assets";
         input.value = list.map((asset) => asset.id).join(",");
         form.appendChild(input);
+        if (token) {
+          const tokenInput = document.createElement("input");
+          tokenInput.type = "hidden";
+          tokenInput.name = "token";
+          tokenInput.value = token;
+          form.appendChild(tokenInput);
+        }
         document.body.appendChild(form);
         form.requestSubmit();
         form.remove();
@@ -293,10 +305,38 @@ export function PublicGallery({
     }
   }, []);
 
+  const createShareLink = useCallback(
+    async (options: { shareAll: boolean; assetIds?: string[] }) => {
+      const currentToken = new URLSearchParams(window.location.search).get("token") || undefined;
+      const response = await fetch(`/g/${gallerySlug}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shareAll: options.shareAll,
+          assetIds: options.assetIds || [],
+          currentToken,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not create share link");
+      }
+
+      const data = (await response.json()) as { shareUrl?: string };
+      if (!data.shareUrl) {
+        throw new Error("No share URL returned");
+      }
+
+      return data.shareUrl;
+    },
+    [gallerySlug],
+  );
+
   const share = useCallback(async () => {
     if (typeof navigator === "undefined") return;
-    const url = window.location.href;
+    setSharing(true);
     try {
+      const url = await createShareLink({ shareAll: true });
       if (navigator.share) {
         await navigator.share({ title: coupleNames, url });
       } else {
@@ -304,8 +344,33 @@ export function PublicGallery({
       }
     } catch {
       // ignore cancellations / unsupported
+    } finally {
+      setSharing(false);
     }
-  }, [coupleNames]);
+  }, [coupleNames, createShareLink]);
+
+  const shareSelection = useCallback(async () => {
+    if (selected.size === 0 || typeof navigator === "undefined") return;
+    setSharing(true);
+
+    try {
+      const ids = flatOrdered.filter((asset) => selected.has(asset.id)).map((asset) => asset.id);
+      const url = await createShareLink({ shareAll: false, assetIds: ids });
+
+      if (navigator.share) {
+        await navigator.share({ title: `${coupleNames} selection`, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+
+      setSelectMode(false);
+      setSelected(new Set());
+    } catch {
+      // ignore cancellations / unsupported
+    } finally {
+      setSharing(false);
+    }
+  }, [coupleNames, createShareLink, flatOrdered, selected]);
 
   const activeAsset = activeIndex !== null ? flatOrdered[activeIndex] : null;
   const dateLong = formatDateLong(eventDate);
@@ -463,7 +528,8 @@ export function PublicGallery({
             type="button"
             onClick={share}
             aria-label="Share gallery"
-            className="shrink-0 rounded-full p-2 text-muted-foreground transition hover:text-foreground"
+            disabled={sharing}
+            className="shrink-0 rounded-full p-2 text-muted-foreground transition hover:text-foreground disabled:opacity-50"
           >
             <Share2 className="size-4" />
           </button>
@@ -485,6 +551,15 @@ export function PublicGallery({
             >
               <Download className="size-3.5" />
               {downloading ? "Preparing…" : "Download"}
+            </button>
+            <button
+              type="button"
+              disabled={selected.size === 0 || sharing}
+              onClick={shareSelection}
+              className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
+            >
+              <Share2 className="size-3.5" />
+              {sharing ? "Sharing…" : "Share"}
             </button>
             <button
               type="button"

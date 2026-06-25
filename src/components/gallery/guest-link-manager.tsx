@@ -29,7 +29,6 @@ export function GuestLinkManager({ galleryId, initialLinks, gallerySlug }: Guest
       const result = await createGuestLinkAction(formData);
       if (result.success) {
         setNewLinkToken(result.token);
-        // Refetch links
         const newLink: GuestGalleryLink = {
           id: Math.random().toString(),
           token: result.token,
@@ -38,8 +37,10 @@ export function GuestLinkManager({ galleryId, initialLinks, gallerySlug }: Guest
           isActive: true,
           accessCount: 0,
           lastAccessedAt: null,
+          shareScope: "full",
+          mediaAssetIds: null,
         };
-        setLinks([newLink, ...links]);
+        setLinks((previous) => [newLink, ...previous]);
         setExpiresInDays(null);
       }
     } finally {
@@ -54,7 +55,9 @@ export function GuestLinkManager({ galleryId, initialLinks, gallerySlug }: Guest
 
     const result = await revokeGuestLinkAction(formData);
     if (result.success) {
-      setLinks(links.map((link) => (link.id === linkId ? { ...link, isActive: false } : link)));
+      setLinks((previous) =>
+        previous.map((link) => (link.id === linkId ? { ...link, isActive: false } : link)),
+      );
     }
   };
 
