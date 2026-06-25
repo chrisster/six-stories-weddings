@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "../../../.."
+		}
+	],
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"/^pushd /Users/chris/project/six-stories-weddings >/dev/null && git add -f \\.env\\.example && git add src/lib/env\\.ts src/lib/types\\.ts src/lib/data\\.ts src/lib/gallery-notifications\\.ts src/lib/portal-auth\\.ts src/app/portal src/app/g/'\\[gallerySlug\\]'/page\\.tsx src/app/admin/projects/actions\\.ts src/app/admin/projects/'\\[id\\]'/page\\.tsx src/app/admin/galleries/'\\[id\\]'/actions\\.ts src/app/admin/galleries/'\\[id\\]'/page\\.tsx supabase/migrations/0012_client_portal\\.sql && git commit -m \"Client portal: add manual access and publish notifications\" && git push origin main 2>&1 \\| tail -8$/": {
+				"approve": true,
+				"matchCommandLine": true
+			}
+		}
+	}
+}

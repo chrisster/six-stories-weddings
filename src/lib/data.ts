@@ -707,3 +707,122 @@ export async function getContacts(): Promise<Contact[]> {
     createdAt: String(row.created_at || ""),
   }));
 }
+
+export async function createGuestLink(
+  galleryId: string,
+  createdBy: string,
+  expiresAt?: Date,
+): Promise<{ token: string; id: string } | null> {
+  if (!hasSupabaseEnv) {
+    return null;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return null;
+  }
+
+  // Generate random 32-char alphanumeric token
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+    .map((b) => ((b % 36) < 10 ? b % 10 : String.fromCharCode(97 + (b % 26))).toString())
+    .join("");
+
+  const { data, error } = await admin
+    .from("guest_gallery_links")
+    .insert({
+      gallery_id: galleryId,
+      token,
+      created_by: createdBy,
+      expires_at: expiresAt?.toISOString() || null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return {
+    token,
+    id: String(data.id),
+  };
+}
+
+export async function getGuestLinksByGallery(galleryId: string) {
+  if (!hasSupabaseEnv) {
+    return [];
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return [];
+  }
+
+  const { data } = await admin
+    .from("guest_gallery_links")
+    .select("id, token, created_at, expires_at, is_active, access_count, last_accessed_at")
+    .eq("gallery_id", galleryId)
+    .order("created_at", { ascending: false });
+
+  return (data || []).map((row) => ({
+    id: String(row.id),
+    token: String(row.token),
+    createdAt: String(row.created_at),
+    expiresAt: (row.expires_at as string | null) || null,
+    isActive: Boolean(row.is_active),
+    accessCount: Number(row.access_count || 0),
+    lastAccessedAt: (row.last_accessed_at as string | null) || null,
+  }));
+}
+
+export async function getGalleryByGuestToken(token: string) {
+  if (!hasSupabaseEnv) {
+    return null;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return null;
+  }
+
+  const { data, error } = await admin
+    .from("guest_gallery_links")
+    .select("gallery_id, is_active, expires_at, access_count")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (error || !data || !data.is_active) {
+    return null;
+  }
+
+  if (data.expires_at && new Date(data.expires_at) < new Date()) {
+    return null;
+  }
+
+  // Update access count and last accessed time
+  const currentCount = Number(data.access_count || 0);
+  await admin
+    .from("guest_gallery_links")
+    .update({
+      access_count: currentCount + 1,
+      last_accessed_at: new Date().toISOString(),
+    })
+    .eq("token", token);
+
+  return getGalleryById(String(data.gallery_id));
+}
+
+export async function revokeGuestLink(linkId: string): Promise<boolean> {
+  if (!hasSupabaseEnv) {
+    return false;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return false;
+  }
+
+  const { error } = await admin.from("guest_gallery_links").update({ is_active: false }).eq("id", linkId);
+
+  return !error;
+}

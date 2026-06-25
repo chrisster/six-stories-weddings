@@ -8,8 +8,9 @@ import {
 } from "@/app/admin/galleries/[id]/actions";
 import { MediaUploader } from "@/components/gallery/media-uploader";
 import { MediaManager } from "@/components/gallery/media-manager";
+import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
-import { getGalleryById, getGalleryFavorites, getGalleryNotificationTemplate } from "@/lib/data";
+import { getGalleryById, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
@@ -50,6 +51,8 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   const favoritedMedia = mediaWithUrl
     .filter((asset) => favorites.counts[asset.id])
     .sort((a, b) => (favorites.counts[b.id] || 0) - (favorites.counts[a.id] || 0));
+
+  const guestLinks = await getGuestLinksByGallery(detail.gallery.id);
 
   return (
     <div className="space-y-6">
@@ -207,6 +210,14 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
               Add
             </button>
           </form>
+        </article>
+
+        <article className="admin-surface p-5">
+          <h3 className="quiet-label mb-3">Guest Links</h3>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Create shareable links for clients to view this gallery directly without requiring portal credentials.
+          </p>
+          <GuestLinkManager galleryId={detail.gallery.id} initialLinks={guestLinks} gallerySlug={detail.gallery.slug} />
         </article>
       </section>
 

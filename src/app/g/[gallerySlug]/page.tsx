@@ -2,18 +2,37 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { PublicGallery } from "@/components/gallery/public-gallery";
-import { getPublicGalleryBySlug } from "@/lib/data";
+import { getPublicGalleryBySlug, getGalleryByGuestToken } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
 import { portalEmailCanAccessProject } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
 
 type PublicGalleryPageProps = {
   params: Promise<{ gallerySlug: string }>;
+  searchParams: Promise<{ token?: string }>;
 };
 
-export default async function PublicGalleryPage({ params }: PublicGalleryPageProps) {
+export default async function PublicGalleryPage({ params, searchParams }: PublicGalleryPageProps) {
   const { gallerySlug } = await params;
-  const detail = await getPublicGalleryBySlug(gallerySlug);
+  const { token } = await searchParams;
+
+  // Check for guest link access first
+  let detail = null;
+  let hasGuestAccess = false;
+
+  if (token) {
+    const guestGallery = await getGalleryByGuestToken(token);
+    if (guestGallery) {
+      detail = guestGallery;
+      hasGuestAccess = true;
+    }
+  }
+
+  // If no guest access, try regular gallery lookup
+  if (!detail) {
+    detail = await getPublicGalleryBySlug(gallerySlug);
+  }
+
   if (!detail) {
     notFound();
   }
@@ -24,7 +43,9 @@ export default async function PublicGalleryPage({ params }: PublicGalleryPagePro
   const hasPortalAccess = portalSession
     ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
     : false;
-  const passcodeLocked = detail.gallery.hasPasscode && passCookie !== "ok" && !hasPortalAccess;
+
+  // Guest link access bypasses passcode
+  const passcodeLocked = hasGuestAccess ? false : detail.gallery.hasPasscode && passCookie !== "ok" && !hasPortalAccess;
 
   const sectionById = new Map(detail.sections.map((section) => [section.id, section.name]));
   const media = await Promise.all(

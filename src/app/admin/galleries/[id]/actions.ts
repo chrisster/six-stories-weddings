@@ -492,3 +492,83 @@ export async function reorderMediaAction(formData: FormData) {
 
   revalidatePath(`/admin/galleries/${galleryId}`);
 }
+
+export async function createGuestLinkAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return { error: "No Supabase environment" };
+  }
+
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  const createdBy = String(formData.get("createdBy") || "admin").trim();
+  const expiresInDays = formData.get("expiresInDays") ? parseInt(String(formData.get("expiresInDays")), 10) : null;
+
+  if (!galleryId) {
+    return { error: "Missing gallery ID" };
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return { error: "Failed to create admin client" };
+  }
+
+  const expiresAt = expiresInDays ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000) : null;
+
+  // Generate random 32-char alphanumeric token
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+    .map((b) => ((b % 36) < 10 ? b % 10 : String.fromCharCode(97 + (b % 26))).toString())
+    .join("");
+
+  const { data, error } = await admin
+    .from("guest_gallery_links")
+    .insert({
+      gallery_id: galleryId,
+      token,
+      created_by: createdBy,
+      expires_at: expiresAt?.toISOString() || null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    return { error: "Failed to create guest link" };
+  }
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+
+  return {
+    success: true,
+    token,
+    link: `/g/gallery?token=${encodeURIComponent(token)}`,
+  };
+}
+
+export async function revokeGuestLinkAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return { error: "No Supabase environment" };
+  }
+
+  const linkId = String(formData.get("linkId") || "").trim();
+  const galleryId = String(formData.get("galleryId") || "").trim();
+
+  if (!linkId || !galleryId) {
+    return { error: "Missing link ID or gallery ID" };
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return { error: "Failed to create admin client" };
+  }
+
+  const { error } = await admin
+    .from("guest_gallery_links")
+    .update({ is_active: false })
+    .eq("id", linkId);
+
+  if (error) {
+    return { error: "Failed to revoke guest link" };
+  }
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+
+  return { success: true };
+}

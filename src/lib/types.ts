@@ -146,6 +146,16 @@ export type PortalGallery = {
   coverUrl?: string | null;
 };
 
+export type GuestGalleryLink = {
+  id: string;
+  token: string;
+  createdAt: string;
+  expiresAt?: string | null;
+  isActive: boolean;
+  accessCount: number;
+  lastAccessedAt?: string | null;
+};
+
 export type ContactStatus =
   | "lead"
   | "offer_sent"
