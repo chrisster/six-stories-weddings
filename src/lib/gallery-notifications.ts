@@ -101,8 +101,18 @@ export function renderGalleryNotificationEmail({
 }
 
 export function canSendGalleryNotificationEmails() {
-  const { apiKey, fromEmail } = getGalleryEmailEnv();
-  return Boolean(apiKey && fromEmail);
+  const {
+    apiKey,
+    fromEmail,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPass,
+  } = getGalleryEmailEnv();
+
+  const hasSmtp = Boolean(smtpHost && smtpPort && smtpUser && smtpPass && fromEmail);
+  const hasResend = Boolean(apiKey && fromEmail);
+  return hasSmtp || hasResend;
 }
 
 export async function sendGalleryNotificationEmail(args: {
@@ -111,7 +121,42 @@ export async function sendGalleryNotificationEmail(args: {
   html: string;
   text: string;
 }) {
-  const { apiKey, fromEmail, replyTo } = getGalleryEmailEnv();
+  const {
+    apiKey,
+    fromEmail,
+    replyTo,
+    smtpHost,
+    smtpPort,
+    smtpSecure,
+    smtpUser,
+    smtpPass,
+  } = getGalleryEmailEnv();
+
+  const hasSmtp = Boolean(smtpHost && smtpPort && smtpUser && smtpPass && fromEmail);
+  if (hasSmtp) {
+    const nodemailer = await import("nodemailer");
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    });
+
+    await transporter.sendMail({
+      from: fromEmail,
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+      replyTo: replyTo || undefined,
+    });
+
+    return { sent: true as const };
+  }
+
   if (!apiKey || !fromEmail) {
     return { sent: false, reason: "missing_env" as const };
   }
