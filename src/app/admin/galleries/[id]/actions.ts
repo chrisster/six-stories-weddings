@@ -150,7 +150,7 @@ export async function updateGallerySettingsAction(formData: FormData) {
     { onConflict: "gallery_id" },
   );
 
-  if (!galleryRow.is_published && isPublished && notifyClients) {
+  if (isPublished && notifyClients) {
     const { data: projectClients } = await admin
       .from("project_clients")
       .select("client_id")
@@ -213,12 +213,16 @@ export async function updateGallerySettingsAction(formData: FormData) {
         });
 
         try {
-          await sendGalleryNotificationEmail({
+          const result = await sendGalleryNotificationEmail({
             to: email,
             subject: template.emailSubject,
             html: rendered.html,
             text: rendered.text,
           });
+
+          if (!result.sent) {
+            throw new Error(`Notification provider not configured (${result.reason})`);
+          }
 
           if (account?.id) {
             await admin
