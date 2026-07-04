@@ -43,7 +43,6 @@ export function buildTimeplanEmail({
   projectTitle,
   eventDate,
   items,
-  recipientName,
 }: BuildTimeplanEmailInput) {
   const isCrew = audience === "crew";
   const appUrl = getAppUrl().replace(/\/$/, "");
@@ -78,9 +77,7 @@ export function buildTimeplanEmail({
     })
     .join("");
 
-  const recipientLine = recipientName
-    ? `<p style="margin:0 0 18px;color:#6b6b6b;font-size:12px;letter-spacing:0.24em;text-transform:uppercase;">${escapeHtml(recipientName)}</p>`
-    : "";
+  const recipientLine = "";
 
   const html = `
     <div style="margin:0;padding:24px;background:#f3f1ee;font-family:Georgia, 'Times New Roman', serif;">

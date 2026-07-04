@@ -34,6 +34,7 @@ export function getGalleryEmailEnv() {
   return {
     apiKey: process.env.RESEND_API_KEY || "",
     fromEmail: process.env.GALLERY_NOTIFICATIONS_FROM_EMAIL || "",
+    fromName: process.env.GALLERY_NOTIFICATIONS_FROM_NAME || "Six Stories Studio",
     replyTo: process.env.GALLERY_NOTIFICATIONS_REPLY_TO || "",
     smtpHost: process.env.SMTP_HOST || "",
     smtpPort: Number.isFinite(smtpPort) ? smtpPort : 587,

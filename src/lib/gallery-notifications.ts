@@ -122,6 +122,7 @@ export async function sendGalleryNotificationEmail(args: {
   const {
     apiKey,
     fromEmail,
+    fromName,
     replyTo,
     smtpHost,
     smtpPort,
@@ -129,6 +130,8 @@ export async function sendGalleryNotificationEmail(args: {
     smtpUser,
     smtpPass,
   } = getGalleryEmailEnv();
+
+  const from = formatFromAddress(fromEmail, fromName);
 
   const hasSmtp = Boolean(smtpHost && smtpPort && smtpUser && smtpPass && fromEmail);
   if (hasSmtp) {
@@ -144,7 +147,7 @@ export async function sendGalleryNotificationEmail(args: {
     });
 
     await transporter.sendMail({
-      from: fromEmail,
+      from,
       to: args.to,
       subject: args.subject,
       html: args.html,
@@ -166,7 +169,7 @@ export async function sendGalleryNotificationEmail(args: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: fromEmail,
+      from,
       to: [args.to],
       subject: args.subject,
       html: args.html,
@@ -181,6 +184,18 @@ export async function sendGalleryNotificationEmail(args: {
   }
 
   return { sent: true as const };
+}
+
+function formatFromAddress(fromEmail: string, fromName?: string) {
+  const email = (fromEmail || "").trim();
+  if (!email) return email;
+  // Already includes a display name (e.g. "Name <email>").
+  if (email.includes("<")) return email;
+  const name = (fromName || "").trim();
+  if (!name) return email;
+  // Escape quotes in the display name for a valid RFC 5322 header.
+  const safeName = name.replace(/"/g, "'");
+  return `"${safeName}" <${email}>`;
 }
 
 export function buildGalleryLinks(gallerySlug: string) {

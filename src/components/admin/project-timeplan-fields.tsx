@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { LocationAutocomplete } from "@/components/admin/location-autocomplete";
 import type { TimeplanItem } from "@/lib/types";
 
 type TimeplanRow = {
@@ -55,9 +56,8 @@ export function ProjectTimeplanFields({ formId, initialTimeplan }: ProjectTimepl
             <input
               form={formId}
               name="timeplanTime"
-              type="text"
+              type="time"
               defaultValue={row.time}
-              placeholder="14:30"
               className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
             />
             <input
@@ -68,13 +68,12 @@ export function ProjectTimeplanFields({ formId, initialTimeplan }: ProjectTimepl
               placeholder="Ceremony"
               className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
             />
-            <input
-              form={formId}
+            <LocationAutocomplete
+              formId={formId}
               name="timeplanLocation"
-              type="text"
-              defaultValue={row.location}
+              initialValue={row.location}
               placeholder="Venue or address (Google Maps)"
-              className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+              className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm"
             />
             <input
               form={formId}

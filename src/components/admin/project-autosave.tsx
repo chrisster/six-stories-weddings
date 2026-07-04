@@ -54,7 +54,14 @@ export function ProjectAutosave({ formId, debounceMs = 1500 }: ProjectAutosavePr
     const form = document.getElementById(formId) as HTMLFormElement | null;
     if (!form) return;
 
-    const schedule = () => {
+    const schedule = (event: Event) => {
+      // Only react to controls associated with this form (including fields
+      // rendered outside the <form> via the form="..." attribute).
+      const target = event.target as (HTMLElement & { form?: HTMLFormElement }) | null;
+      if (!target || target.form !== form) {
+        return;
+      }
+
       setStatus("pending");
       if (timerRef.current) {
         window.clearTimeout(timerRef.current);
@@ -64,12 +71,12 @@ export function ProjectAutosave({ formId, debounceMs = 1500 }: ProjectAutosavePr
       }, debounceMs);
     };
 
-    form.addEventListener("input", schedule);
-    form.addEventListener("change", schedule);
+    document.addEventListener("input", schedule, true);
+    document.addEventListener("change", schedule, true);
 
     return () => {
-      form.removeEventListener("input", schedule);
-      form.removeEventListener("change", schedule);
+      document.removeEventListener("input", schedule, true);
+      document.removeEventListener("change", schedule, true);
       if (timerRef.current) {
         window.clearTimeout(timerRef.current);
       }
