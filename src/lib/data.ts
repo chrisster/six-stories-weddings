@@ -60,6 +60,41 @@ function normalizePayments(raw: unknown): Array<{ date: string; amount: number; 
   }, []);
 }
 
+function normalizeTimeplan(
+  raw: unknown,
+): Array<{ time: string; action: string; location: string | null; notes: string | null }> {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.reduce<Array<{ time: string; action: string; location: string | null; notes: string | null }>>(
+    (acc, entry) => {
+      if (!entry || typeof entry !== "object") {
+        return acc;
+      }
+
+      const candidate = entry as Record<string, unknown>;
+      const time = String(candidate.time || "").trim();
+      const action = String(candidate.action || "").trim();
+      const location = String(candidate.location || "").trim();
+      const notes = String(candidate.notes || "").trim();
+
+      if (!time && !action && !location && !notes) {
+        return acc;
+      }
+
+      acc.push({
+        time,
+        action,
+        location: location || null,
+        notes: notes || null,
+      });
+      return acc;
+    },
+    [],
+  );
+}
+
 type DashboardMetrics = {
   totalProjects: number;
   draftProjects: number;
@@ -135,6 +170,7 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
 
   const offerAmount = Number((row.offer_amount ?? row.budget_total) || 0);
   const payments = normalizePayments(row.payments_json);
+  const timeplan = normalizeTimeplan(row.timeplan_json);
   const paymentsTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
   const amountPaid = Number((row.amount_paid ?? paymentsTotal) || 0);
   const amountRemaining = Math.max(0, Number(row.amount_remaining ?? offerAmount - amountPaid));
@@ -162,6 +198,7 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
       amountPaid,
       amountRemaining,
       payments,
+      timeplan,
     notes: row.notes as string | null,
     coverImageUrl: coverImageUrl || null,
     clients,

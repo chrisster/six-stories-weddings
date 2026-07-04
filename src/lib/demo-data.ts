@@ -42,6 +42,26 @@ export const demoProject: Project = {
       note: "Pre-event top-up",
     },
   ],
+  timeplan: [
+    {
+      time: "14:00",
+      action: "Bridal preparation",
+      location: "Belvedere Hotel, Mykonos",
+      notes: "Hair & makeup finishing touches",
+    },
+    {
+      time: "16:30",
+      action: "Ceremony",
+      location: "Agios Nikolaos Chapel",
+      notes: null,
+    },
+    {
+      time: "19:00",
+      action: "Reception & dinner",
+      location: "Scorpios Mykonos",
+      notes: "Golden hour couple portraits before dinner",
+    },
+  ],
   notes: "Luxury island wedding. Couple requested cinematic edit with warm tones.",
   clients: [
     {

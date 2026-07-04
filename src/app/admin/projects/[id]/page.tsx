@@ -7,20 +7,30 @@ import {
   removeClientFromProjectAction,
   removeCrewFromProjectAction,
   setClientPortalPasswordAction,
+  shareTimeplanAction,
   updateClientAction,
   updateProjectAction,
 } from "@/app/admin/projects/actions";
 import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/app/admin/tasks/actions";
 import { DeleteProjectButton } from "@/components/admin/delete-project-button";
+import { ProjectAutosave } from "@/components/admin/project-autosave";
 import { ProjectPaymentsFields } from "@/components/admin/project-payments-fields";
 import { ProjectSaveButton } from "@/components/admin/project-save-button";
+import { ProjectTimeplanFields } from "@/components/admin/project-timeplan-fields";
 import { getClientPortalAccountsByEmails, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ save?: string; reason?: string; detail?: string }>;
+  searchParams: Promise<{
+    save?: string;
+    reason?: string;
+    detail?: string;
+    share?: string;
+    audience?: string;
+    count?: string;
+  }>;
 };
 
 type ServiceType = "photo" | "film";
@@ -122,6 +132,24 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
           {query.detail ? (
             <p className="mt-1 text-xs text-red-600/80">Details: {query.detail}</p>
           ) : null}
+        </div>
+      ) : null}
+
+      {query.share === "ok" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+          Timeplan sent to {query.count || ""} {query.audience === "crew" ? "crew member(s)" : "client(s)"}.
+        </div>
+      ) : null}
+
+      {query.share === "error" ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          {query.reason === "empty"
+            ? "Add at least one timeplan row before sharing."
+            : query.reason === "no_recipients"
+              ? "No email addresses found for the selected recipients."
+              : query.reason === "send_failed"
+                ? "Could not send the timeplan email. Check email settings."
+                : "Could not share the timeplan."}
         </div>
       ) : null}
 
@@ -376,6 +404,45 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
       </section>
 
       <section className="soft-panel p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Timeplan</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Schedule for the wedding day. Add times, actions, locations, and notes, then share with clients or crew.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <form action={shareTimeplanAction}>
+              <input type="hidden" name="projectId" value={project.id} />
+              <input type="hidden" name="audience" value="client" />
+              <button
+                type="submit"
+                className="h-9 rounded-full border border-border px-4 text-sm hover:border-foreground/30"
+              >
+                Share with clients
+              </button>
+            </form>
+            <form action={shareTimeplanAction}>
+              <input type="hidden" name="projectId" value={project.id} />
+              <input type="hidden" name="audience" value="crew" />
+              <button
+                type="submit"
+                className="h-9 rounded-full border border-border px-4 text-sm hover:border-foreground/30"
+              >
+                Share with crew
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <ProjectTimeplanFields formId="edit-wedding-form" initialTimeplan={project.timeplan} />
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          Timeplan changes are saved with the project (autosave or Save). Share buttons email the currently saved timeplan.
+        </p>
+      </section>
+
+      <section className="soft-panel p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
           <ul className="space-y-3">
             {project.crewAssignments.map((assignment) => (
@@ -484,7 +551,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
           </form>
       </section>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        <ProjectAutosave formId="edit-wedding-form" />
         <ProjectSaveButton formId="edit-wedding-form" />
       </div>
     </div>

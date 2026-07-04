@@ -66,6 +66,13 @@ export type ProjectPayment = {
   note?: string;
 };
 
+export type TimeplanItem = {
+  time: string;
+  action: string;
+  location?: string | null;
+  notes?: string | null;
+};
+
 export type Project = {
   id: string;
   title: string;
@@ -81,6 +88,7 @@ export type Project = {
   amountPaid: number;
   amountRemaining: number;
   payments: ProjectPayment[];
+  timeplan: TimeplanItem[];
   notes?: string | null;
   coverImageUrl?: string | null;
   clients: Client[];

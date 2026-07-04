@@ -45,6 +45,38 @@ function parsePayments(formData: FormData): Array<{ date: string; amount: number
   return payments;
 }
 
+function parseTimeplan(
+  formData: FormData,
+): Array<{ time: string; action: string; location: string | null; notes: string | null }> {
+  const times = formData.getAll("timeplanTime").map((value) => String(value || "").trim());
+  const actions = formData.getAll("timeplanAction").map((value) => String(value || "").trim());
+  const locations = formData.getAll("timeplanLocation").map((value) => String(value || "").trim());
+  const notes = formData.getAll("timeplanNotes").map((value) => String(value || "").trim());
+
+  const maxLen = Math.max(times.length, actions.length, locations.length, notes.length);
+  const items: Array<{ time: string; action: string; location: string | null; notes: string | null }> = [];
+
+  for (let index = 0; index < maxLen; index += 1) {
+    const time = times[index] || "";
+    const action = actions[index] || "";
+    const location = locations[index] || "";
+    const note = notes[index] || "";
+
+    if (!time && !action && !location && !note) {
+      continue;
+    }
+
+    items.push({
+      time,
+      action,
+      location: location || null,
+      notes: note || null,
+    });
+  }
+
+  return items;
+}
+
 function stripMissingOptionalColumns(
   payload: Record<string, unknown>,
   message: string,
@@ -53,7 +85,7 @@ function stripMissingOptionalColumns(
   const next = { ...payload };
   let changed = false;
 
-  ["referral", "offer_amount", "payments_json"].forEach((column) => {
+  ["referral", "offer_amount", "payments_json", "timeplan_json"].forEach((column) => {
     if (lower.includes(column) && column in next) {
       delete next[column];
       changed = true;
@@ -371,11 +403,68 @@ export async function updateProjectAction(formData: FormData) {
     return;
   }
 
-  const title = String(formData.get("title") || "").trim();
   const rawDate = String(formData.get("eventDate") || "").trim();
   const eventDate = normalizeEventDate(rawDate);
   if (!eventDate) {
     redirect(`/admin/projects/${projectId}?save=error&reason=date`);
+  }
+
+  const result = await persistProjectFromForm(formData);
+
+  if (!result.ok) {
+    redirect(
+      `/admin/projects/${projectId}?save=error&reason=server&detail=${encodeURIComponent(result.detail || "")}`,
+    );
+  }
+
+  revalidatePath(`/admin/projects/${projectId}`);
+  revalidatePath("/admin/projects");
+  revalidatePath("/admin");
+  redirect(`/admin/projects/${projectId}?save=ok`);
+}
+
+export async function autosaveProjectAction(
+  formData: FormData,
+): Promise<{ ok: boolean; reason?: string; detail?: string }> {
+  if (!hasSupabaseEnv) {
+    return { ok: false, reason: "demo" };
+  }
+
+  const projectId = String(formData.get("projectId") || "").trim();
+  if (!projectId) {
+    return { ok: false, reason: "missing_project" };
+  }
+
+  const rawDate = String(formData.get("eventDate") || "").trim();
+  const eventDate = normalizeEventDate(rawDate);
+  if (!eventDate) {
+    return { ok: false, reason: "date" };
+  }
+
+  const result = await persistProjectFromForm(formData);
+  if (!result.ok) {
+    return { ok: false, reason: "server", detail: result.detail };
+  }
+
+  revalidatePath(`/admin/projects/${projectId}`);
+  revalidatePath("/admin/projects");
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+async function persistProjectFromForm(
+  formData: FormData,
+): Promise<{ ok: true } | { ok: false; detail?: string }> {
+  const projectId = String(formData.get("projectId") || "").trim();
+  if (!projectId) {
+    return { ok: false, detail: "Missing project id" };
+  }
+
+  const title = String(formData.get("title") || "").trim();
+  const rawDate = String(formData.get("eventDate") || "").trim();
+  const eventDate = normalizeEventDate(rawDate);
+  if (!eventDate) {
+    return { ok: false, detail: "Invalid date" };
   }
   const fallbackProjectType = String(formData.get("projectType") || "").trim();
   const parsedFallback = parseLegacyProjectType(fallbackProjectType || "Wedding");
@@ -391,6 +480,7 @@ export async function updateProjectAction(formData: FormData) {
   const notes = String(formData.get("notes") || "").trim() || null;
   const offerAmount = toNumber(formData.get("offerAmount")) || toNumber(formData.get("budgetTotal"));
   const payments = parsePayments(formData);
+  const timeplan = parseTimeplan(formData);
   const amountPaidInput = toNumber(formData.get("amountPaid"));
   const paymentsTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
   const amountPaid = payments.length > 0 ? paymentsTotal : amountPaidInput;
@@ -399,7 +489,7 @@ export async function updateProjectAction(formData: FormData) {
 
   const admin = createAdminClient();
   if (!admin) {
-    return;
+    return { ok: false, detail: "No admin client" };
   }
 
   const payload: Record<string, unknown> = {
@@ -414,13 +504,14 @@ export async function updateProjectAction(formData: FormData) {
     amount_paid: amountPaid,
     amount_remaining: amountRemaining,
     payments_json: payments,
+    timeplan_json: timeplan,
     notes,
   };
 
   let updatePayload = { ...payload };
   let error: { message: string } | null = null;
 
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     const result = await admin
       .from("projects")
       .update(updatePayload)
@@ -439,22 +530,110 @@ export async function updateProjectAction(formData: FormData) {
   }
 
   if (error) {
-    console.error("updateProjectAction failed", {
+    console.error("persistProjectFromForm failed", {
       projectId,
       message: error.message,
       status,
       eventDate,
       projectType,
     });
-    redirect(
-      `/admin/projects/${projectId}?save=error&reason=server&detail=${encodeURIComponent(error.message)}`,
-    );
+    return { ok: false, detail: error.message };
   }
 
-  revalidatePath(`/admin/projects/${projectId}`);
-  revalidatePath("/admin/projects");
-  revalidatePath("/admin");
-  redirect(`/admin/projects/${projectId}?save=ok`);
+  return { ok: true };
+}
+
+export async function shareTimeplanAction(formData: FormData) {
+  const projectId = String(formData.get("projectId") || "").trim();
+  const audience = String(formData.get("audience") || "").trim() === "crew" ? "crew" : "client";
+
+  if (!hasSupabaseEnv || !projectId) {
+    redirect(`/admin/projects/${projectId}?share=error&reason=unavailable`);
+  }
+
+  const { getProjectById, getCrewMembers } = await import("@/lib/data");
+  const { buildTimeplanEmail } = await import("@/lib/timeplan-notifications");
+  const { sendGalleryNotificationEmail } = await import("@/lib/gallery-notifications");
+
+  const project = await getProjectById(projectId);
+  if (!project) {
+    redirect(`/admin/projects/${projectId}?share=error&reason=not_found`);
+  }
+
+  if (!project.timeplan || project.timeplan.length === 0) {
+    redirect(`/admin/projects/${projectId}?share=error&reason=empty`);
+  }
+
+  const recipients: Array<{ email: string; name: string }> = [];
+
+  if (audience === "client") {
+    project.clients.forEach((client) => {
+      const email = (client.email || "").trim();
+      if (email) {
+        recipients.push({ email, name: client.fullName });
+      }
+    });
+  } else {
+    const assignedIds = new Set(project.crewAssignments.map((assignment) => assignment.crewMemberId));
+    const crewMembers = await getCrewMembers();
+    const emailPattern = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+
+    project.crewAssignments.forEach((assignment) => {
+      const contact = (assignment.crewMember.contactInfo || "").trim();
+      const match = contact.match(emailPattern);
+      if (match) {
+        recipients.push({ email: match[0], name: assignment.crewMember.fullName });
+      }
+    });
+
+    crewMembers.forEach((member) => {
+      if (!assignedIds.has(member.id)) return;
+      const contact = (member.contactInfo || "").trim();
+      const match = contact.match(emailPattern);
+      if (match && !recipients.some((recipient) => recipient.email === match[0])) {
+        recipients.push({ email: match[0], name: member.fullName });
+      }
+    });
+  }
+
+  const uniqueRecipients = Array.from(
+    new Map(recipients.map((recipient) => [recipient.email.toLowerCase(), recipient])).values(),
+  );
+
+  if (uniqueRecipients.length === 0) {
+    redirect(`/admin/projects/${projectId}?share=error&reason=no_recipients`);
+  }
+
+  let sentCount = 0;
+  for (const recipient of uniqueRecipients) {
+    const email = buildTimeplanEmail({
+      audience,
+      projectTitle: project.title,
+      eventDate: project.eventDate,
+      items: project.timeplan,
+      recipientName: recipient.name,
+    });
+
+    try {
+      const result = await sendGalleryNotificationEmail({
+        to: recipient.email,
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+      });
+      if (result.sent) {
+        sentCount += 1;
+      }
+    } catch (sendError) {
+      console.error("shareTimeplanAction send failed", { projectId, email: recipient.email, sendError });
+    }
+  }
+
+  if (sentCount === 0) {
+    redirect(`/admin/projects/${projectId}?share=error&reason=send_failed`);
+  }
+
+  redirect(`/admin/projects/${projectId}?share=ok&audience=${audience}&count=${sentCount}`);
 }
 
 export async function updateClientAction(formData: FormData) {
