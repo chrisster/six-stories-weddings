@@ -1,38 +1,50 @@
 import { PostProductionBoard, type BoardTask } from "@/components/admin/post-production-board";
-import { getCrewMembers, getProjects } from "@/lib/data";
+import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getAssignedProjectIdsForEmail, getCrewMembers, getProjects } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function TasksPage() {
   const [projects, crewMembers] = await Promise.all([getProjects(), getCrewMembers()]);
+  const role = await getCurrentUserRole();
+  const isCrew = role === "crew";
+
+  let visibleProjects = projects.filter(
+    (project) => project.status !== "completed" && project.status !== "cancelled",
+  );
+
+  if (isCrew) {
+    const user = await getCurrentUser();
+    const assignedIds = new Set(await getAssignedProjectIdsForEmail(user?.email || ""));
+    visibleProjects = visibleProjects.filter((project) => assignedIds.has(project.id));
+  }
 
   const crewNameById = new Map(crewMembers.map((member) => [member.id, member.fullName]));
 
-  const tasks: BoardTask[] = projects
-    .filter((project) => project.status !== "completed" && project.status !== "cancelled")
-    .flatMap((project) =>
-      project.tasks
-        .filter((task) => task.kind === "photo_edit" || task.kind === "video_edit")
-        .map((task) => ({
-          id: task.id,
-          title: task.title,
-          status: task.status,
-          kind: (task.kind as "photo_edit" | "video_edit" | null) ?? null,
-          dueDate: task.dueDate ?? null,
-          assigneeId: task.assigneeId ?? null,
-          assigneeName: task.assigneeId
-            ? project.crewAssignments.find((a) => a.crewMemberId === task.assigneeId)?.crewMember
-                .fullName ||
-              crewNameById.get(task.assigneeId) ||
-              null
-            : null,
-          projectId: project.id,
-          projectTitle: project.title,
-        })),
-    );
+  const tasks: BoardTask[] = visibleProjects.flatMap((project) =>
+    project.tasks
+      .filter((task) => task.kind === "photo_edit" || task.kind === "video_edit")
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        kind: (task.kind as "photo_edit" | "video_edit" | null) ?? null,
+        dueDate: task.dueDate ?? null,
+        assigneeId: task.assigneeId ?? null,
+        assigneeName: task.assigneeId
+          ? project.crewAssignments.find((a) => a.crewMemberId === task.assigneeId)?.crewMember
+              .fullName ||
+            crewNameById.get(task.assigneeId) ||
+            null
+          : null,
+        projectId: project.id,
+        projectTitle: project.title,
+      })),
+  );
 
   const openTasks = tasks.filter((task) => task.status !== "done").length;
   const assignees = crewMembers.map((member) => ({ id: member.id, name: member.fullName }));
+  const projectOptions = visibleProjects.map((project) => ({ id: project.id, title: project.title }));
 
   return (
     <div className="space-y-6">
@@ -50,13 +62,12 @@ export default async function TasksPage() {
         </span>
       </header>
 
-      {tasks.length === 0 ? (
-        <div className="rounded-2xl border border-border/70 bg-white p-10 text-center text-sm text-muted-foreground">
-          No editing tasks yet. Assign an editor to a project to create photo or video edit tasks.
-        </div>
-      ) : (
-        <PostProductionBoard tasks={tasks} assignees={assignees} />
-      )}
+      <PostProductionBoard
+        tasks={tasks}
+        assignees={assignees}
+        projects={projectOptions}
+        canManage={!isCrew}
+      />
     </div>
   );
 }

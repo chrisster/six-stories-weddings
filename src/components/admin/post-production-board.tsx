@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { deleteTaskAction, updateTaskAction } from "@/app/admin/tasks/actions";
+import { createEditingTaskAction, deleteTaskAction, updateTaskAction } from "@/app/admin/tasks/actions";
 
 export type BoardTask = {
   id: string;
@@ -19,10 +19,13 @@ export type BoardTask = {
 };
 
 type Assignee = { id: string; name: string };
+type ProjectOption = { id: string; title: string };
 
 type PostProductionBoardProps = {
   tasks: BoardTask[];
   assignees: Assignee[];
+  projects: ProjectOption[];
+  canManage: boolean;
 };
 
 const STATUS_ORDER = ["backlog", "stand_by", "in_progress", "todo", "review", "done"] as const;
@@ -61,10 +64,11 @@ function isOverdue(due: string | null) {
   return date.getTime() < Date.now();
 }
 
-export function PostProductionBoard({ tasks, assignees }: PostProductionBoardProps) {
+export function PostProductionBoard({ tasks, assignees, projects, canManage }: PostProductionBoardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [showAdd, setShowAdd] = useState(false);
 
   const grouped = useMemo(() => {
     const map = new Map<string, BoardTask[]>();
@@ -98,8 +102,66 @@ export function PostProductionBoard({ tasks, assignees }: PostProductionBoardPro
     });
   };
 
+  const createTask = (formData: FormData) => {
+    startTransition(async () => {
+      await createEditingTaskAction(formData);
+      setShowAdd(false);
+      router.refresh();
+    });
+  };
+
   return (
     <div className={`space-y-6 ${isPending ? "opacity-70" : ""}`}>
+      {canManage ? (
+        <div className="rounded-2xl border border-border/70 bg-white p-3">
+          {!showAdd ? (
+            <button
+              type="button"
+              onClick={() => setShowAdd(true)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition hover:opacity-90"
+            >
+              + Add editing task
+            </button>
+          ) : (
+            <form action={createTask} className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+              <select name="projectId" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm xl:col-span-2">
+                <option value="">Select project</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.title}
+                  </option>
+                ))}
+              </select>
+              <select name="kind" required defaultValue="video_edit" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+                <option value="video_edit">Video edit</option>
+                <option value="photo_edit">Photo edit</option>
+              </select>
+              <select name="assigneeId" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+                <option value="">Assignee</option>
+                {assignees.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+              <input name="dueDate" type="date" className="h-10 rounded-xl border border-border px-3 text-sm" />
+              <div className="flex gap-2">
+                <button type="submit" className="h-10 flex-1 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAdd(false)}
+                  className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/40"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      ) : null}
+
       {STATUS_ORDER.map((status) => {
         const items = grouped.get(status) || [];
         if (items.length === 0) return null;
@@ -196,14 +258,18 @@ export function PostProductionBoard({ tasks, assignees }: PostProductionBoardPro
                         </select>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => remove(task.id)}
-                        className="h-8 w-8 justify-self-end rounded-lg border border-border text-sm text-muted-foreground transition hover:border-red-200 hover:text-red-600"
-                        aria-label="Delete task"
-                      >
-                        ×
-                      </button>
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => remove(task.id)}
+                          className="h-8 w-8 justify-self-end rounded-lg border border-border text-sm text-muted-foreground transition hover:border-red-200 hover:text-red-600"
+                          aria-label="Delete task"
+                        >
+                          ×
+                        </button>
+                      ) : (
+                        <span />
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -212,6 +278,12 @@ export function PostProductionBoard({ tasks, assignees }: PostProductionBoardPro
           </section>
         );
       })}
+
+      {tasks.length === 0 ? (
+        <div className="rounded-2xl border border-border/70 bg-white p-10 text-center text-sm text-muted-foreground">
+          No editing tasks yet. Assign an editor to a project — or add one manually above.
+        </div>
+      ) : null}
     </div>
   );
 }

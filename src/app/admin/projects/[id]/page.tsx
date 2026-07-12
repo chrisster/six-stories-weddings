@@ -512,7 +512,19 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                   <option key={m.id} value={m.id}>{m.fullName} ({m.roleType})</option>
                 ))}
               </select>
-              <input name="assignmentRole" placeholder="Role on this project" className="h-10 rounded-xl border border-border px-3 text-sm" />
+              <select name="assignmentRole" defaultValue="" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+                <option value="" disabled>Role on this project</option>
+                <option value="Photographer">Photographer</option>
+                <option value="Second Photographer">Second Photographer</option>
+                <option value="Videographer">Videographer</option>
+                <option value="Second Videographer">Second Videographer</option>
+                <option value="Editor">Editor</option>
+                <option value="Video Editor">Video Editor</option>
+                <option value="Assistant">Assistant</option>
+                <option value="Drone Operator">Drone Operator</option>
+                <option value="Coordinator">Coordinator</option>
+                <option value="Partner">Partner</option>
+              </select>
               <select name="participantType" defaultValue="inhouse" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
                 <option value="inhouse">In-house</option>
                 <option value="freelancer">Freelancer</option>
