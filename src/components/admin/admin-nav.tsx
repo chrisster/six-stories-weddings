@@ -8,26 +8,37 @@ import {
   ContactRound,
   FolderKanban,
   ImageIcon,
+  Users,
   Wallet,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+type NavRole = "admin" | "crew" | null | undefined;
+
 const links = [
   { href: "/admin", label: "Projects", icon: FolderKanban },
-  { href: "/admin/contacts", label: "Contacts", icon: ContactRound },
+  { href: "/admin/contacts", label: "Contacts", icon: ContactRound, hideForCrew: true },
   { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/admin/galleries", label: "Galleries", icon: ImageIcon },
-  { href: "/admin/financials", label: "Financials", icon: Wallet },
-];
+  { href: "/admin/financials", label: "Financials", icon: Wallet, hideForCrew: true },
+  { href: "/admin/team", label: "Team", icon: Users, adminOnly: true },
+] as const;
 
-export function AdminNav() {
+export function AdminNav({ role }: { role?: NavRole }) {
   const pathname = usePathname();
+  const isCrew = role === "crew";
+
+  const visibleLinks = links.filter((link) => {
+    if (isCrew && "hideForCrew" in link && link.hideForCrew) return false;
+    if (isCrew && "adminOnly" in link && link.adminOnly) return false;
+    return true;
+  });
 
   return (
     <nav className="flex flex-col gap-1.5">
-      {links.map((link) => {
+      {visibleLinks.map((link) => {
         const isActive =
           link.href === "/admin"
             ? pathname === "/admin" || (pathname.startsWith("/admin/projects/") && !pathname.startsWith("/admin/projects/new"))

@@ -18,6 +18,7 @@ import { ProjectPaymentsFields } from "@/components/admin/project-payments-field
 import { ProjectSaveButton } from "@/components/admin/project-save-button";
 import { ProjectTimeplanFields } from "@/components/admin/project-timeplan-fields";
 import { getClientPortalAccountsByEmails, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
+import { getCurrentUserRole } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
 
@@ -103,6 +104,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
 
   const [galleries, crewMembers] = await Promise.all([getGalleries(), getCrewMembers()]);
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
+  const role = await getCurrentUserRole();
+  const isCrew = role === "crew";
   const portalAccounts = await getClientPortalAccountsByEmails(
     project.clients.map((client) => client.email || "").filter(Boolean),
   );
@@ -369,39 +372,41 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
         </form>
       </section>
 
-      <section className="soft-panel p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Financials</h3>
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-border/80 bg-zinc-50 px-3 py-1 text-xs text-muted-foreground">
-              Paid {currency(displayedAmountPaid)}
-            </span>
-            <span className="rounded-full border border-border/80 bg-zinc-50 px-3 py-1 text-xs text-muted-foreground">
-              Remaining {currency(displayedRemaining)}
-            </span>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Offer</label>
-            <input
-              form="edit-wedding-form"
-              name="offerAmount"
-              type="number"
-              min="0"
-              step="0.01"
-              defaultValue={project.offerAmount}
-              className="h-10 w-full rounded-xl border border-border px-3 text-sm"
-            />
+      {!isCrew ? (
+        <section className="soft-panel p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Financials</h3>
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-border/80 bg-zinc-50 px-3 py-1 text-xs text-muted-foreground">
+                Paid {currency(displayedAmountPaid)}
+              </span>
+              <span className="rounded-full border border-border/80 bg-zinc-50 px-3 py-1 text-xs text-muted-foreground">
+                Remaining {currency(displayedRemaining)}
+              </span>
+            </div>
           </div>
 
-          <div className="sm:col-span-2">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Payments</p>
-            <ProjectPaymentsFields formId="edit-wedding-form" initialPayments={project.payments} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Offer</label>
+              <input
+                form="edit-wedding-form"
+                name="offerAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                defaultValue={project.offerAmount}
+                className="h-10 w-full rounded-xl border border-border px-3 text-sm"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Payments</p>
+              <ProjectPaymentsFields formId="edit-wedding-form" initialPayments={project.payments} />
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <section className="soft-panel p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

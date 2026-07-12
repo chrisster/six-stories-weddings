@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
+import { getCurrentUserRole } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function toNumber(value: FormDataEntryValue | null) {
@@ -507,6 +508,16 @@ async function persistProjectFromForm(
     timeplan_json: timeplan,
     notes,
   };
+
+  // Crew members must not be able to change financial fields.
+  const role = await getCurrentUserRole();
+  if (role === "crew") {
+    delete payload.offer_amount;
+    delete payload.budget_total;
+    delete payload.amount_paid;
+    delete payload.amount_remaining;
+    delete payload.payments_json;
+  }
 
   let updatePayload = { ...payload };
   let error: { message: string } | null = null;

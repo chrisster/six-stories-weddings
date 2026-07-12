@@ -1,5 +1,6 @@
 import { AdminNav } from "@/components/admin/admin-nav";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { getCurrentUserRole } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 
 export default async function AdminLayout({
@@ -7,12 +8,14 @@ export default async function AdminLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const role = hasSupabaseEnv ? await getCurrentUserRole() : "admin";
+
   return (
     <div className="container-editorial py-6 sm:py-8">
       <div className="grid gap-6 lg:grid-cols-[210px_minmax(0,1fr)]">
         <aside className="admin-surface h-fit p-4 lg:sticky lg:top-6">
-          <p className="quiet-label mb-3">Studio</p>
-          <AdminNav />
+          <p className="quiet-label mb-3">Studio{role === "crew" ? " · Crew" : ""}</p>
+          <AdminNav role={role} />
           {hasSupabaseEnv ? (
             <div className="mt-4 border-t border-border/70 pt-3">
               <LogoutButton />

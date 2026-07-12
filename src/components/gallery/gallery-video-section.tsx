@@ -24,6 +24,8 @@ type GalleryVideoSectionProps = {
   allowDownloads: boolean;
   onDownload: (video: GalleryVideoAsset) => void;
   onShare: (assetId: string) => void;
+  canComment?: boolean;
+  commenterName?: string | null;
   sectionRef?: (element: HTMLElement | null) => void;
 };
 
@@ -45,6 +47,8 @@ export function GalleryVideoSection({
   allowDownloads,
   onDownload,
   onShare,
+  canComment = false,
+  commenterName = null,
   sectionRef,
 }: GalleryVideoSectionProps) {
   if (videos.length === 0) return null;
@@ -67,6 +71,8 @@ export function GalleryVideoSection({
             allowDownloads={allowDownloads}
             onDownload={onDownload}
             onShare={onShare}
+            canComment={canComment}
+            commenterName={commenterName}
           />
         ))}
       </div>
@@ -80,29 +86,37 @@ function GalleryVideoItem({
   allowDownloads,
   onDownload,
   onShare,
+  canComment,
+  commenterName,
 }: {
   video: GalleryVideoAsset;
   gallerySlug: string;
   allowDownloads: boolean;
   onDownload: (video: GalleryVideoAsset) => void;
   onShare: (assetId: string) => void;
+  canComment: boolean;
+  commenterName: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [comments, setComments] = useState<VideoComment[]>([]);
-  const [guestName, setGuestName] = useState("");
+  const [guestName, setGuestName] = useState(commenterName || "");
   const [body, setBody] = useState("");
   const [pendingTs, setPendingTs] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    if (commenterName) {
+      setGuestName(commenterName);
+      return;
+    }
     try {
       const savedName = localStorage.getItem("ss_guest_name") || "";
       if (savedName) setGuestName(savedName);
     } catch {
       // ignore
     }
-  }, []);
+  }, [commenterName]);
 
   const loadComments = useCallback(async () => {
     try {
@@ -255,51 +269,65 @@ function GalleryVideoItem({
         )}
 
         <div className="space-y-2 rounded-xl border border-border/70 bg-white p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={captureCurrentTime}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs transition hover:border-foreground/30"
-            >
-              {pendingTs != null ? `At ${formatTimestamp(pendingTs)}` : "Comment at current time"}
-            </button>
-            {pendingTs != null ? (
-              <button
-                type="button"
-                onClick={() => setPendingTs(null)}
-                className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          {!canComment ? (
+            <p className="text-sm text-muted-foreground">
+              <a
+                href="/portal/login"
+                className="font-medium text-foreground underline underline-offset-4"
               >
-                Clear time
-              </button>
-            ) : null}
-          </div>
+                Sign in
+              </a>{" "}
+              to leave a comment on this film.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={captureCurrentTime}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs transition hover:border-foreground/30"
+                >
+                  {pendingTs != null ? `At ${formatTimestamp(pendingTs)}` : "Comment at current time"}
+                </button>
+                {pendingTs != null ? (
+                  <button
+                    type="button"
+                    onClick={() => setPendingTs(null)}
+                    className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                  >
+                    Clear time
+                  </button>
+                ) : null}
+              </div>
 
-          <input
-            type="text"
-            value={guestName}
-            onChange={(event) => setGuestName(event.target.value)}
-            placeholder="Your name (optional)"
-            className="h-10 w-full rounded-xl border border-border px-3 text-sm"
-          />
+              <input
+                type="text"
+                value={guestName}
+                onChange={(event) => setGuestName(event.target.value)}
+                placeholder="Your name (optional)"
+                className="h-10 w-full rounded-xl border border-border px-3 text-sm"
+              />
 
-          <textarea
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            rows={2}
-            placeholder="Leave a comment…"
-            className="w-full rounded-xl border border-border px-3 py-2 text-sm"
-          />
+              <textarea
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                rows={2}
+                placeholder="Leave a comment…"
+                className="w-full rounded-xl border border-border px-3 py-2 text-sm"
+              />
 
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={submitComment}
-              disabled={submitting || body.trim().length === 0}
-              className="h-9 rounded-full border border-foreground bg-foreground px-4 text-sm text-background transition hover:opacity-90 disabled:opacity-40"
-            >
-              {submitting ? "Posting…" : "Post comment"}
-            </button>
-          </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={submitComment}
+                  disabled={submitting || body.trim().length === 0}
+                  className="h-9 rounded-full border border-foreground bg-foreground px-4 text-sm text-background transition hover:opacity-90 disabled:opacity-40"
+                >
+                  {submitting ? "Posting…" : "Post comment"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </article>

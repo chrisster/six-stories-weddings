@@ -35,6 +35,8 @@ type PublicGalleryProps = {
   coverUrl?: string | null;
   studioName?: string;
   sectionOrder?: string[];
+  canComment?: boolean;
+  commenterName?: string | null;
 };
 
 type GroupedSection = {
@@ -64,6 +66,8 @@ export function PublicGallery({
   coverUrl,
   studioName = "Six Stories",
   sectionOrder = [],
+  canComment = false,
+  commenterName = null,
 }: PublicGalleryProps) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -773,6 +777,8 @@ export function PublicGallery({
           allowDownloads={allowDownloads}
           onDownload={downloadVideo}
           onShare={shareAsset}
+          canComment={canComment}
+          commenterName={commenterName}
           sectionRef={(element) => {
             sectionRefs.current["Films"] = element;
           }}

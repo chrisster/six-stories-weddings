@@ -1,4 +1,5 @@
 import { getProjects } from "@/lib/data";
+import { requireAdminRole } from "@/lib/auth";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type FinancialsPageProps = {
@@ -43,6 +44,7 @@ const periodOptions = [
 const inactiveStatuses = new Set(["cancelled", "declined"]);
 
 export default async function FinancialsPage({ searchParams }: FinancialsPageProps) {
+  await requireAdminRole();
   const params = await searchParams;
   const period = params.period || "all";
 

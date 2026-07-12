@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getPublicGalleryBySlug } from "@/lib/data";
+import { getCurrentUser } from "@/lib/auth";
+import { getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import { readPortalSession } from "@/lib/portal-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 async function resolveGallery(slug: string) {
@@ -83,6 +85,17 @@ export async function POST(
     return NextResponse.json({ error: "Gallery not found" }, { status: 404 });
   }
 
+  // Comments are restricted to logged-in clients (portal) or studio admins.
+  const adminUser = await getCurrentUser();
+  const portalSession = await readPortalSession();
+  const hasPortalAccess = portalSession
+    ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
+    : false;
+
+  if (!adminUser && !hasPortalAccess) {
+    return NextResponse.json({ error: "Please sign in to comment." }, { status: 401 });
+  }
+
   // Ensure the asset belongs to this gallery.
   const asset = detail.mediaAssets.find((item) => item.id === mediaAssetId);
   if (!asset) {
@@ -94,12 +107,18 @@ export async function POST(
     return NextResponse.json({ error: "Unavailable" }, { status: 503 });
   }
 
+  const identityName =
+    guestName ||
+    (portalSession?.email ? portalSession.email.split("@")[0] : "") ||
+    (adminUser?.email ? "Six Stories Studio" : "") ||
+    "Guest";
+
   const { data, error } = await admin
     .from("gallery_comments")
     .insert({
       gallery_id: detail.gallery.id,
       media_asset_id: mediaAssetId,
-      guest_name: guestName || null,
+      guest_name: identityName,
       comment_body: commentBody,
       timestamp_seconds: timestampSeconds,
     })

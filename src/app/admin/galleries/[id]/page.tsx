@@ -54,6 +54,9 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
 
   const guestLinks = await getGuestLinksByGallery(detail.gallery.id);
 
+  const photoMedia = mediaWithUrl.filter((asset) => asset.mediaType !== "video");
+  const videoMedia = mediaWithUrl.filter((asset) => asset.mediaType === "video");
+
   return (
     <div className="space-y-6">
       <section className="admin-surface overflow-hidden">
@@ -265,19 +268,37 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
       </section>
 
       <section className="admin-surface p-5">
-        <h3 className="title-cinematic text-xl font-semibold">Files</h3>
+        <h3 className="title-cinematic text-xl font-semibold">Photos</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Upload, organize, set covers, and manage all media for this gallery.
+          Upload, organize, set covers, and manage the photos for this gallery.
         </p>
 
         <div className="mt-5 border-t border-border/70 pt-5">
-          <p className="quiet-label mb-3">Upload Media</p>
-          <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} />
+          <p className="quiet-label mb-3">Upload Photos</p>
+          <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} accept="image/*" />
         </div>
 
         <div className="mt-5 border-t border-border/70 pt-5">
-          <p className="quiet-label mb-3">Media Library</p>
-          <MediaManager media={mediaWithUrl} sections={detail.sections} galleryId={detail.gallery.id} />
+          <p className="quiet-label mb-3">Photo Library</p>
+          <MediaManager media={photoMedia} sections={detail.sections} galleryId={detail.gallery.id} />
+        </div>
+      </section>
+
+      <section className="admin-surface p-5">
+        <h3 className="title-cinematic text-xl font-semibold">Videos</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Upload films for this gallery. Videos appear in a dedicated section on the client gallery
+          with a player and timestamped comments.
+        </p>
+
+        <div className="mt-5 border-t border-border/70 pt-5">
+          <p className="quiet-label mb-3">Upload Videos</p>
+          <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} accept="video/*" />
+        </div>
+
+        <div className="mt-5 border-t border-border/70 pt-5">
+          <p className="quiet-label mb-3">Video Library</p>
+          <MediaManager media={videoMedia} sections={detail.sections} galleryId={detail.gallery.id} />
         </div>
       </section>
     </div>

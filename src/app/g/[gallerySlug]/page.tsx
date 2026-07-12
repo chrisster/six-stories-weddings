@@ -61,6 +61,13 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
 
   const cover = media.find((asset) => asset.id === detail.gallery.coverMediaId) || media[0];
 
+  const canComment = Boolean(adminUser || hasPortalAccess);
+  const commenterName = portalSession?.email
+    ? portalSession.email.split("@")[0]
+    : adminUser?.email
+      ? "Six Stories Studio"
+      : null;
+
   return (
     <main className="min-h-screen bg-white">
       <PublicGallery
@@ -72,6 +79,8 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
         eventDate={detail.project.eventDate}
         coverUrl={cover && cover.mediaType === "photo" ? cover.url : null}
         sectionOrder={detail.sections.map((section) => section.name)}
+        canComment={canComment}
+        commenterName={commenterName}
       />
     </main>
   );

@@ -17,6 +17,8 @@ type MediaManagerProps = {
 
 type SortOption = "date" | "name" | "section";
 
+const PAGE_SIZE = 24;
+
 export function MediaManager({ media, sections, galleryId }: MediaManagerProps) {
   const router = useRouter();
   const [mediaState, setMediaState] = useState(media);
@@ -24,6 +26,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   const [sortBy, setSortBy] = useState<SortOption>("date");
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>("");
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
 
   useEffect(() => {
     setMediaState(media);
@@ -174,11 +177,16 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm("Delete all photos in this gallery?")) return;
+    if (!confirm("Delete all items shown here?")) return;
+
+    // Scope the deletion to the media currently managed here (photos or videos)
+    // so a filtered manager never deletes the other media type.
+    const ids = mediaState.map((item) => item.id);
+    if (ids.length === 0) return;
 
     const formData = new FormData();
     formData.append("galleryId", galleryId);
-    formData.append("deleteAll", "true");
+    formData.append("mediaIds", ids.join(","));
 
     await bulkDeleteMediaAction(formData);
     setMediaState([]);
@@ -283,6 +291,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
       <div className="space-y-8">
         {[...groupedAndSorted.entries()].map(([sectionName, sectionMedia]) => {
           const sectionId = sections.find((s) => sectionMap.get(s.id) === sectionName)?.id;
+          const visibleCount = visibleBySection[sectionName] ?? PAGE_SIZE;
+          const visibleMedia = sectionMedia.slice(0, visibleCount);
+          const remaining = sectionMedia.length - visibleMedia.length;
 
           return (
             <div
@@ -306,7 +317,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
               </div>
 
               <div className="columns-2 gap-3 sm:columns-3 xl:columns-4 [&>*]:mb-3">
-                {sectionMedia.map((asset) => {
+                {visibleMedia.map((asset) => {
                   const selected = selectedIds.has(asset.id);
                   return (
                     <div
@@ -358,6 +369,23 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                   );
                 })}
               </div>
+
+              {remaining > 0 ? (
+                <div className="flex justify-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleBySection((current) => ({
+                        ...current,
+                        [sectionName]: visibleCount + PAGE_SIZE,
+                      }))
+                    }
+                    className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
+                  >
+                    Load more ({remaining} remaining)
+                  </button>
+                </div>
+              ) : null}
             </div>
           );
         })}

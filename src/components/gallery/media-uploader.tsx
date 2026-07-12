@@ -15,9 +15,10 @@ type UploadProgress = {
 type MediaUploaderProps = {
   galleryId: string;
   sections: Array<{ id: string; name: string }>;
+  accept?: string;
 };
 
-export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
+export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" }: MediaUploaderProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -318,7 +319,7 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
+            accept={accept}
             multiple
             onChange={handleFileSelect}
             className="h-10 rounded-xl border border-border bg-white px-3 py-2 text-sm"
