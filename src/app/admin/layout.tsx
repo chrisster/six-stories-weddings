@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { LifeBuoy } from "lucide-react";
 
 import { AdminNav } from "@/components/admin/admin-nav";
 import { LogoutButton } from "@/components/auth/logout-button";
@@ -30,13 +29,6 @@ export default async function AdminLayout({
         </div>
 
         <div className="mt-6 space-y-1 border-t border-border/60 pt-4">
-          <a
-            href="mailto:hello@sixstoriesstudio.com"
-            className="inline-flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-foreground/[0.03] hover:text-foreground"
-          >
-            <LifeBuoy className="size-[18px]" strokeWidth={1.8} />
-            Help
-          </a>
           {hasSupabaseEnv ? (
             <LogoutButton />
           ) : (

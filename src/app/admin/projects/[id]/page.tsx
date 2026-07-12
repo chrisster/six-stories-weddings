@@ -17,8 +17,8 @@ import { ProjectAutosave } from "@/components/admin/project-autosave";
 import { ProjectPaymentsFields } from "@/components/admin/project-payments-fields";
 import { ProjectSaveButton } from "@/components/admin/project-save-button";
 import { ProjectTimeplanFields } from "@/components/admin/project-timeplan-fields";
-import { getClientPortalAccountsByEmails, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
-import { getCurrentUserRole } from "@/lib/auth";
+import { getClientPortalAccountsByEmails, getAssignedProjectIdsForEmail, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
+import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
 
@@ -106,6 +106,15 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
   const role = await getCurrentUserRole();
   const isCrew = role === "crew";
+
+  if (isCrew) {
+    const user = await getCurrentUser();
+    const assignedIds = new Set(await getAssignedProjectIdsForEmail(user?.email || ""));
+    if (!assignedIds.has(project.id)) {
+      notFound();
+    }
+  }
+
   const portalAccounts = await getClientPortalAccountsByEmails(
     project.clients.map((client) => client.email || "").filter(Boolean),
   );
@@ -181,7 +190,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                 Open Gallery Manager
               </Link>
             ) : null}
-            <DeleteProjectButton projectId={project.id} projectTitle={project.title} />
+            {!isCrew ? (
+              <DeleteProjectButton projectId={project.id} projectTitle={project.title} />
+            ) : null}
           </div>
         </div>
 
@@ -190,6 +201,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
       <section className="soft-panel overflow-hidden p-0">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 px-5 py-4">
           <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Clients</h3>
+          {!isCrew ? (
           <details>
             <summary className="cursor-pointer list-none rounded-xl border border-foreground bg-foreground px-3 py-2 text-sm text-background">
               Add client
@@ -206,6 +218,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
               </form>
             </div>
           </details>
+          ) : null}
         </div>
 
         {project.clients.length > 0 ? (
@@ -227,6 +240,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                     </span>
                     <p className="text-sm text-muted-foreground">{client.email || "-"}</p>
                     <p className="text-sm text-muted-foreground">{client.notes || "-"}</p>
+                    {!isCrew ? (
                     <details className="justify-self-start sm:justify-self-end">
                       <summary className="cursor-pointer list-none rounded-xl border border-border bg-white px-3 py-1.5 text-sm text-foreground">
                         Edit
@@ -285,6 +299,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                         )}
                       </div>
                     </details>
+                    ) : null}
                   </div>
                 </li>
               ))}
@@ -298,9 +313,14 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
       <section className="soft-panel p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Details</h3>
-          {!hasSupabaseEnv ? <p className="text-xs text-muted-foreground">Read-only in demo mode.</p> : null}
+          {isCrew ? (
+            <p className="text-xs text-muted-foreground">View only</p>
+          ) : !hasSupabaseEnv ? (
+            <p className="text-xs text-muted-foreground">Read-only in demo mode.</p>
+          ) : null}
         </div>
         <form id="edit-wedding-form" action={updateProjectAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <fieldset disabled={isCrew} className="contents">
           <input type="hidden" name="projectId" value={project.id} />
 
           <div className="space-y-1.5">
@@ -369,6 +389,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
             <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Notes</label>
             <textarea name="notes" defaultValue={project.notes || ""} rows={3} className="w-full rounded-xl border border-border px-3 py-2 text-sm" />
           </div>
+          </fieldset>
         </form>
       </section>
 
@@ -440,7 +461,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
           </div>
         </div>
 
-        <ProjectTimeplanFields formId="edit-wedding-form" initialTimeplan={project.timeplan} />
+        <fieldset disabled={isCrew} className="m-0 border-0 p-0">
+          <ProjectTimeplanFields formId="edit-wedding-form" initialTimeplan={project.timeplan} />
+        </fieldset>
 
         <p className="mt-3 text-xs text-muted-foreground">
           Timeplan changes are saved with the project (autosave or Save). Share buttons email the currently saved timeplan.
@@ -459,26 +482,28 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                     {assignment.assignmentRole} · {assignment.crewMember.roleType} ·{" "}
                     {assignment.participantType === "freelancer" ? (
                       <span className="text-amber-600">
-                        Freelancer{assignment.freelancerFee != null ? ` · ${currency(assignment.freelancerFee)}` : ""}
+                        Freelancer{!isCrew && assignment.freelancerFee != null ? ` · ${currency(assignment.freelancerFee)}` : ""}
                       </span>
                     ) : (
                       "In-house"
                     )}
                     </p>
                   </div>
-                  {(assignment as any).participantType === "freelancer" ? (
+                  {!isCrew && (assignment as any).participantType === "freelancer" ? (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Freelancer{(assignment as any).freelancerBudget ? ` €${(assignment as any).freelancerBudget}` : ""}</span>
                   ) : null}
-                  <form action={removeCrewFromProjectAction}>
-                    <input type="hidden" name="projectId" value={project.id} />
-                    <input type="hidden" name="assignmentId" value={assignment.id} />
-                    <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">Remove</button>
-                  </form>
+                  {!isCrew ? (
+                    <form action={removeCrewFromProjectAction}>
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <input type="hidden" name="assignmentId" value={assignment.id} />
+                      <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">Remove</button>
+                    </form>
+                  ) : null}
                 </div>
               </li>
             ))}
           </ul>
-          {availableCrew.length > 0 ? (
+          {!isCrew && availableCrew.length > 0 ? (
             <form action={addCrewToProjectAction} className="mt-4 grid gap-3 rounded-xl border border-border/80 bg-zinc-50 p-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_180px_180px_auto]">
               <input type="hidden" name="projectId" value={project.id} />
               <select name="crewMemberId" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
@@ -495,11 +520,11 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
               <input name="freelancerFee" type="number" min="0" step="0.01" placeholder="Fee (freelancer)" className="h-10 rounded-xl border border-border px-3 text-sm" />
               <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Add crew</button>
             </form>
-          ) : (
+          ) : !isCrew ? (
             <p className="mt-3 text-xs text-muted-foreground">
-              {crewMembers.length === 0 ? "No crew in roster yet — add them in Contacts." : "All crew members are already assigned."}
+              {crewMembers.length === 0 ? "No crew in roster yet — add them in Team." : "All crew members are already assigned."}
             </p>
-          )}
+          ) : null}
       </section>
 
       <section className="soft-panel p-5">
@@ -557,8 +582,14 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
       </section>
 
       <div className="flex items-center justify-end gap-3">
-        <ProjectAutosave formId="edit-wedding-form" />
-        <ProjectSaveButton formId="edit-wedding-form" />
+        {!isCrew ? (
+          <>
+            <ProjectAutosave formId="edit-wedding-form" />
+            <ProjectSaveButton formId="edit-wedding-form" />
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">You have view-only access to this project.</p>
+        )}
       </div>
     </div>
   );

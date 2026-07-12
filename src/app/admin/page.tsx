@@ -2,8 +2,8 @@ import Link from "next/link";
 import { Images, Plus } from "lucide-react";
 
 import { ProjectsControls } from "@/components/admin/projects-controls";
-import { getCurrentUserRole } from "@/lib/auth";
-import { getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
+import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type AdminPageProps = {
@@ -107,9 +107,17 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const role = await getCurrentUserRole();
   const isCrew = role === "crew";
   const eventStats = await getGalleryEventStats(undefined, periodSince(period));
+
+  let scopedProjects = projects;
+  if (isCrew) {
+    const user = await getCurrentUser();
+    const assignedIds = new Set(await getAssignedProjectIdsForEmail(user?.email || ""));
+    scopedProjects = projects.filter((project) => assignedIds.has(project.id));
+  }
+
   const galleryByProject = new Map(galleries.map((gallery) => [gallery.projectId, gallery]));
 
-  const periodFiltered = projects.filter((project) => isWithinPeriod(project.eventDate, period));
+  const periodFiltered = scopedProjects.filter((project) => isWithinPeriod(project.eventDate, period));
 
   const filtered = periodFiltered
     .filter((project) => {
@@ -169,13 +177,15 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">Create something beautiful.</p>
         </div>
-        <Link
-          href="/admin/projects/new"
-          className="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition hover:opacity-90"
-        >
-          <Plus className="size-4" />
-          Create project
-        </Link>
+        {!isCrew ? (
+          <Link
+            href="/admin/projects/new"
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition hover:opacity-90"
+          >
+            <Plus className="size-4" />
+            Create project
+          </Link>
+        ) : null}
       </header>
 
       <section className="rounded-3xl border border-border/70 bg-white p-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
@@ -195,13 +205,15 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
       <section className="rounded-3xl border border-border/70 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="title-cinematic text-xl font-semibold">Projects</h2>
-          <Link
-            href="/admin/projects/new"
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-4 text-sm transition hover:border-foreground/40"
-          >
-            <Plus className="size-3.5" />
-            Add project
-          </Link>
+          {!isCrew ? (
+            <Link
+              href="/admin/projects/new"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-4 text-sm transition hover:border-foreground/40"
+            >
+              <Plus className="size-3.5" />
+              Add project
+            </Link>
+          ) : null}
         </div>
 
         <ProjectsControls

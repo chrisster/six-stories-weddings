@@ -479,6 +479,83 @@ export async function getGalleryFavorites(
   return { counts, total: (data || []).length, guests: guests.size };
 }
 
+export type OrganizationSettings = {
+  studioName: string;
+  contactEmail: string;
+  replyToEmail: string;
+  phone: string;
+  website: string;
+  address: string;
+};
+
+export async function getOrganizationSettings(): Promise<OrganizationSettings> {
+  const empty: OrganizationSettings = {
+    studioName: "",
+    contactEmail: "",
+    replyToEmail: "",
+    phone: "",
+    website: "",
+    address: "",
+  };
+
+  if (!hasSupabaseEnv) {
+    return empty;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return empty;
+  }
+
+  const { data } = await admin
+    .from("organization_settings")
+    .select("*")
+    .eq("id", "default")
+    .maybeSingle();
+
+  if (!data) {
+    return empty;
+  }
+
+  return {
+    studioName: String(data.studio_name || ""),
+    contactEmail: String(data.contact_email || ""),
+    replyToEmail: String(data.reply_to_email || ""),
+    phone: String(data.phone || ""),
+    website: String(data.website || ""),
+    address: String(data.address || ""),
+  };
+}
+
+export async function getAssignedProjectIdsForEmail(email: string): Promise<string[]> {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!hasSupabaseEnv || !normalized) {
+    return [];
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return [];
+  }
+
+  const { data: members } = await admin
+    .from("crew_members")
+    .select("id, email, contact_info")
+    .or(`email.eq.${normalized},contact_info.eq.${normalized}`);
+
+  const memberIds = (members || []).map((row) => String(row.id));
+  if (memberIds.length === 0) {
+    return [];
+  }
+
+  const { data: assignments } = await admin
+    .from("crew_assignments")
+    .select("project_id")
+    .in("crew_member_id", memberIds);
+
+  return Array.from(new Set((assignments || []).map((row) => String(row.project_id))));
+}
+
 export async function logGalleryEvent(
   galleryId: string,
   eventType: "view" | "download",

@@ -1,9 +1,11 @@
 import { NewWeddingForm } from "@/components/admin/new-wedding-form";
+import { requireAdminRole } from "@/lib/auth";
 import { getContacts, getCrewMembers } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewWeddingPage() {
+  await requireAdminRole();
   const [contacts, crewMembers] = await Promise.all([getContacts(), getCrewMembers()]);
 
   return (

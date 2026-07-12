@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Download, Eye } from "lucide-react";
 
-import { getGalleries, getGalleryEventStats, getProjectById } from "@/lib/data";
+import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjectById } from "@/lib/data";
 
 function displayName(projectTitle: string | undefined, galleryTitle: string): string {
   if (projectTitle && projectTitle.trim()) {
@@ -11,7 +12,15 @@ function displayName(projectTitle: string | undefined, galleryTitle: string): st
 }
 
 export default async function GalleriesPage() {
-  const galleries = await getGalleries();
+  const allGalleries = await getGalleries();
+
+  let galleries = allGalleries;
+  if ((await getCurrentUserRole()) === "crew") {
+    const user = await getCurrentUser();
+    const assignedIds = new Set(await getAssignedProjectIdsForEmail(user?.email || ""));
+    galleries = allGalleries.filter((gallery) => assignedIds.has(gallery.projectId));
+  }
+
   const eventStats = await getGalleryEventStats(galleries.map((gallery) => gallery.id));
   const galleryWithProject = await Promise.all(
     galleries.map(async (gallery) => ({

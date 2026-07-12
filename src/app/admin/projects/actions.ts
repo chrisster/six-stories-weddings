@@ -165,6 +165,10 @@ export async function createProjectAction(formData: FormData) {
     return;
   }
 
+  if ((await getCurrentUserRole()) === "crew") {
+    redirect("/admin");
+  }
+
   const manualTitle = String(formData.get("title") || "").trim();
   const eventDate = String(formData.get("eventDate") || "").trim();
 
@@ -380,6 +384,7 @@ export async function createProjectAction(formData: FormData) {
 
 export async function deleteProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  if ((await getCurrentUserRole()) === "crew") return;
 
   const projectId = String(formData.get("projectId") || "").trim();
   if (!projectId) return;
@@ -402,6 +407,10 @@ export async function updateProjectAction(formData: FormData) {
   const projectId = String(formData.get("projectId") || "").trim();
   if (!projectId) {
     return;
+  }
+
+  if ((await getCurrentUserRole()) === "crew") {
+    redirect(`/admin/projects/${projectId}`);
   }
 
   const rawDate = String(formData.get("eventDate") || "").trim();
@@ -434,6 +443,10 @@ export async function autosaveProjectAction(
   const projectId = String(formData.get("projectId") || "").trim();
   if (!projectId) {
     return { ok: false, reason: "missing_project" };
+  }
+
+  if ((await getCurrentUserRole()) === "crew") {
+    return { ok: false, reason: "forbidden" };
   }
 
   const rawDate = String(formData.get("eventDate") || "").trim();
@@ -652,6 +665,10 @@ export async function updateClientAction(formData: FormData) {
     return;
   }
 
+  if ((await getCurrentUserRole()) === "crew") {
+    return;
+  }
+
   const projectId = String(formData.get("projectId") || "").trim();
   const clientId = String(formData.get("clientId") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim();
@@ -686,6 +703,7 @@ export async function updateClientAction(formData: FormData) {
 
 export async function removeClientFromProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  if ((await getCurrentUserRole()) === "crew") return;
   const projectId = String(formData.get("projectId") || "").trim();
   const clientId = String(formData.get("clientId") || "").trim();
   if (!projectId || !clientId) return;
@@ -697,6 +715,7 @@ export async function removeClientFromProjectAction(formData: FormData) {
 
 export async function addCrewToProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  if ((await getCurrentUserRole()) === "crew") return;
   const projectId = String(formData.get("projectId") || "").trim();
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const assignmentRole = String(formData.get("assignmentRole") || "crew").trim();
@@ -725,6 +744,7 @@ export async function addCrewToProjectAction(formData: FormData) {
 
 export async function removeCrewFromProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  if ((await getCurrentUserRole()) === "crew") return;
   const projectId = String(formData.get("projectId") || "").trim();
   const assignmentId = String(formData.get("assignmentId") || "").trim();
   if (!projectId || !assignmentId) return;
@@ -736,6 +756,10 @@ export async function removeCrewFromProjectAction(formData: FormData) {
 
 export async function addClientToProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) {
+    return;
+  }
+
+  if ((await getCurrentUserRole()) === "crew") {
     return;
   }
 
