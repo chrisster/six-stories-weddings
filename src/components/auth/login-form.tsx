@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { requestPasswordResetAction } from "@/app/login/actions";
 import { Button } from "@/components/ui/button";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/client";
@@ -62,17 +63,12 @@ export function LoginForm() {
 
     setResetLoading(true);
     try {
-      const supabase = createClient();
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (resetError) {
-        setError(resetError.message);
+      const result = await requestPasswordResetAction(email.trim());
+      if (!result.ok) {
+        setError(result.error || "Could not send the reset email.");
         return;
       }
-
-      setNotice("Check your inbox for a link to set a new password.");
+      setNotice("If an account exists for that email, a reset link is on its way.");
     } finally {
       setResetLoading(false);
     }
