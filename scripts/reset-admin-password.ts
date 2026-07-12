@@ -10,7 +10,7 @@
  * You will be prompted for the new password (input is hidden). Nothing is
  * printed except a success/failure message.
  */
-import { createClient, type User } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -57,26 +57,23 @@ function promptHidden(question: string): Promise<string> {
   });
 }
 
-async function findUserByEmail(
-  supabase: ReturnType<typeof createClient>,
-  targetEmail: string,
-): Promise<User | null> {
-  for (let page = 1; page <= 50; page += 1) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw error;
-    const match = data.users.find((u) => (u.email || "").toLowerCase() === targetEmail);
-    if (match) return match;
-    if (data.users.length < 200) break;
-  }
-  return null;
-}
-
 async function main() {
   const supabase = createClient(url!, serviceRole!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const user = await findUserByEmail(supabase, email);
+  let user: { id: string; email?: string } | null = null;
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    const match = data.users.find((u) => (u.email || "").toLowerCase() === email);
+    if (match) {
+      user = match;
+      break;
+    }
+    if (data.users.length < 200) break;
+  }
+
   if (!user) {
     console.error(`No auth user found for ${email}.`);
     process.exit(1);
