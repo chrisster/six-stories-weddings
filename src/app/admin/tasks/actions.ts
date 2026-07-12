@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
-import { getAssignedProjectIdsForEmail } from "@/lib/data";
+import { getAssignedProjectIdsForEmail, notifyCrewMemberById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -31,6 +31,19 @@ export async function createTaskAction(formData: FormData) {
     assignee_id: assigneeId,
     due_date: dueDate,
   });
+  if (assigneeId) {
+    const actor = await getCurrentUser();
+    await notifyCrewMemberById(
+      assigneeId,
+      {
+        type: "task_assigned",
+        title: "A task was assigned to you",
+        body: title,
+        link: "/admin/tasks",
+      },
+      actor?.email,
+    );
+  }
   revalidatePath(`/admin/projects/${projectId}`);
   revalidatePath("/admin/tasks");
 }
@@ -70,6 +83,13 @@ export async function updateTaskAction(formData: FormData) {
     }
   }
 
+  const { data: current } = await admin
+    .from("project_tasks")
+    .select("title, assignee_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  const currentAssignee = current?.assignee_id ? String(current.assignee_id) : null;
+
   const patch: Record<string, unknown> = {};
 
   if (formData.has("title")) {
@@ -90,6 +110,44 @@ export async function updateTaskAction(formData: FormData) {
   if (Object.keys(patch).length === 0) return;
 
   await admin.from("project_tasks").update(patch).eq("id", taskId);
+
+  const actor = await getCurrentUser();
+  const taskTitle = (patch.title as string | undefined) || String(current?.title || "A task");
+  const changedAssignee =
+    "assignee_id" in patch && String(patch.assignee_id || "") !== String(currentAssignee || "");
+  const finalAssignee =
+    "assignee_id" in patch ? (patch.assignee_id as string | null) : currentAssignee;
+
+  if (changedAssignee && finalAssignee) {
+    await notifyCrewMemberById(
+      finalAssignee,
+      {
+        type: "task_assigned",
+        title: "A task was assigned to you",
+        body: taskTitle,
+        link: "/admin/tasks",
+      },
+      actor?.email,
+    );
+  } else if (finalAssignee) {
+    const changes: string[] = [];
+    if ("status" in patch) changes.push("status");
+    if ("due_date" in patch) changes.push("due date");
+    if ("title" in patch) changes.push("name");
+    if (changes.length > 0) {
+      await notifyCrewMemberById(
+        finalAssignee,
+        {
+          type: "task_updated",
+          title: "A task was updated",
+          body: `${taskTitle} — ${changes.join(", ")} changed`,
+          link: "/admin/tasks",
+        },
+        actor?.email,
+      );
+    }
+  }
+
   revalidatePath("/admin/tasks");
 }
 
@@ -116,6 +174,20 @@ export async function createProjectTaskAction(formData: FormData) {
     assignee_id: assigneeId,
     due_date: dueDate,
   });
+
+  if (assigneeId) {
+    const actor = await getCurrentUser();
+    await notifyCrewMemberById(
+      assigneeId,
+      {
+        type: "task_assigned",
+        title: "A task was assigned to you",
+        body: title,
+        link: "/admin/tasks",
+      },
+      actor?.email,
+    );
+  }
 
   revalidatePath("/admin/tasks");
   revalidatePath(`/admin/projects/${projectId}`);

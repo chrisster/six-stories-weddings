@@ -6,7 +6,8 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
-import { getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { notifyCrewMemberById } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function toNumber(value: FormDataEntryValue | null) {
@@ -738,6 +739,23 @@ export async function addCrewToProjectAction(formData: FormData) {
       participant_type: participantType,
       freelancer_fee: freelancerFee,
     });
+
+    const { data: project } = await admin
+      .from("projects")
+      .select("title")
+      .eq("id", projectId)
+      .maybeSingle();
+    const actor = await getCurrentUser();
+    await notifyCrewMemberById(
+      crewMemberId,
+      {
+        type: "project_assigned",
+        title: "You were added to a project",
+        body: `${String(project?.title || "A project")} — role: ${assignmentRole}`,
+        link: `/admin/projects/${projectId}`,
+      },
+      actor?.email,
+    );
   }
 
   revalidatePath(`/admin/projects/${projectId}`);

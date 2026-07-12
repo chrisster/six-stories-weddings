@@ -558,6 +558,93 @@ export async function getAssignedProjectIdsForEmail(email: string): Promise<stri
   return Array.from(new Set((assignments || []).map((row) => String(row.project_id))));
 }
 
+export type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+};
+
+export async function createNotification(
+  recipientEmail: string,
+  payload: { type?: string; title: string; body?: string | null; link?: string | null },
+): Promise<void> {
+  const email = (recipientEmail || "").trim().toLowerCase();
+  if (!hasSupabaseEnv || !email || !payload.title) {
+    return;
+  }
+  const admin = createAdminClient();
+  if (!admin) return;
+  await admin.from("notifications").insert({
+    recipient_email: email,
+    type: payload.type || "general",
+    title: payload.title,
+    body: payload.body || null,
+    link: payload.link || null,
+  });
+}
+
+export async function notifyCrewMemberById(
+  crewMemberId: string,
+  payload: { type?: string; title: string; body?: string | null; link?: string | null },
+  actorEmail?: string | null,
+): Promise<void> {
+  if (!hasSupabaseEnv || !crewMemberId) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  const { data: member } = await admin
+    .from("crew_members")
+    .select("email, contact_info")
+    .eq("id", crewMemberId)
+    .maybeSingle();
+  const email = String(member?.email || member?.contact_info || "").trim().toLowerCase();
+  if (!email) return;
+  if (actorEmail && actorEmail.trim().toLowerCase() === email) return;
+  await createNotification(email, payload);
+}
+
+export async function getNotificationsForEmail(
+  email: string,
+  limit = 20,
+): Promise<NotificationItem[]> {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!hasSupabaseEnv || !normalized) return [];
+  const admin = createAdminClient();
+  if (!admin) return [];
+  const { data } = await admin
+    .from("notifications")
+    .select("id, type, title, body, link, read, created_at")
+    .eq("recipient_email", normalized)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data || []).map((row) => ({
+    id: String(row.id),
+    type: String(row.type || "general"),
+    title: String(row.title || ""),
+    body: (row.body as string | null) || null,
+    link: (row.link as string | null) || null,
+    read: Boolean(row.read),
+    createdAt: String(row.created_at || ""),
+  }));
+}
+
+export async function markNotificationsRead(email: string, ids?: string[]): Promise<void> {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!hasSupabaseEnv || !normalized) return;
+  const admin = createAdminClient();
+  if (!admin) return;
+  let query = admin.from("notifications").update({ read: true }).eq("recipient_email", normalized);
+  if (ids && ids.length > 0) {
+    query = query.in("id", ids);
+  } else {
+    query = query.eq("read", false);
+  }
+  await query;
+}
+
 export async function logGalleryEvent(
   galleryId: string,
   eventType: "view" | "download",
