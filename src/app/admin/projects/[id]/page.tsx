@@ -9,6 +9,7 @@ import {
   setClientPortalPasswordAction,
   shareTimeplanAction,
   updateClientAction,
+  updateCrewAssignmentAction,
   updateProjectAction,
 } from "@/app/admin/projects/actions";
 import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/app/admin/tasks/actions";
@@ -493,11 +494,52 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Freelancer{(assignment as any).freelancerBudget ? ` €${(assignment as any).freelancerBudget}` : ""}</span>
                   ) : null}
                   {!isCrew ? (
-                    <form action={removeCrewFromProjectAction}>
-                      <input type="hidden" name="projectId" value={project.id} />
-                      <input type="hidden" name="assignmentId" value={assignment.id} />
-                      <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">Remove</button>
-                    </form>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <details className="group relative">
+                        <summary className="cursor-pointer list-none rounded-lg border border-border bg-white px-2 py-1.5 text-xs text-foreground hover:border-foreground/40">
+                          Edit
+                        </summary>
+                        <div className="absolute right-0 z-10 mt-2 w-72 rounded-xl border border-border bg-white p-3 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.4)]">
+                          <form action={updateCrewAssignmentAction} className="grid gap-2">
+                            <input type="hidden" name="projectId" value={project.id} />
+                            <input type="hidden" name="assignmentId" value={assignment.id} />
+                            <select name="assignmentRole" defaultValue={assignment.assignmentRole || ""} className="h-9 rounded-lg border border-border bg-white px-2 text-sm">
+                              <option value="Photographer">Photographer</option>
+                              <option value="Second Photographer">Second Photographer</option>
+                              <option value="Videographer">Videographer</option>
+                              <option value="Second Videographer">Second Videographer</option>
+                              <option value="Editor">Editor</option>
+                              <option value="Video Editor">Video Editor</option>
+                              <option value="Assistant">Assistant</option>
+                              <option value="Drone Operator">Drone Operator</option>
+                              <option value="Coordinator">Coordinator</option>
+                              <option value="Partner">Partner</option>
+                            </select>
+                            <select name="participantType" defaultValue={assignment.participantType} className="h-9 rounded-lg border border-border bg-white px-2 text-sm">
+                              <option value="inhouse">In-house</option>
+                              <option value="freelancer">Freelancer</option>
+                            </select>
+                            <input
+                              name="freelancerFee"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              defaultValue={assignment.freelancerFee ?? ""}
+                              placeholder="Fee (freelancer)"
+                              className="h-9 rounded-lg border border-border px-2 text-sm"
+                            />
+                            <button type="submit" className="h-9 rounded-lg border border-foreground bg-foreground px-3 text-sm text-background">
+                              Save
+                            </button>
+                          </form>
+                        </div>
+                      </details>
+                      <form action={removeCrewFromProjectAction}>
+                        <input type="hidden" name="projectId" value={project.id} />
+                        <input type="hidden" name="assignmentId" value={assignment.id} />
+                        <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">Remove</button>
+                      </form>
+                    </div>
                   ) : null}
                 </div>
               </li>

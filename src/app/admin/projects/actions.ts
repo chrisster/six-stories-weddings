@@ -829,6 +829,38 @@ export async function removeCrewFromProjectAction(formData: FormData) {
   revalidatePath(`/admin/projects/${projectId}`);
 }
 
+export async function updateCrewAssignmentAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  if ((await getCurrentUserRole()) === "crew") return;
+  const projectId = String(formData.get("projectId") || "").trim();
+  const assignmentId = String(formData.get("assignmentId") || "").trim();
+  const assignmentRole = String(formData.get("assignmentRole") || "").trim();
+  const participantType = String(formData.get("participantType") || "inhouse").trim() === "freelancer"
+    ? "freelancer"
+    : "inhouse";
+  const rawFee = formData.get("freelancerFee");
+  const freelancerFee =
+    participantType === "freelancer" && rawFee && String(rawFee).trim() !== ""
+      ? Number(rawFee)
+      : null;
+
+  if (!projectId || !assignmentId) return;
+
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  await admin
+    .from("crew_assignments")
+    .update({
+      assignment_role: assignmentRole || "crew",
+      participant_type: participantType,
+      freelancer_fee: freelancerFee,
+    })
+    .eq("id", assignmentId);
+
+  revalidatePath(`/admin/projects/${projectId}`);
+}
+
 export async function addClientToProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
