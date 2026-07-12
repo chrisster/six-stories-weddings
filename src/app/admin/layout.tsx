@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Building2, Users } from "lucide-react";
 
 import { AdminNav } from "@/components/admin/admin-nav";
 import { LogoutButton } from "@/components/auth/logout-button";
@@ -29,6 +30,24 @@ export default async function AdminLayout({
         </div>
 
         <div className="mt-6 space-y-1 border-t border-border/60 pt-4">
+          {role !== "crew" ? (
+            <>
+              <Link
+                href="/admin/team"
+                className="inline-flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-foreground/[0.03] hover:text-foreground"
+              >
+                <Users className="size-[18px]" strokeWidth={1.8} />
+                Team
+              </Link>
+              <Link
+                href="/admin/organization"
+                className="inline-flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-foreground/[0.03] hover:text-foreground"
+              >
+                <Building2 className="size-[18px]" strokeWidth={1.8} />
+                Organization
+              </Link>
+            </>
+          ) : null}
           {hasSupabaseEnv ? (
             <LogoutButton />
           ) : (

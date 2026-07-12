@@ -3,13 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Building2,
   CheckSquare,
   ContactRound,
   FolderKanban,
   ImageIcon,
   UserCircle,
-  Users,
   Wallet,
 } from "lucide-react";
 
@@ -23,8 +21,6 @@ const links = [
   { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/admin/contacts", label: "Contacts", icon: ContactRound, hideForCrew: true },
   { href: "/admin/financials", label: "Financials", icon: Wallet, hideForCrew: true },
-  { href: "/admin/team", label: "Team", icon: Users, adminOnly: true },
-  { href: "/admin/organization", label: "Organization", icon: Building2, adminOnly: true },
   { href: "/admin/account", label: "Account", icon: UserCircle },
 ] as const;
 
