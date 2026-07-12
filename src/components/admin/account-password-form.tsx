@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
 
 export function AccountPasswordForm() {
+  const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -87,9 +89,11 @@ export function AccountPasswordForm() {
         setError(updateError.message);
         return;
       }
-      setMessage("Password updated. You can keep working.");
+      setMessage("Password updated. Redirecting to your workspace…");
       setPassword("");
       setConfirm("");
+      router.push("/admin");
+      router.refresh();
     } finally {
       setLoading(false);
     }
