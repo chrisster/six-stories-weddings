@@ -717,6 +717,7 @@ export async function getCrewMembers(): Promise<CrewMember[]> {
     roleType: (row.role_type as CrewMember["roleType"]) || "assistant",
     contactInfo: (row.contact_info as string | null) || null,
     email: (row.email as string | null) || (row.contact_info as string | null) || null,
+    phone: (row.phone as string | null) || null,
     authUserId: (row.auth_user_id as string | null) || null,
   }));
 }

@@ -51,6 +51,8 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+const PHOTO_PAGE_SIZE = 30;
+
 function displayName(name?: string) {
   if (!name) return "";
   return name.replace(/\.[^./]+$/, "");
@@ -79,6 +81,7 @@ export function PublicGallery({
   const [sharing, setSharing] = useState(false);
   const [sharePreviewUrl, setSharePreviewUrl] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
   const sessionRef = useRef<string>("");
 
   // Establish a per-browser guest identity (the passcode unlock is the client
@@ -134,6 +137,10 @@ export function PublicGallery({
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
       const link = document.createElement("a");
       link.href = `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}&download=1${tokenParam}`;
+      if (asset.fileName) {
+        // Hint the browser to keep the original filename for same-origin downloads.
+        link.download = asset.fileName;
+      }
       link.rel = "noopener";
       document.body.appendChild(link);
       link.click();
@@ -489,6 +496,20 @@ export function PublicGallery({
             >
               Gallery
             </button>
+            {videoAssets.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFavoritesOnly(false);
+                  scrollToSection("Films");
+                }}
+                className={`text-[11px] uppercase tracking-[0.22em] transition hover:text-foreground ${
+                  !favoritesOnly && activeSection === "Films" ? "text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                Films
+              </button>
+            ) : null}
             {grouped.map((group) => (
               <button
                 key={group.name}
@@ -504,20 +525,6 @@ export function PublicGallery({
                 {group.name}
               </button>
             ))}
-            {videoAssets.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setFavoritesOnly(false);
-                  scrollToSection("Films");
-                }}
-                className={`text-[11px] uppercase tracking-[0.22em] transition hover:text-foreground ${
-                  !favoritesOnly && activeSection === "Films" ? "text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                Films
-              </button>
-            ) : null}
           </div>
 
           <button
@@ -726,46 +733,7 @@ export function PublicGallery({
         </div>
       ) : null}
 
-      {/* ---------- SECTIONS ---------- */}
-      <div ref={galleryStartRef} className="px-2 pb-20 sm:px-4">
-        {favoritesOnly && displayedGroups.length === 0 ? (
-          <div className="py-24 text-center">
-            <Heart className="mx-auto size-8 text-muted-foreground" />
-            <p className="mt-4 text-sm text-muted-foreground">
-              No favorites yet. Tap the heart on any photo to save it here.
-            </p>
-          </div>
-        ) : (
-          displayedGroups.map((group, index) => (
-            <section
-              key={group.name}
-              data-section={group.name}
-              id={`sec-${slugify(group.name)}-${index}`}
-              ref={(element) => {
-                sectionRefs.current[group.name] = element;
-              }}
-              className="scroll-mt-20"
-            >
-              <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
-                {group.name}
-              </h2>
-              <JustifiedGrid
-                items={group.items}
-                favorites={favorites}
-                allowDownloads={allowDownloads}
-                selectMode={selectMode}
-                selected={selected}
-                onSelect={openAt}
-                onToggleFavorite={toggleFavorite}
-                onToggleSelect={toggleSelect}
-                onDownload={downloadAsset}
-              />
-            </section>
-          ))
-        )}
-      </div>
-
-      {/* ---------- FILMS ---------- */}
+      {/* ---------- FILMS (shown first) ---------- */}
       {!favoritesOnly && videoAssets.length > 0 ? (
         <GalleryVideoSection
           videos={videoAssets.map((asset) => ({
@@ -784,6 +752,67 @@ export function PublicGallery({
           }}
         />
       ) : null}
+
+      {/* ---------- SECTIONS ---------- */}
+      <div ref={galleryStartRef} className="px-2 pb-20 sm:px-4">
+        {favoritesOnly && displayedGroups.length === 0 ? (
+          <div className="py-24 text-center">
+            <Heart className="mx-auto size-8 text-muted-foreground" />
+            <p className="mt-4 text-sm text-muted-foreground">
+              No favorites yet. Tap the heart on any photo to save it here.
+            </p>
+          </div>
+        ) : (
+          displayedGroups.map((group, index) => {
+            const visibleCount = visibleBySection[group.name] ?? PHOTO_PAGE_SIZE;
+            const visibleItems = group.items.slice(0, visibleCount);
+            const remaining = group.items.length - visibleItems.length;
+
+            return (
+              <section
+                key={group.name}
+                data-section={group.name}
+                id={`sec-${slugify(group.name)}-${index}`}
+                ref={(element) => {
+                  sectionRefs.current[group.name] = element;
+                }}
+                className="scroll-mt-20"
+              >
+                <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
+                  {group.name}
+                </h2>
+                <JustifiedGrid
+                  items={visibleItems}
+                  favorites={favorites}
+                  allowDownloads={allowDownloads}
+                  selectMode={selectMode}
+                  selected={selected}
+                  onSelect={openAt}
+                  onToggleFavorite={toggleFavorite}
+                  onToggleSelect={toggleSelect}
+                  onDownload={downloadAsset}
+                />
+                {remaining > 0 ? (
+                  <div className="flex justify-center pt-8">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVisibleBySection((current) => ({
+                          ...current,
+                          [group.name]: visibleCount + PHOTO_PAGE_SIZE,
+                        }))
+                      }
+                      className="rounded-full border border-foreground/30 px-6 py-2.5 text-[11px] uppercase tracking-[0.22em] text-foreground transition hover:border-foreground"
+                    >
+                      Load more ({remaining})
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+            );
+          })
+        )}
+      </div>
 
       {/* ---------- LIGHTBOX ---------- */}
       {activeAsset ? (

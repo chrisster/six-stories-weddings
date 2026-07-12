@@ -1,7 +1,15 @@
 import { requireAdminRole } from "@/lib/auth";
 import { getCrewMembers } from "@/lib/data";
+import { hasSupabaseEnv } from "@/lib/env";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-import { createCrewAction, inviteCrewAction, removeCrewAction, updateCrewAction } from "./actions";
+import {
+  createCrewAction,
+  inviteCrewAction,
+  removeCrewAction,
+  setCrewAdminAccessAction,
+  updateCrewAction,
+} from "./actions";
 
 type TeamPageProps = {
   searchParams: Promise<{ status?: string; reason?: string }>;
@@ -19,10 +27,23 @@ function specialtyLabel(value: string) {
   return specialties.find((s) => s.value === value)?.label || value;
 }
 
+async function getLoginRoleByEmail(): Promise<Record<string, string>> {
+  if (!hasSupabaseEnv) return {};
+  const admin = createAdminClient();
+  if (!admin) return {};
+  const { data } = await admin.from("users").select("email, role");
+  const map: Record<string, string> = {};
+  (data || []).forEach((row) => {
+    const email = String(row.email || "").toLowerCase();
+    if (email) map[email] = String(row.role || "");
+  });
+  return map;
+}
+
 export default async function TeamPage({ searchParams }: TeamPageProps) {
   await requireAdminRole();
   const { status, reason } = await searchParams;
-  const crew = await getCrewMembers();
+  const [crew, roleByEmail] = await Promise.all([getCrewMembers(), getLoginRoleByEmail()]);
 
   return (
     <div className="space-y-6">
@@ -51,6 +72,16 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
           Invitation email sent. The crew member can set their password from the link.
         </div>
       ) : null}
+      {status === "granted" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+          Full admin access granted.
+        </div>
+      ) : null}
+      {status === "revoked" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Admin access revoked — back to crew access.
+        </div>
+      ) : null}
       {status === "removed" ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           Crew member removed.
@@ -62,17 +93,19 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
             ? "Enter a full name."
             : reason === "no_email"
               ? "Add a valid email address before inviting this crew member."
-              : reason === "email_failed"
-                ? "The invite could not be emailed. Check email settings."
-                : reason === "unavailable"
-                  ? "Team management is unavailable."
-                  : `Something went wrong: ${reason ? decodeURIComponent(reason) : "unknown error"}`}
+              : reason === "no_login"
+                ? "Invite this crew member first so they have a login."
+                : reason === "email_failed"
+                  ? "The invite could not be emailed. Check email settings."
+                  : reason === "unavailable"
+                    ? "Team management is unavailable."
+                    : `Something went wrong: ${reason ? decodeURIComponent(reason) : "unknown error"}`}
         </div>
       ) : null}
 
       <section className="soft-panel p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Add crew member</h3>
-        <form action={createCrewAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <form action={createCrewAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <input
             name="fullName"
             required
@@ -83,6 +116,11 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
             name="email"
             type="email"
             placeholder="Email (for login invite)"
+            className="h-10 rounded-xl border border-border px-3 text-sm"
+          />
+          <input
+            name="phone"
+            placeholder="Phone"
             className="h-10 rounded-xl border border-border px-3 text-sm"
           />
           <select name="roleType" defaultValue="photographer" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
@@ -109,6 +147,8 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
           <ul>
             {crew.map((member) => {
               const hasLogin = Boolean(member.authUserId);
+              const loginRole = member.email ? roleByEmail[member.email.toLowerCase()] : undefined;
+              const isAdmin = loginRole === "admin";
               return (
                 <li
                   key={member.id}
@@ -120,14 +160,22 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                       <p className="text-xs text-muted-foreground">
                         {specialtyLabel(member.roleType)}
                         {member.email ? ` · ${member.email}` : ""}
+                        {member.phone ? ` · ${member.phone}` : ""}
                       </p>
-                      <span
-                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] ${
-                          hasLogin ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500"
-                        }`}
-                      >
-                        {hasLogin ? "Has login" : "No login yet"}
-                      </span>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-[11px] ${
+                            hasLogin ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500"
+                          }`}
+                        >
+                          {hasLogin ? "Has login" : "No login yet"}
+                        </span>
+                        {isAdmin ? (
+                          <span className="inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] text-indigo-700">
+                            Full admin
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -140,6 +188,24 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                           {hasLogin ? "Resend set-password email" : "Invite (set password)"}
                         </button>
                       </form>
+
+                      {hasLogin ? (
+                        <form action={setCrewAdminAccessAction}>
+                          <input type="hidden" name="crewMemberId" value={member.id} />
+                          <input type="hidden" name="grant" value={isAdmin ? "false" : "true"} />
+                          <button
+                            type="submit"
+                            className={`h-9 rounded-lg border px-3 text-xs ${
+                              isAdmin
+                                ? "border-amber-300 text-amber-700 hover:border-amber-400"
+                                : "border-indigo-300 text-indigo-700 hover:border-indigo-400"
+                            }`}
+                          >
+                            {isAdmin ? "Revoke admin" : "Grant full admin"}
+                          </button>
+                        </form>
+                      ) : null}
+
                       <form action={removeCrewAction}>
                         <input type="hidden" name="crewMemberId" value={member.id} />
                         <input type="hidden" name="authUserId" value={member.authUserId || ""} />
@@ -157,7 +223,7 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                     <summary className="cursor-pointer list-none text-xs text-muted-foreground underline underline-offset-4">
                       Edit details
                     </summary>
-                    <form action={updateCrewAction} className="mt-3 grid gap-2 sm:grid-cols-4">
+                    <form action={updateCrewAction} className="mt-3 grid gap-2 sm:grid-cols-5">
                       <input type="hidden" name="crewMemberId" value={member.id} />
                       <input
                         name="fullName"
@@ -170,6 +236,12 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                         type="email"
                         defaultValue={member.email || ""}
                         placeholder="Email"
+                        className="h-10 rounded-xl border border-border px-3 text-sm"
+                      />
+                      <input
+                        name="phone"
+                        defaultValue={member.phone || ""}
+                        placeholder="Phone"
                         className="h-10 rounded-xl border border-border px-3 text-sm"
                       />
                       <select

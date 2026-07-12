@@ -33,6 +33,7 @@ export async function createCrewAction(formData: FormData) {
 
   const fullName = String(formData.get("fullName") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
   const roleType = normalizeSpecialty(String(formData.get("roleType") || "assistant"));
 
   if (!fullName) {
@@ -48,6 +49,7 @@ export async function createCrewAction(formData: FormData) {
     full_name: fullName,
     role_type: roleType,
     email,
+    phone,
     contact_info: email,
     active: true,
   });
@@ -69,6 +71,7 @@ export async function updateCrewAction(formData: FormData) {
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
   const roleType = normalizeSpecialty(String(formData.get("roleType") || "assistant"));
 
   if (!crewMemberId || !fullName) {
@@ -82,7 +85,7 @@ export async function updateCrewAction(formData: FormData) {
 
   await admin
     .from("crew_members")
-    .update({ full_name: fullName, role_type: roleType, email, contact_info: email })
+    .update({ full_name: fullName, role_type: roleType, email, phone, contact_info: email })
     .eq("id", crewMemberId);
 
   revalidatePath("/admin/team");
@@ -223,4 +226,52 @@ export async function removeCrewAction(formData: FormData) {
 
   revalidatePath("/admin/team");
   redirect("/admin/team?status=removed");
+}
+
+export async function setCrewAdminAccessAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    redirect("/admin/team?status=error&reason=unavailable");
+  }
+  await requireAdmin();
+
+  const crewMemberId = String(formData.get("crewMemberId") || "").trim();
+  const grant = String(formData.get("grant") || "") === "true";
+
+  const admin = createAdminClient();
+  if (!admin) {
+    redirect("/admin/team?status=error&reason=unavailable");
+  }
+
+  const { data: member } = await admin
+    .from("crew_members")
+    .select("id, email, contact_info, auth_user_id")
+    .eq("id", crewMemberId)
+    .maybeSingle();
+
+  const email = String(member?.email || member?.contact_info || "").trim().toLowerCase();
+  const authUserId = (member?.auth_user_id as string | null) || null;
+
+  if (!member || (!email && !authUserId)) {
+    redirect("/admin/team?status=error&reason=no_login");
+  }
+
+  const nextRole = grant ? "admin" : "crew";
+
+  const base = admin.from("users").update({ role: nextRole });
+  const { data, error } = await (authUserId
+    ? base.eq("auth_user_id", authUserId)
+    : base.eq("email", email)
+  ).select("id");
+
+  if (error) {
+    redirect(`/admin/team?status=error&reason=${encodeURIComponent(error.message)}`);
+  }
+
+  if (!data || data.length === 0) {
+    // No login row yet — the member must be invited first.
+    redirect("/admin/team?status=error&reason=no_login");
+  }
+
+  revalidatePath("/admin/team");
+  redirect(`/admin/team?status=${grant ? "granted" : "revoked"}`);
 }

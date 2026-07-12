@@ -29,6 +29,7 @@ export type CrewMember = {
   roleType: "photographer" | "videographer" | "editor" | "assistant" | "partner";
   contactInfo?: string | null;
   email?: string | null;
+  phone?: string | null;
   authUserId?: string | null;
 };
 

@@ -196,14 +196,14 @@ function GalleryVideoItem({
 
   return (
     <article className="overflow-hidden rounded-2xl border border-border/70 bg-white">
-      <div className="bg-black">
+      <div className="flex justify-center bg-black">
         <video
           ref={videoRef}
           src={video.url}
           controls
           playsInline
           preload="metadata"
-          className="mx-auto max-h-[70vh] w-full bg-black"
+          className="max-h-[80vh] w-auto max-w-full bg-black"
         />
       </div>
 

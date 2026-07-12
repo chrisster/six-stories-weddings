@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
 import { NavigationLoader } from "@/components/ui/navigation-loader";
+import { RecoveryRedirect } from "@/components/auth/recovery-redirect";
 import "./globals.css";
 
 const headingFont = Cormorant_Garamond({
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="en" className={`${headingFont.variable} ${bodyFont.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <NavigationLoader />
+        <RecoveryRedirect />
         {children}
       </body>
     </html>
