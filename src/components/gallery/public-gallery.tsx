@@ -9,12 +9,14 @@ import {
   ChevronRight,
   Download,
   Heart,
+  MessageCircle,
   Share2,
   X,
 } from "lucide-react";
 
 import { formatDateLong } from "@/lib/utils";
 import { GalleryVideoSection, type GalleryVideoAsset } from "@/components/gallery/gallery-video-section";
+import { MediaComments } from "@/components/gallery/media-comments";
 
 type PublicAsset = {
   id: string;
@@ -82,6 +84,7 @@ export function PublicGallery({
   const [sharePreviewUrl, setSharePreviewUrl] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
+  const [showComments, setShowComments] = useState(false);
   const sessionRef = useRef<string>("");
 
   // Establish a per-browser guest identity (the passcode unlock is the client
@@ -216,7 +219,7 @@ export function PublicGallery({
   const grouped = useMemo<GroupedSection[]>(() => {
     const map = new Map<string, PublicAsset[]>();
     photoAssets.forEach((asset) => {
-      const key = asset.sectionName || "Moments";
+      const key = asset.sectionName || "Photos";
       map.set(key, [...(map.get(key) || []), asset]);
     });
 
@@ -257,7 +260,10 @@ export function PublicGallery({
     [flatOrdered],
   );
 
-  const close = useCallback(() => setActiveIndex(null), []);
+  const close = useCallback(() => {
+    setActiveIndex(null);
+    setShowComments(false);
+  }, []);
   const next = useCallback(
     () => setActiveIndex((current) => (current === null ? current : (current + 1) % flatOrdered.length)),
     [flatOrdered.length],
@@ -501,13 +507,13 @@ export function PublicGallery({
                 type="button"
                 onClick={() => {
                   setFavoritesOnly(false);
-                  scrollToSection("Films");
+                  scrollToSection("Film");
                 }}
                 className={`text-[11px] uppercase tracking-[0.22em] transition hover:text-foreground ${
-                  !favoritesOnly && activeSection === "Films" ? "text-foreground" : "text-muted-foreground"
+                  !favoritesOnly && activeSection === "Film" ? "text-foreground" : "text-muted-foreground"
                 }`}
               >
-                Films
+                Film
               </button>
             ) : null}
             {grouped.map((group) => (
@@ -748,7 +754,7 @@ export function PublicGallery({
           canComment={canComment}
           commenterName={commenterName}
           sectionRef={(element) => {
-            sectionRefs.current["Films"] = element;
+            sectionRefs.current["Film"] = element;
           }}
         />
       ) : null}
@@ -856,7 +862,9 @@ export function PublicGallery({
           ) : null}
 
           <div
-            className="flex max-h-[92vh] w-full max-w-6xl items-center justify-center px-4 pb-20"
+            className={`flex max-h-[92vh] w-full items-center justify-center px-4 pb-20 transition-all ${
+              showComments ? "max-w-3xl sm:pr-[22rem]" : "max-w-6xl"
+            }`}
             onClick={(event) => event.stopPropagation()}
           >
             {activeAsset.mediaType === "photo" ? (
@@ -869,6 +877,32 @@ export function PublicGallery({
               <video src={activeAsset.url} controls autoPlay className="max-h-[84vh] w-auto max-w-full" />
             )}
           </div>
+
+          {/* Comments panel */}
+          {showComments ? (
+            <div
+              className="absolute inset-y-0 right-0 z-20 w-full max-w-sm border-l border-border/40 bg-white p-5 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setShowComments(false)}
+                aria-label="Close comments"
+                className="absolute right-3 top-3 rounded-full p-1.5 text-muted-foreground transition hover:text-foreground"
+              >
+                <X className="size-5" />
+              </button>
+              <div className="h-full pt-6">
+                <MediaComments
+                  key={activeAsset.id}
+                  gallerySlug={gallerySlug}
+                  mediaAssetId={activeAsset.id}
+                  canComment={canComment}
+                  commenterName={commenterName}
+                />
+              </div>
+            </div>
+          ) : null}
 
           {/* Filename + action bar */}
           <div
@@ -907,6 +941,17 @@ export function PublicGallery({
                 className="flex size-10 items-center justify-center rounded-full bg-white/10 text-white/90 backdrop-blur transition hover:bg-white/20"
               >
                 <Share2 className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowComments((value) => !value)}
+                aria-label="Comments"
+                aria-pressed={showComments}
+                className={`flex size-10 items-center justify-center rounded-full backdrop-blur transition ${
+                  showComments ? "bg-white text-foreground" : "bg-white/10 text-white/90 hover:bg-white/20"
+                }`}
+              >
+                <MessageCircle className="size-4" />
               </button>
             </div>
           </div>

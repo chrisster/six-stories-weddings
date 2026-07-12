@@ -54,7 +54,7 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
     visibleAssets.map(async (asset) => ({
       ...asset,
       url: await getSignedMediaUrl(asset.storagePath),
-      sectionName: sectionById.get(asset.sectionId || "") || "Moments",
+      sectionName: sectionById.get(asset.sectionId || "") || "Photos",
       fileName: asset.originalName || "",
     })),
   );

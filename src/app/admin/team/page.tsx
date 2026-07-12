@@ -8,6 +8,7 @@ import {
   inviteCrewAction,
   removeCrewAction,
   setCrewAdminAccessAction,
+  setCrewPasswordAction,
   updateCrewAction,
 } from "./actions";
 
@@ -82,6 +83,11 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
           Admin access revoked — back to crew access.
         </div>
       ) : null}
+      {status === "password_set" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+          Password set. The crew member can sign in with it now.
+        </div>
+      ) : null}
       {status === "removed" ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           Crew member removed.
@@ -97,9 +103,11 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                 ? "Invite this crew member first so they have a login."
                 : reason === "email_failed"
                   ? "The invite could not be emailed. Check email settings."
-                  : reason === "unavailable"
-                    ? "Team management is unavailable."
-                    : `Something went wrong: ${reason ? decodeURIComponent(reason) : "unknown error"}`}
+                  : reason === "weak_password"
+                    ? "Use a password of at least 8 characters."
+                    : reason === "unavailable"
+                      ? "Team management is unavailable."
+                      : `Something went wrong: ${reason ? decodeURIComponent(reason) : "unknown error"}`}
         </div>
       ) : null}
 
@@ -260,6 +268,27 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                         className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/30"
                       >
                         Save
+                      </button>
+                    </form>
+
+                    <form
+                      action={setCrewPasswordAction}
+                      className="mt-3 grid gap-2 border-t border-border/60 pt-3 sm:grid-cols-[1fr_auto]"
+                    >
+                      <input type="hidden" name="crewMemberId" value={member.id} />
+                      <input
+                        name="password"
+                        type="password"
+                        minLength={8}
+                        required
+                        placeholder="Set or reset password directly (min 8)"
+                        className="h-10 rounded-xl border border-border px-3 text-sm"
+                      />
+                      <button
+                        type="submit"
+                        className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/30"
+                      >
+                        Set password
                       </button>
                     </form>
                   </details>

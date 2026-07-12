@@ -228,6 +228,73 @@ export async function removeCrewAction(formData: FormData) {
   redirect("/admin/team?status=removed");
 }
 
+export async function setCrewPasswordAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    redirect("/admin/team?status=error&reason=unavailable");
+  }
+  await requireAdmin();
+
+  const crewMemberId = String(formData.get("crewMemberId") || "").trim();
+  const password = String(formData.get("password") || "");
+
+  if (!crewMemberId || password.length < 8) {
+    redirect("/admin/team?status=error&reason=weak_password");
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    redirect("/admin/team?status=error&reason=unavailable");
+  }
+
+  const { data: member } = await admin
+    .from("crew_members")
+    .select("id, full_name, email, contact_info, auth_user_id")
+    .eq("id", crewMemberId)
+    .maybeSingle();
+
+  const email = String(member?.email || member?.contact_info || "").trim().toLowerCase();
+  const fullName = String(member?.full_name || "").trim();
+  let authUserId = (member?.auth_user_id as string | null) || null;
+
+  if (!member || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    redirect("/admin/team?status=error&reason=no_email");
+  }
+
+  if (authUserId) {
+    const { error } = await admin.auth.admin.updateUserById(authUserId, { password });
+    if (error) {
+      redirect(`/admin/team?status=error&reason=${encodeURIComponent(error.message)}`);
+    }
+  } else {
+    const { data: created, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName || null },
+    });
+    if (error || !created?.user) {
+      redirect(`/admin/team?status=error&reason=${encodeURIComponent(error?.message || "create_failed")}`);
+    }
+    authUserId = created!.user.id;
+  }
+
+  await admin.from("users").upsert(
+    {
+      auth_user_id: authUserId,
+      email,
+      full_name: fullName || null,
+      role: "crew",
+      active: true,
+    },
+    { onConflict: "email" },
+  );
+
+  await admin.from("crew_members").update({ auth_user_id: authUserId }).eq("id", crewMemberId);
+
+  revalidatePath("/admin/team");
+  redirect("/admin/team?status=password_set");
+}
+
 export async function setCrewAdminAccessAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     redirect("/admin/team?status=error&reason=unavailable");

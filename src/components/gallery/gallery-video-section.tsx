@@ -55,12 +55,12 @@ export function GalleryVideoSection({
 
   return (
     <section
-      data-section="Films"
+      data-section="Film"
       ref={sectionRef}
       className="scroll-mt-20 px-2 pb-16 sm:px-4"
     >
       <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
-        Films
+        Film
       </h2>
       <div className="mx-auto flex max-w-4xl flex-col gap-16">
         {videos.map((video) => (
@@ -203,7 +203,7 @@ function GalleryVideoItem({
           controls
           playsInline
           preload="metadata"
-          className="max-h-[80vh] w-auto max-w-full bg-black"
+          className="max-h-[65vh] w-auto max-w-full object-contain bg-black"
         />
       </div>
 
