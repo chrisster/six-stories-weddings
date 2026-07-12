@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { NavigationLoader } from "@/components/ui/navigation-loader";
 import { RecoveryRedirect } from "@/components/auth/recovery-redirect";
 import "./globals.css";
@@ -32,6 +33,7 @@ export default function RootLayout({
         <NavigationLoader />
         <RecoveryRedirect />
         {children}
+        <SpeedInsights />
       </body>
     </html>
   );
