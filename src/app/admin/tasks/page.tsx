@@ -22,24 +22,22 @@ export default async function TasksPage() {
   const crewNameById = new Map(crewMembers.map((member) => [member.id, member.fullName]));
 
   const tasks: BoardTask[] = visibleProjects.flatMap((project) =>
-    project.tasks
-      .filter((task) => task.kind === "photo_edit" || task.kind === "video_edit")
-      .map((task) => ({
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        kind: (task.kind as "photo_edit" | "video_edit" | null) ?? null,
-        dueDate: task.dueDate ?? null,
-        assigneeId: task.assigneeId ?? null,
-        assigneeName: task.assigneeId
-          ? project.crewAssignments.find((a) => a.crewMemberId === task.assigneeId)?.crewMember
-              .fullName ||
-            crewNameById.get(task.assigneeId) ||
-            null
-          : null,
-        projectId: project.id,
-        projectTitle: project.title,
-      })),
+    project.tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      kind: (task.kind as "photo_edit" | "video_edit" | null) ?? null,
+      dueDate: task.dueDate ?? null,
+      assigneeId: task.assigneeId ?? null,
+      assigneeName: task.assigneeId
+        ? project.crewAssignments.find((a) => a.crewMemberId === task.assigneeId)?.crewMember
+            .fullName ||
+          crewNameById.get(task.assigneeId) ||
+          null
+        : null,
+      projectId: project.id,
+      projectTitle: project.title,
+    })),
   );
 
   const openTasks = tasks.filter((task) => task.status !== "done").length;
@@ -50,11 +48,11 @@ export default async function TasksPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase">Post-production</p>
-          <h1 className="title-cinematic mt-2 text-3xl font-semibold">Editing Tasks</h1>
+          <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase">Workspace</p>
+          <h1 className="title-cinematic mt-2 text-3xl font-semibold">Tasks</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Photo &amp; video edits across active projects. Tasks are created automatically when an
-            editor is assigned to a project.
+            All tasks across active projects. Create tasks on a project or here, and track them by
+            status.
           </p>
         </div>
         <span className="rounded-full border border-border bg-white px-4 py-2 text-sm text-muted-foreground">

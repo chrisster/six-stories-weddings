@@ -19,13 +19,15 @@ export async function createTaskAction(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const assigneeId = String(formData.get("assigneeId") || "").trim() || null;
   const dueDate = String(formData.get("dueDate") || "").trim() || null;
+  const statusRaw = String(formData.get("status") || "todo").trim();
+  const status = VALID_STATUSES.includes(statusRaw) ? statusRaw : "todo";
   if (!projectId || !title) return;
   const admin = createAdminClient();
   if (!admin) return;
   await admin.from("project_tasks").insert({
     project_id: projectId,
     title,
-    status: "todo",
+    status,
     assignee_id: assigneeId,
     due_date: dueDate,
   });
@@ -70,6 +72,10 @@ export async function updateTaskAction(formData: FormData) {
 
   const patch: Record<string, unknown> = {};
 
+  if (formData.has("title")) {
+    const title = String(formData.get("title") || "").trim();
+    if (title) patch.title = title;
+  }
   if (formData.has("status")) {
     const status = String(formData.get("status") || "").trim();
     if (VALID_STATUSES.includes(status)) patch.status = status;
@@ -87,42 +93,32 @@ export async function updateTaskAction(formData: FormData) {
   revalidatePath("/admin/tasks");
 }
 
-export async function createEditingTaskAction(formData: FormData) {
+export async function createProjectTaskAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
   if ((await getCurrentUserRole()) === "crew") return;
 
   const projectId = String(formData.get("projectId") || "").trim();
-  const kind = String(formData.get("kind") || "").trim();
+  const title = String(formData.get("title") || "").trim();
   const assigneeId = String(formData.get("assigneeId") || "").trim() || null;
   const dueDate = String(formData.get("dueDate") || "").trim() || null;
-  const status = String(formData.get("status") || "backlog").trim();
+  const statusRaw = String(formData.get("status") || "todo").trim();
+  const status = VALID_STATUSES.includes(statusRaw) ? statusRaw : "todo";
 
-  if (!projectId || (kind !== "photo_edit" && kind !== "video_edit")) return;
+  if (!projectId || !title) return;
 
   const admin = createAdminClient();
   if (!admin) return;
 
-  const { data: project } = await admin
-    .from("projects")
-    .select("title, event_date")
-    .eq("id", projectId)
-    .maybeSingle();
-
-  const title = String(project?.title || "Project");
-  const eventDate = String(project?.event_date || "").replaceAll("-", ".");
-  const label = kind === "video_edit" ? "VIDEO EDIT" : "PHOTO EDIT";
-  const taskTitle = [label, eventDate, title].filter(Boolean).join(" - ");
-
   await admin.from("project_tasks").insert({
     project_id: projectId,
-    title: taskTitle,
-    status: VALID_STATUSES.includes(status) ? status : "backlog",
-    kind,
+    title,
+    status,
     assignee_id: assigneeId,
     due_date: dueDate,
   });
 
   revalidatePath("/admin/tasks");
+  revalidatePath(`/admin/projects/${projectId}`);
 }
 
 export async function deleteTaskAction(formData: FormData) {

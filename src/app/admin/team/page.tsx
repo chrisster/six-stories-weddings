@@ -16,18 +16,6 @@ type TeamPageProps = {
   searchParams: Promise<{ status?: string; reason?: string }>;
 };
 
-const specialties = [
-  { value: "photographer", label: "Photographer" },
-  { value: "videographer", label: "Videographer" },
-  { value: "editor", label: "Editor" },
-  { value: "assistant", label: "Assistant" },
-  { value: "partner", label: "Partner" },
-];
-
-function specialtyLabel(value: string) {
-  return specialties.find((s) => s.value === value)?.label || value;
-}
-
 async function getLoginRoleByEmail(): Promise<Record<string, string>> {
   if (!hasSupabaseEnv) return {};
   const admin = createAdminClient();
@@ -113,7 +101,7 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
 
       <section className="soft-panel p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Add crew member</h3>
-        <form action={createCrewAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <form action={createCrewAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input
             name="fullName"
             required
@@ -131,13 +119,6 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
             placeholder="Phone"
             className="h-10 rounded-xl border border-border px-3 text-sm"
           />
-          <select name="roleType" defaultValue="photographer" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
-            {specialties.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
           <button
             type="submit"
             className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background"
@@ -166,8 +147,7 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                     <div>
                       <p className="text-sm font-medium text-foreground">{member.fullName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {specialtyLabel(member.roleType)}
-                        {member.email ? ` · ${member.email}` : ""}
+                        {member.email || "No email"}
                         {member.phone ? ` · ${member.phone}` : ""}
                       </p>
                       <div className="mt-1 flex flex-wrap gap-1.5">
@@ -231,7 +211,7 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                     <summary className="cursor-pointer list-none text-xs text-muted-foreground underline underline-offset-4">
                       Edit details
                     </summary>
-                    <form action={updateCrewAction} className="mt-3 grid gap-2 sm:grid-cols-5">
+                    <form action={updateCrewAction} className="mt-3 grid gap-2 sm:grid-cols-4">
                       <input type="hidden" name="crewMemberId" value={member.id} />
                       <input
                         name="fullName"
@@ -252,17 +232,6 @@ export default async function TeamPage({ searchParams }: TeamPageProps) {
                         placeholder="Phone"
                         className="h-10 rounded-xl border border-border px-3 text-sm"
                       />
-                      <select
-                        name="roleType"
-                        defaultValue={member.roleType}
-                        className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-                      >
-                        {specialties.map((s) => (
-                          <option key={s.value} value={s.value}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
                       <button
                         type="submit"
                         className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/30"

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { createEditingTaskAction, deleteTaskAction, updateTaskAction } from "@/app/admin/tasks/actions";
+import { createProjectTaskAction, deleteTaskAction, updateTaskAction } from "@/app/admin/tasks/actions";
 
 export type BoardTask = {
   id: string;
@@ -104,7 +104,7 @@ export function PostProductionBoard({ tasks, assignees, projects, canManage }: P
 
   const createTask = (formData: FormData) => {
     startTransition(async () => {
-      await createEditingTaskAction(formData);
+      await createProjectTaskAction(formData);
       setShowAdd(false);
       router.refresh();
     });
@@ -124,17 +124,19 @@ export function PostProductionBoard({ tasks, assignees, projects, canManage }: P
             </button>
           ) : (
             <form action={createTask} className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-              <select name="projectId" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm xl:col-span-2">
+              <input
+                name="title"
+                required
+                placeholder="Task name"
+                className="h-10 rounded-xl border border-border px-3 text-sm xl:col-span-2"
+              />
+              <select name="projectId" required className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
                 <option value="">Select project</option>
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.title}
                   </option>
                 ))}
-              </select>
-              <select name="kind" required defaultValue="video_edit" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
-                <option value="video_edit">Video edit</option>
-                <option value="photo_edit">Photo edit</option>
               </select>
               <select name="assigneeId" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
                 <option value="">Assignee</option>
@@ -202,11 +204,25 @@ export function PostProductionBoard({ tasks, assignees, projects, canManage }: P
                         <div className="flex items-center gap-2">
                           <span
                             className={`size-2.5 shrink-0 rounded-full ${
-                              task.kind === "video_edit" ? "bg-rose-500" : "bg-blue-500"
+                              task.kind === "video_edit"
+                                ? "bg-rose-500"
+                                : task.kind === "photo_edit"
+                                  ? "bg-blue-500"
+                                  : STATUS_META[task.status]?.dot || "bg-zinc-400"
                             }`}
-                            title={task.kind === "video_edit" ? "Video edit" : "Photo edit"}
                           />
-                          <span className="truncate text-sm font-medium text-foreground">{task.title}</span>
+                          <input
+                            defaultValue={task.title}
+                            onBlur={(e) => {
+                              if (e.target.value.trim() && e.target.value !== task.title) {
+                                submit(task.id, "title", e.target.value.trim());
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                            }}
+                            className="min-w-0 flex-1 truncate rounded border border-transparent bg-transparent px-1 text-sm font-medium text-foreground hover:border-border focus:border-border focus:bg-white focus:outline-none"
+                          />
                         </div>
                         <Link
                           href={`/admin/projects/${task.projectId}`}
