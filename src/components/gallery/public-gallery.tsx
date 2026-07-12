@@ -331,10 +331,13 @@ export function PublicGallery({
   }, []);
 
   const scrollToGallery = useCallback(() => {
-    if (galleryStartRef.current) {
-      galleryStartRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Films render before photos, so jump to the Film section first when videos exist.
+    const filmSection = videoAssets.length > 0 ? sectionRefs.current["Film"] : null;
+    const target = filmSection || galleryStartRef.current;
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, []);
+  }, [videoAssets.length]);
 
   const createShareLink = useCallback(
     async (options: { shareAll: boolean; assetIds?: string[] }) => {
