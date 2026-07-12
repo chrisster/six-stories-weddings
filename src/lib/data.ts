@@ -501,7 +501,10 @@ export async function logGalleryEvent(
   });
 }
 
-export async function getGalleryEventStats(galleryIds?: string[]): Promise<{
+export async function getGalleryEventStats(
+  galleryIds?: string[],
+  since?: Date | null,
+): Promise<{
   totals: { views: number; viewers: number; downloads: number; galleriesWithDownloads: number };
   byGallery: Record<string, { views: number; downloads: number; viewers: number }>;
 }> {
@@ -522,6 +525,9 @@ export async function getGalleryEventStats(galleryIds?: string[]): Promise<{
   let query = admin.from("gallery_events").select("gallery_id, event_type, guest_session_id");
   if (galleryIds && galleryIds.length > 0) {
     query = query.in("gallery_id", galleryIds);
+  }
+  if (since) {
+    query = query.gte("created_at", since.toISOString());
   }
 
   const { data } = await query;

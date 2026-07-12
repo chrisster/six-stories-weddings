@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { Download, Eye } from "lucide-react";
 
-import { getGalleries, getProjectById } from "@/lib/data";
+import { getGalleries, getGalleryEventStats, getProjectById } from "@/lib/data";
 
 function displayName(projectTitle: string | undefined, galleryTitle: string): string {
   if (projectTitle && projectTitle.trim()) {
@@ -11,6 +12,7 @@ function displayName(projectTitle: string | undefined, galleryTitle: string): st
 
 export default async function GalleriesPage() {
   const galleries = await getGalleries();
+  const eventStats = await getGalleryEventStats(galleries.map((gallery) => gallery.id));
   const galleryWithProject = await Promise.all(
     galleries.map(async (gallery) => ({
       gallery,
@@ -22,6 +24,7 @@ export default async function GalleriesPage() {
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {galleryWithProject.map(({ gallery, project }) => {
         const name = displayName(project?.title, gallery.title);
+        const stats = eventStats.byGallery[gallery.id] || { views: 0, downloads: 0, viewers: 0 };
 
         return (
           <article
@@ -51,6 +54,17 @@ export default async function GalleriesPage() {
                   }`}
                 >
                   {gallery.isPublished ? "Published" : "Draft"}
+                </span>
+              </div>
+
+              <div className="mb-3 flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5" title={`${stats.viewers} unique visitors`}>
+                  <Eye className="size-3.5" />
+                  {stats.views} view{stats.views === 1 ? "" : "s"}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Download className="size-3.5" />
+                  {stats.downloads} download{stats.downloads === 1 ? "" : "s"}
                 </span>
               </div>
 

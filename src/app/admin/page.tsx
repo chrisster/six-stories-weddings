@@ -53,6 +53,12 @@ function isWithinPeriod(eventDate: string, period: string) {
   const date = new Date(`${eventDate}T00:00:00Z`);
   const now = new Date();
 
+  if (period === "this_week") {
+    const since = new Date(now);
+    since.setUTCDate(since.getUTCDate() - 7);
+    return date >= since;
+  }
+
   if (period === "this_month") {
     return (
       date.getUTCFullYear() === now.getUTCFullYear() &&
@@ -65,6 +71,22 @@ function isWithinPeriod(eventDate: string, period: string) {
   }
 
   return true;
+}
+
+function periodSince(period: string): Date | null {
+  const now = new Date();
+  if (period === "this_week") {
+    const since = new Date(now);
+    since.setUTCDate(since.getUTCDate() - 7);
+    return since;
+  }
+  if (period === "this_month") {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  }
+  if (period === "this_year") {
+    return new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+  }
+  return null;
 }
 
 function eventTypeText(projectType: string): string {
@@ -84,7 +106,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const galleries = await getGalleries();
   const role = await getCurrentUserRole();
   const isCrew = role === "crew";
-  const eventStats = await getGalleryEventStats();
+  const eventStats = await getGalleryEventStats(undefined, periodSince(period));
   const galleryByProject = new Map(galleries.map((gallery) => [gallery.projectId, gallery]));
 
   const periodFiltered = projects.filter((project) => isWithinPeriod(project.eventDate, period));
