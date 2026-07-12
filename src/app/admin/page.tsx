@@ -3,7 +3,7 @@ import { Images, Plus } from "lucide-react";
 
 import { ProjectsControls } from "@/components/admin/projects-controls";
 import { getCurrentUserRole } from "@/lib/auth";
-import { getGalleries, getProjects } from "@/lib/data";
+import { getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type AdminPageProps = {
@@ -84,6 +84,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const galleries = await getGalleries();
   const role = await getCurrentUserRole();
   const isCrew = role === "crew";
+  const eventStats = await getGalleryEventStats();
   const galleryByProject = new Map(galleries.map((gallery) => [gallery.projectId, gallery]));
 
   const periodFiltered = projects.filter((project) => isWithinPeriod(project.eventDate, period));
@@ -118,17 +119,22 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
 
   const revenuePaid = periodFiltered.reduce((sum, project) => sum + project.amountPaid, 0);
   const activeGalleries = galleries.length;
+  const publishedGalleries = galleries.filter((g) => g.isPublished).length;
 
   const insights = [
-    { label: "Projects", value: String(statusCounts.all), hint: `${statusCounts.scheduled} scheduled` },
-    { label: "Galleries", value: String(activeGalleries), hint: `${galleries.filter((g) => g.isPublished).length} published` },
+    { label: "Galleries", value: String(activeGalleries), hint: `${publishedGalleries} published` },
     {
-      label: "In production",
-      value: String(statusCounts.post_production),
-      hint: `${statusCounts.completed} completed`,
+      label: "Views",
+      value: eventStats.totals.views.toLocaleString(),
+      hint: `${eventStats.totals.viewers} visitor${eventStats.totals.viewers === 1 ? "" : "s"}`,
+    },
+    {
+      label: "Downloads",
+      value: eventStats.totals.downloads.toLocaleString(),
+      hint: `from ${eventStats.totals.galleriesWithDownloads} galler${eventStats.totals.galleriesWithDownloads === 1 ? "y" : "ies"}`,
     },
     isCrew
-      ? { label: "Completed", value: String(statusCounts.completed), hint: "delivered" }
+      ? { label: "Projects", value: String(statusCounts.all), hint: `${statusCounts.scheduled} scheduled` }
       : { label: "Revenue", value: currency(revenuePaid), hint: "collected" },
   ];
 

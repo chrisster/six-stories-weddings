@@ -10,7 +10,7 @@ import { MediaUploader } from "@/components/gallery/media-uploader";
 import { MediaManager } from "@/components/gallery/media-manager";
 import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
-import { getGalleryById, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
+import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
 import { getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
@@ -57,6 +57,9 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   const photoMedia = mediaWithUrl.filter((asset) => asset.mediaType !== "video");
   const videoMedia = mediaWithUrl.filter((asset) => asset.mediaType === "video");
 
+  const eventStats = await getGalleryEventStats([detail.gallery.id]);
+  const galleryStats = eventStats.byGallery[detail.gallery.id] || { views: 0, downloads: 0, viewers: 0 };
+
   return (
     <div className="space-y-6">
       <section className="admin-surface overflow-hidden">
@@ -82,6 +85,19 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
               <div className="rounded-xl border border-border/70 px-3 py-2">
                 <p className="text-xs text-muted-foreground">Scenes</p>
                 <p className="mt-1 font-medium">{detail.sections.length}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 px-3 py-2">
+                <p className="text-xs text-muted-foreground">Views</p>
+                <p className="mt-1 font-medium">
+                  {galleryStats.views}
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">
+                    · {galleryStats.viewers} visitor{galleryStats.viewers === 1 ? "" : "s"}
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/70 px-3 py-2">
+                <p className="text-xs text-muted-foreground">Downloads</p>
+                <p className="mt-1 font-medium">{galleryStats.downloads}</p>
               </div>
             </div>
 

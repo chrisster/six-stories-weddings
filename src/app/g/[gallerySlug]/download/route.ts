@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import { getGuestAccessByToken, getPublicGalleryBySlug, logGalleryEvent, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
 import { getSignedMediaUrl } from "@/lib/storage";
 
@@ -52,6 +52,11 @@ export async function GET(
 
   if (guestAssetIds && guestAssetIds.length > 0 && !guestAssetIds.includes(asset.id)) {
     return new NextResponse("Forbidden", { status: 403 });
+  }
+
+  // Count actual downloads (not inline streams) by non-admin viewers.
+  if (forceDownload && !adminUser) {
+    await logGalleryEvent(detail.gallery.id, "download", { mediaAssetId: asset.id });
   }
 
   const signedUrl = await getSignedMediaUrl(asset.storagePath);

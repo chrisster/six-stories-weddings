@@ -479,6 +479,100 @@ export async function getGalleryFavorites(
   return { counts, total: (data || []).length, guests: guests.size };
 }
 
+export async function logGalleryEvent(
+  galleryId: string,
+  eventType: "view" | "download",
+  options?: { mediaAssetId?: string | null; session?: string | null },
+): Promise<void> {
+  if (!hasSupabaseEnv || !galleryId) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  await admin.from("gallery_events").insert({
+    gallery_id: galleryId,
+    event_type: eventType,
+    media_asset_id: options?.mediaAssetId || null,
+    guest_session_id: options?.session || null,
+  });
+}
+
+export async function getGalleryEventStats(galleryIds?: string[]): Promise<{
+  totals: { views: number; viewers: number; downloads: number; galleriesWithDownloads: number };
+  byGallery: Record<string, { views: number; downloads: number; viewers: number }>;
+}> {
+  const empty = {
+    totals: { views: 0, viewers: 0, downloads: 0, galleriesWithDownloads: 0 },
+    byGallery: {} as Record<string, { views: number; downloads: number; viewers: number }>,
+  };
+
+  if (!hasSupabaseEnv) {
+    return empty;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return empty;
+  }
+
+  let query = admin.from("gallery_events").select("gallery_id, event_type, guest_session_id");
+  if (galleryIds && galleryIds.length > 0) {
+    query = query.in("gallery_id", galleryIds);
+  }
+
+  const { data } = await query;
+  const rows = data || [];
+
+  const byGallery: Record<string, { views: number; downloads: number; viewers: Set<string> }> = {};
+  const globalViewers = new Set<string>();
+  const downloadGalleries = new Set<string>();
+  let views = 0;
+  let downloads = 0;
+
+  rows.forEach((row) => {
+    const galleryId = String(row.gallery_id);
+    if (!byGallery[galleryId]) {
+      byGallery[galleryId] = { views: 0, downloads: 0, viewers: new Set() };
+    }
+    if (row.event_type === "view") {
+      views += 1;
+      byGallery[galleryId].views += 1;
+      const session = row.guest_session_id ? String(row.guest_session_id) : "";
+      if (session) {
+        byGallery[galleryId].viewers.add(session);
+        globalViewers.add(session);
+      }
+    } else if (row.event_type === "download") {
+      downloads += 1;
+      byGallery[galleryId].downloads += 1;
+      downloadGalleries.add(galleryId);
+    }
+  });
+
+  const normalizedByGallery: Record<string, { views: number; downloads: number; viewers: number }> = {};
+  Object.entries(byGallery).forEach(([id, value]) => {
+    normalizedByGallery[id] = {
+      views: value.views,
+      downloads: value.downloads,
+      viewers: value.viewers.size,
+    };
+  });
+
+  return {
+    totals: {
+      views,
+      viewers: globalViewers.size,
+      downloads,
+      galleriesWithDownloads: downloadGalleries.size,
+    },
+    byGallery: normalizedByGallery,
+  };
+}
+
 export async function getGalleryCommentCounts(
   galleryId: string,
 ): Promise<Record<string, number>> {

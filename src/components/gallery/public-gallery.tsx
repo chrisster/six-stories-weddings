@@ -105,6 +105,13 @@ export function PublicGallery({
     sessionRef.current = id;
     if (!id) return;
 
+    // Record a gallery view (best-effort, once per mount).
+    fetch(`/g/${gallerySlug}/view`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session: id }),
+    }).catch(() => {});
+
     fetch(`/g/${gallerySlug}/favorites?session=${encodeURIComponent(id)}`)
       .then((response) => response.json())
       .then((data: { favorites?: string[] }) => setFavorites(new Set(data.favorites || [])))

@@ -1,7 +1,7 @@
 import { Zip, ZipPassThrough } from "fflate";
 
 import { getCurrentUser } from "@/lib/auth";
-import { getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import { getGuestAccessByToken, getPublicGalleryBySlug, logGalleryEvent, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
 import { getSignedMediaUrl } from "@/lib/storage";
 import type { MediaAsset } from "@/lib/types";
@@ -54,6 +54,11 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null, toke
 
   if (assets.length === 0) {
     return new Response("No files", { status: 404 });
+  }
+
+  // Count the bulk download once (non-admin viewers only).
+  if (!adminUser) {
+    await logGalleryEvent(detail.gallery.id, "download");
   }
 
   // Pure-JS streaming ZIP via fflate — no Node stream dependencies, works on
