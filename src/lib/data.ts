@@ -529,7 +529,7 @@ export async function getOrganizationSettings(): Promise<OrganizationSettings> {
   };
 }
 
-export async function getAssignedProjectIdsForEmail(email: string): Promise<string[]> {
+export async function getCrewMemberIdsForEmail(email: string): Promise<string[]> {
   const normalized = (email || "").trim().toLowerCase();
   if (!hasSupabaseEnv || !normalized) {
     return [];
@@ -545,7 +545,21 @@ export async function getAssignedProjectIdsForEmail(email: string): Promise<stri
     .select("id, email, contact_info")
     .or(`email.eq.${normalized},contact_info.eq.${normalized}`);
 
-  const memberIds = (members || []).map((row) => String(row.id));
+  return (members || []).map((row) => String(row.id));
+}
+
+export async function getAssignedProjectIdsForEmail(email: string): Promise<string[]> {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!hasSupabaseEnv || !normalized) {
+    return [];
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return [];
+  }
+
+  const memberIds = await getCrewMemberIdsForEmail(normalized);
   if (memberIds.length === 0) {
     return [];
   }

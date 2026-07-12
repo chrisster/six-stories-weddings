@@ -7,6 +7,53 @@ import { getAssignedProjectIdsForEmail, notifyCrewMemberById } from "@/lib/data"
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const STATUS_LABELS: Record<string, string> = {
+  backlog: "Backlog",
+  stand_by: "Stand by",
+  todo: "To do",
+  in_progress: "In progress",
+  review: "Review",
+  done: "Done",
+};
+
+function statusLabel(status?: string | null): string {
+  const key = String(status || "").trim();
+  return STATUS_LABELS[key] || "To do";
+}
+
+function formatDueDate(value?: string | null): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const date = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+async function getProjectTitle(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  projectId: string,
+): Promise<string> {
+  if (!projectId) return "a project";
+  const { data } = await admin
+    .from("projects")
+    .select("title")
+    .eq("id", projectId)
+    .maybeSingle();
+  return String(data?.title || "a project");
+}
+
+function assignedTaskBody(
+  taskTitle: string,
+  projectTitle: string,
+  status?: string | null,
+  dueDate?: string | null,
+): string {
+  const due = formatDueDate(dueDate);
+  const parts = [`"${taskTitle}" on ${projectTitle}.`, `Status: ${statusLabel(status)}.`];
+  if (due) parts.push(`Due ${due}.`);
+  return parts.join(" ");
+}
+
 async function crewCanTouchProject(projectId: string): Promise<boolean> {
   const user = await getCurrentUser();
   const assigned = await getAssignedProjectIdsForEmail(user?.email || "");
@@ -33,12 +80,13 @@ export async function createTaskAction(formData: FormData) {
   });
   if (assigneeId) {
     const actor = await getCurrentUser();
+    const projectTitle = await getProjectTitle(admin, projectId);
     await notifyCrewMemberById(
       assigneeId,
       {
         type: "task_assigned",
-        title: "A task was assigned to you",
-        body: title,
+        title: "New task assigned to you",
+        body: assignedTaskBody(title, projectTitle, status, dueDate),
         link: "/admin/tasks",
       },
       actor?.email,
@@ -85,7 +133,7 @@ export async function updateTaskAction(formData: FormData) {
 
   const { data: current } = await admin
     .from("project_tasks")
-    .select("title, assignee_id")
+    .select("title, assignee_id, project_id, status, due_date")
     .eq("id", taskId)
     .maybeSingle();
   const currentAssignee = current?.assignee_id ? String(current.assignee_id) : null;
@@ -113,6 +161,9 @@ export async function updateTaskAction(formData: FormData) {
 
   const actor = await getCurrentUser();
   const taskTitle = (patch.title as string | undefined) || String(current?.title || "A task");
+  const projectTitle = await getProjectTitle(admin, String(current?.project_id || ""));
+  const finalStatus = "status" in patch ? (patch.status as string) : current?.status;
+  const finalDue = "due_date" in patch ? (patch.due_date as string | null) : current?.due_date;
   const changedAssignee =
     "assignee_id" in patch && String(patch.assignee_id || "") !== String(currentAssignee || "");
   const finalAssignee =
@@ -123,24 +174,35 @@ export async function updateTaskAction(formData: FormData) {
       finalAssignee,
       {
         type: "task_assigned",
-        title: "A task was assigned to you",
-        body: taskTitle,
+        title: "New task assigned to you",
+        body: assignedTaskBody(taskTitle, projectTitle, finalStatus, finalDue),
         link: "/admin/tasks",
       },
       actor?.email,
     );
   } else if (finalAssignee) {
     const changes: string[] = [];
-    if ("status" in patch) changes.push("status");
-    if ("due_date" in patch) changes.push("due date");
-    if ("title" in patch) changes.push("name");
+    let headline = "Your task was updated";
+    if ("status" in patch) {
+      changes.push(`moved to ${statusLabel(patch.status as string)}`);
+      headline = `Task moved to ${statusLabel(patch.status as string)}`;
+    }
+    if ("due_date" in patch) {
+      const due = formatDueDate(patch.due_date as string | null);
+      changes.push(due ? `due date set to ${due}` : "due date removed");
+      if (!("status" in patch)) headline = due ? "Task due date updated" : "Task due date removed";
+    }
+    if ("title" in patch) {
+      changes.push(`renamed to "${taskTitle}"`);
+      if (!("status" in patch) && !("due_date" in patch)) headline = "Task renamed";
+    }
     if (changes.length > 0) {
       await notifyCrewMemberById(
         finalAssignee,
         {
           type: "task_updated",
-          title: "A task was updated",
-          body: `${taskTitle} — ${changes.join(", ")} changed`,
+          title: headline,
+          body: `"${taskTitle}" on ${projectTitle}: ${changes.join("; ")}.`,
           link: "/admin/tasks",
         },
         actor?.email,
@@ -177,12 +239,13 @@ export async function createProjectTaskAction(formData: FormData) {
 
   if (assigneeId) {
     const actor = await getCurrentUser();
+    const projectTitle = await getProjectTitle(admin, projectId);
     await notifyCrewMemberById(
       assigneeId,
       {
         type: "task_assigned",
-        title: "A task was assigned to you",
-        body: title,
+        title: "New task assigned to you",
+        body: assignedTaskBody(title, projectTitle, status, dueDate),
         link: "/admin/tasks",
       },
       actor?.email,

@@ -751,7 +751,7 @@ export async function addCrewToProjectAction(formData: FormData) {
       {
         type: "project_assigned",
         title: "You were added to a project",
-        body: `${String(project?.title || "A project")} — role: ${assignmentRole}`,
+        body: `You've been added to ${String(project?.title || "a project")} as ${assignmentRole}. Open the project to see the details and schedule.`,
         link: `/admin/projects/${projectId}`,
       },
       actor?.email,

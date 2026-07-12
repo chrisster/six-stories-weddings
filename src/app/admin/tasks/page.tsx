@@ -1,6 +1,11 @@
 import { PostProductionBoard, type BoardTask } from "@/components/admin/post-production-board";
 import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
-import { getAssignedProjectIdsForEmail, getCrewMembers, getProjects } from "@/lib/data";
+import {
+  getAssignedProjectIdsForEmail,
+  getCrewMemberIdsForEmail,
+  getCrewMembers,
+  getProjects,
+} from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +18,21 @@ export default async function TasksPage() {
     (project) => project.status !== "completed" && project.status !== "cancelled",
   );
 
+  let crewMemberIds: Set<string> | null = null;
   if (isCrew) {
     const user = await getCurrentUser();
-    const assignedIds = new Set(await getAssignedProjectIdsForEmail(user?.email || ""));
-    visibleProjects = visibleProjects.filter((project) => assignedIds.has(project.id));
+    const [assignedIds, memberIds] = await Promise.all([
+      getAssignedProjectIdsForEmail(user?.email || ""),
+      getCrewMemberIdsForEmail(user?.email || ""),
+    ]);
+    const assignedSet = new Set(assignedIds);
+    crewMemberIds = new Set(memberIds);
+    visibleProjects = visibleProjects.filter((project) => assignedSet.has(project.id));
   }
 
   const crewNameById = new Map(crewMembers.map((member) => [member.id, member.fullName]));
 
-  const tasks: BoardTask[] = visibleProjects.flatMap((project) =>
+  let tasks: BoardTask[] = visibleProjects.flatMap((project) =>
     project.tasks.map((task) => ({
       id: task.id,
       title: task.title,
@@ -39,6 +50,11 @@ export default async function TasksPage() {
       projectTitle: project.title,
     })),
   );
+
+  // Crew members only see the tasks assigned specifically to them.
+  if (isCrew && crewMemberIds) {
+    tasks = tasks.filter((task) => task.assigneeId && crewMemberIds!.has(task.assigneeId));
+  }
 
   const openTasks = tasks.filter((task) => task.status !== "done").length;
   const assignees = crewMembers.map((member) => ({ id: member.id, name: member.fullName }));
