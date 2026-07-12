@@ -720,6 +720,7 @@ export async function addCrewToProjectAction(formData: FormData) {
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const assignmentRole = String(formData.get("assignmentRole") || "crew").trim();
   const participantType = String(formData.get("participantType") || "inhouse").trim();
+  const editKind = String(formData.get("editKind") || "auto").trim();
   const rawFee = formData.get("freelancerFee");
   const freelancerFee = rawFee && String(rawFee).trim() !== "" ? Number(rawFee) : null;
   if (!projectId || !crewMemberId) return;
@@ -739,7 +740,81 @@ export async function addCrewToProjectAction(formData: FormData) {
       freelancer_fee: freelancerFee,
     });
   }
+
+  await maybeCreateEditorTasks(admin, projectId, crewMemberId, editKind);
+
   revalidatePath(`/admin/projects/${projectId}`);
+  revalidatePath("/admin/tasks");
+}
+
+// Automatically create post-production editing tasks when an editor is
+// assigned. The edit kind can be forced (photo/video) or derived from the
+// project's services + the crew member's specialty.
+async function maybeCreateEditorTasks(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  projectId: string,
+  crewMemberId: string,
+  editKind: string,
+) {
+  const { data: member } = await admin
+    .from("crew_members")
+    .select("role_type")
+    .eq("id", crewMemberId)
+    .maybeSingle();
+
+  const roleType = String(member?.role_type || "").toLowerCase();
+
+  let kinds: Array<"photo_edit" | "video_edit"> = [];
+  if (editKind === "photo_edit") {
+    kinds = ["photo_edit"];
+  } else if (editKind === "video_edit") {
+    kinds = ["video_edit"];
+  } else if (editKind === "none") {
+    kinds = [];
+  } else {
+    // Auto: only when the assigned person is an editor.
+    if (roleType !== "editor") return;
+    const { data: project } = await admin
+      .from("projects")
+      .select("project_type")
+      .eq("id", projectId)
+      .maybeSingle();
+    const services = parseLegacyProjectType(String(project?.project_type || "Wedding")).services;
+    if (services.includes("photo")) kinds.push("photo_edit");
+    if (services.includes("film")) kinds.push("video_edit");
+    if (kinds.length === 0) kinds = ["video_edit"];
+  }
+
+  if (kinds.length === 0) return;
+
+  const { data: project } = await admin
+    .from("projects")
+    .select("title, event_date")
+    .eq("id", projectId)
+    .maybeSingle();
+  const title = String(project?.title || "Project");
+  const eventDate = String(project?.event_date || "").replaceAll("-", ".");
+
+  for (const kind of kinds) {
+    const { data: existingTask } = await admin
+      .from("project_tasks")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("kind", kind)
+      .maybeSingle();
+    if (existingTask) continue;
+
+    const label = kind === "video_edit" ? "VIDEO EDIT" : "PHOTO EDIT";
+    const taskTitle = [label, eventDate, title].filter(Boolean).join(" - ");
+
+    await admin.from("project_tasks").insert({
+      project_id: projectId,
+      title: taskTitle,
+      status: "backlog",
+      kind,
+      assignee_id: crewMemberId,
+    });
+  }
 }
 
 export async function removeCrewFromProjectAction(formData: FormData) {

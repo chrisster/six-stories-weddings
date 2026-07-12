@@ -44,11 +44,20 @@ export type CrewAssignment = {
   crewMember: CrewMember;
 };
 
+export type PostProductionTaskStatus =
+  | "backlog"
+  | "stand_by"
+  | "todo"
+  | "in_progress"
+  | "review"
+  | "done";
+
 export type ProjectTask = {
   id: string;
   projectId: string;
   title: string;
-  status: "todo" | "in_progress" | "done";
+  status: PostProductionTaskStatus;
+  kind?: "photo_edit" | "video_edit" | null;
   dueDate?: string | null;
   assigneeId?: string | null;
 };

@@ -518,6 +518,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                 <option value="freelancer">Freelancer</option>
               </select>
               <input name="freelancerFee" type="number" min="0" step="0.01" placeholder="Fee (freelancer)" className="h-10 rounded-xl border border-border px-3 text-sm" />
+              <select name="editKind" defaultValue="auto" title="Editing task to create" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+                <option value="auto">Editor: auto by services</option>
+                <option value="photo_edit">Editor: Photo edit</option>
+                <option value="video_edit">Editor: Video edit</option>
+                <option value="none">No editing task</option>
+              </select>
               <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Add crew</button>
             </form>
           ) : !isCrew ? (

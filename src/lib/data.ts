@@ -21,6 +21,7 @@ import type {
   GalleryNotificationTemplate,
   PortalGallery,
   Project,
+  ProjectTask,
 } from "@/lib/types";
 
 function normalizePaymentDate(raw: string): string {
@@ -150,7 +151,8 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
     id: String(task.id),
     projectId: String(task.project_id),
     title: String(task.title || ""),
-    status: (task.status as "todo" | "in_progress" | "done") || "todo",
+    status: (String(task.status || "todo") as ProjectTask["status"]) || "todo",
+    kind: (task.kind as "photo_edit" | "video_edit" | null) || null,
     dueDate: task.due_date as string | null,
     assigneeId: task.assignee_id as string | null,
   }));

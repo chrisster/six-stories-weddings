@@ -38,6 +38,35 @@ export async function updateTaskStatusAction(formData: FormData) {
   revalidatePath("/admin/tasks");
 }
 
+const VALID_STATUSES = ["backlog", "stand_by", "todo", "in_progress", "review", "done"];
+
+export async function updateTaskAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  const taskId = String(formData.get("taskId") || "").trim();
+  if (!taskId) return;
+
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  const patch: Record<string, unknown> = {};
+
+  if (formData.has("status")) {
+    const status = String(formData.get("status") || "").trim();
+    if (VALID_STATUSES.includes(status)) patch.status = status;
+  }
+  if (formData.has("dueDate")) {
+    patch.due_date = String(formData.get("dueDate") || "").trim() || null;
+  }
+  if (formData.has("assigneeId")) {
+    patch.assignee_id = String(formData.get("assigneeId") || "").trim() || null;
+  }
+
+  if (Object.keys(patch).length === 0) return;
+
+  await admin.from("project_tasks").update(patch).eq("id", taskId);
+  revalidatePath("/admin/tasks");
+}
+
 export async function deleteTaskAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
   const taskId = String(formData.get("taskId") || "").trim();
