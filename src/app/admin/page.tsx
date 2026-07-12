@@ -1,13 +1,22 @@
 import Link from "next/link";
-import { Images } from "lucide-react";
+import { Images, Plus } from "lucide-react";
 
 import { ProjectsControls } from "@/components/admin/projects-controls";
+import { getCurrentUserRole } from "@/lib/auth";
 import { getGalleries, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
 type AdminPageProps = {
   searchParams: Promise<{ q?: string; status?: string; sort?: string; period?: string }>;
 };
+
+function currency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 function statusLabel(status: string) {
   if (status === "post_production") return "post production";
@@ -73,6 +82,8 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
 
   const projects = await getProjects();
   const galleries = await getGalleries();
+  const role = await getCurrentUserRole();
+  const isCrew = role === "crew";
   const galleryByProject = new Map(galleries.map((gallery) => [gallery.projectId, gallery]));
 
   const periodFiltered = projects.filter((project) => isWithinPeriod(project.eventDate, period));
@@ -105,30 +116,62 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
     declined: periodFiltered.filter((project) => project.status === "declined").length,
   };
 
+  const revenuePaid = periodFiltered.reduce((sum, project) => sum + project.amountPaid, 0);
+  const activeGalleries = galleries.length;
+
+  const insights = [
+    { label: "Projects", value: String(statusCounts.all), hint: `${statusCounts.scheduled} scheduled` },
+    { label: "Galleries", value: String(activeGalleries), hint: `${galleries.filter((g) => g.isPublished).length} published` },
+    {
+      label: "In production",
+      value: String(statusCounts.post_production),
+      hint: `${statusCounts.completed} completed`,
+    },
+    isCrew
+      ? { label: "Completed", value: String(statusCounts.completed), hint: "delivered" }
+      : { label: "Revenue", value: currency(revenuePaid), hint: "collected" },
+  ];
+
   return (
-    <div className="space-y-5">
-      <section className="admin-surface p-4">
-        <p className="quiet-label mb-3">Overview</p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {statusKpis.map((kpi) => (
-            <article
-              key={kpi.key}
-              className="rounded-2xl border border-border/80 bg-zinc-50 px-4 py-3"
-            >
-              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{kpi.label}</p>
-              <p className="mt-2 text-3xl font-semibold text-foreground">{statusCounts[kpi.key] || 0}</p>
-            </article>
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="title-cinematic text-3xl font-semibold sm:text-[2.1rem]">
+            Welcome, Six Stories Studio
+          </h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">Create something beautiful.</p>
+        </div>
+        <Link
+          href="/admin/projects/new"
+          className="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition hover:opacity-90"
+        >
+          <Plus className="size-4" />
+          Create project
+        </Link>
+      </header>
+
+      <section className="rounded-3xl border border-border/70 bg-white p-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+        <div className="grid grid-cols-2 divide-border/70 sm:grid-cols-4 sm:divide-x">
+          {insights.map((item) => (
+            <div key={item.label} className="px-5 py-5">
+              <p className="text-[2rem] font-semibold leading-none tracking-tight text-foreground">
+                {item.value}
+              </p>
+              <p className="mt-2 text-sm font-medium text-foreground/80">{item.label}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{item.hint}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      <section className="admin-surface p-4">
+      <section className="rounded-3xl border border-border/70 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="title-cinematic text-2xl font-semibold">Projects</h2>
+          <h2 className="title-cinematic text-xl font-semibold">Projects</h2>
           <Link
             href="/admin/projects/new"
-            className="h-9 rounded-xl border border-foreground bg-foreground px-4 py-2 text-sm text-background transition hover:opacity-90"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-4 text-sm transition hover:border-foreground/40"
           >
+            <Plus className="size-3.5" />
             Add project
           </Link>
         </div>

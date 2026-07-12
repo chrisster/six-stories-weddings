@@ -19,10 +19,10 @@ type NavRole = "admin" | "crew" | null | undefined;
 
 const links = [
   { href: "/admin", label: "Projects", icon: FolderKanban },
-  { href: "/admin/contacts", label: "Contacts", icon: ContactRound, hideForCrew: true },
-  { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
-  { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/admin/galleries", label: "Galleries", icon: ImageIcon },
+  { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
+  { href: "/admin/contacts", label: "Contacts", icon: ContactRound, hideForCrew: true },
   { href: "/admin/financials", label: "Financials", icon: Wallet, hideForCrew: true },
   { href: "/admin/team", label: "Team", icon: Users, adminOnly: true },
   { href: "/admin/account", label: "Account", icon: UserCircle },
@@ -39,11 +39,12 @@ export function AdminNav({ role }: { role?: NavRole }) {
   });
 
   return (
-    <nav className="flex flex-col gap-1.5">
+    <nav className="flex flex-col gap-1">
       {visibleLinks.map((link) => {
         const isActive =
           link.href === "/admin"
-            ? pathname === "/admin" || (pathname.startsWith("/admin/projects/") && !pathname.startsWith("/admin/projects/new"))
+            ? pathname === "/admin" ||
+              (pathname.startsWith("/admin/projects/") && !pathname.startsWith("/admin/projects/new"))
             : pathname.startsWith(link.href);
         const Icon = link.icon;
 
@@ -52,13 +53,19 @@ export function AdminNav({ role }: { role?: NavRole }) {
             key={link.href}
             href={link.href}
             className={cn(
-              "inline-flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition",
+              "group inline-flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
               isActive
-                ? "border-border bg-muted/60 text-foreground"
-                : "border-transparent bg-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground",
+                ? "bg-foreground/[0.06] font-medium text-foreground"
+                : "text-muted-foreground hover:bg-foreground/[0.03] hover:text-foreground",
             )}
           >
-            <Icon className="size-4" strokeWidth={1.8} />
+            <Icon
+              className={cn(
+                "size-[18px] transition",
+                isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
+              )}
+              strokeWidth={1.8}
+            />
             {link.label}
           </Link>
         );
