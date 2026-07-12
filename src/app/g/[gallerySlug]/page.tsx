@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { PublicGallery } from "@/components/gallery/public-gallery";
 import { getCurrentUser } from "@/lib/auth";
-import { getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import { getGalleryCommentCounts, getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
 import { getSignedMediaUrl } from "@/lib/storage";
 
@@ -68,6 +68,8 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
       ? "Six Stories Studio"
       : null;
 
+  const commentCounts = await getGalleryCommentCounts(detail.gallery.id);
+
   return (
     <main className="min-h-screen bg-white">
       <PublicGallery
@@ -81,6 +83,7 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
         sectionOrder={detail.sections.map((section) => section.name)}
         canComment={canComment}
         commenterName={commenterName}
+        commentCounts={commentCounts}
       />
     </main>
   );

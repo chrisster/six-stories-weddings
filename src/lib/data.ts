@@ -479,6 +479,33 @@ export async function getGalleryFavorites(
   return { counts, total: (data || []).length, guests: guests.size };
 }
 
+export async function getGalleryCommentCounts(
+  galleryId: string,
+): Promise<Record<string, number>> {
+  if (!hasSupabaseEnv) {
+    return {};
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return {};
+  }
+
+  const { data } = await admin
+    .from("gallery_comments")
+    .select("media_asset_id")
+    .eq("gallery_id", galleryId);
+
+  const counts: Record<string, number> = {};
+  (data || []).forEach((row) => {
+    if (!row.media_asset_id) return;
+    const id = String(row.media_asset_id);
+    counts[id] = (counts[id] || 0) + 1;
+  });
+
+  return counts;
+}
+
 export async function getClientPortalAccountsByEmails(
   emails: string[],
 ): Promise<Record<string, ClientPortalAccountSummary>> {

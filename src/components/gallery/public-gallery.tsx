@@ -39,6 +39,7 @@ type PublicGalleryProps = {
   sectionOrder?: string[];
   canComment?: boolean;
   commenterName?: string | null;
+  commentCounts?: Record<string, number>;
 };
 
 type GroupedSection = {
@@ -72,6 +73,7 @@ export function PublicGallery({
   sectionOrder = [],
   canComment = false,
   commenterName = null,
+  commentCounts = {},
 }: PublicGalleryProps) {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -793,6 +795,7 @@ export function PublicGallery({
                   allowDownloads={allowDownloads}
                   selectMode={selectMode}
                   selected={selected}
+                  commentCounts={commentCounts}
                   onSelect={openAt}
                   onToggleFavorite={toggleFavorite}
                   onToggleSelect={toggleSelect}
@@ -971,6 +974,7 @@ type JustifiedGridProps = {
   allowDownloads: boolean;
   selectMode: boolean;
   selected: Set<string>;
+  commentCounts?: Record<string, number>;
   onSelect: (assetId: string) => void;
   onToggleFavorite: (assetId: string) => void;
   onToggleSelect: (assetId: string) => void;
@@ -983,6 +987,7 @@ function JustifiedGrid({
   allowDownloads,
   selectMode,
   selected,
+  commentCounts = {},
   onSelect,
   onToggleFavorite,
   onToggleSelect,
@@ -1055,6 +1060,7 @@ function JustifiedGrid({
           {row.items.map(({ asset, w, h }) => {
             const isFavorite = favorites.has(asset.id);
             const isSelected = selected.has(asset.id);
+            const commentCount = commentCounts[asset.id] || 0;
             return (
               <div
                 key={asset.id}
@@ -1140,6 +1146,13 @@ function JustifiedGrid({
                     <Heart className={`size-[18px] ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
                   </button>
                 )}
+
+                {!selectMode && commentCount > 0 ? (
+                  <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[11px] font-medium text-white backdrop-blur">
+                    <MessageCircle className="size-3.5" />
+                    {commentCount}
+                  </span>
+                ) : null}
               </div>
             );
           })}
