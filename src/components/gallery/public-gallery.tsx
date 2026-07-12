@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { formatDateLong } from "@/lib/utils";
+import { GalleryVideoSection, type GalleryVideoAsset } from "@/components/gallery/gallery-video-section";
 
 type PublicAsset = {
   id: string;
@@ -192,9 +193,18 @@ export function PublicGallery({
     });
   }, []);
 
+  const photoAssets = useMemo(
+    () => assets.filter((asset) => asset.mediaType !== "video"),
+    [assets],
+  );
+  const videoAssets = useMemo(
+    () => assets.filter((asset) => asset.mediaType === "video"),
+    [assets],
+  );
+
   const grouped = useMemo<GroupedSection[]>(() => {
     const map = new Map<string, PublicAsset[]>();
-    assets.forEach((asset) => {
+    photoAssets.forEach((asset) => {
       const key = asset.sectionName || "Moments";
       map.set(key, [...(map.get(key) || []), asset]);
     });
@@ -370,6 +380,34 @@ export function PublicGallery({
     }
   }, [createShareLink, flatOrdered, openSharePreview, selected]);
 
+  const shareAsset = useCallback(
+    async (assetId: string) => {
+      setSharing(true);
+      try {
+        const url = await createShareLink({ shareAll: false, assetIds: [assetId] });
+        openSharePreview(url);
+      } catch {
+        // ignore errors for now
+      } finally {
+        setSharing(false);
+      }
+    },
+    [createShareLink, openSharePreview],
+  );
+
+  const downloadVideo = useCallback(
+    (video: GalleryVideoAsset) => {
+      downloadAsset({
+        id: video.id,
+        sectionName: "Films",
+        mediaType: "video",
+        url: video.url,
+        fileName: video.fileName,
+      });
+    },
+    [downloadAsset],
+  );
+
   const copyShareLink = useCallback(async () => {
     if (!sharePreviewUrl || typeof navigator === "undefined") return;
     try {
@@ -462,6 +500,20 @@ export function PublicGallery({
                 {group.name}
               </button>
             ))}
+            {videoAssets.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFavoritesOnly(false);
+                  scrollToSection("Films");
+                }}
+                className={`text-[11px] uppercase tracking-[0.22em] transition hover:text-foreground ${
+                  !favoritesOnly && activeSection === "Films" ? "text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                Films
+              </button>
+            ) : null}
           </div>
 
           <button
@@ -708,6 +760,24 @@ export function PublicGallery({
           ))
         )}
       </div>
+
+      {/* ---------- FILMS ---------- */}
+      {!favoritesOnly && videoAssets.length > 0 ? (
+        <GalleryVideoSection
+          videos={videoAssets.map((asset) => ({
+            id: asset.id,
+            url: asset.url,
+            fileName: asset.fileName,
+          }))}
+          gallerySlug={gallerySlug}
+          allowDownloads={allowDownloads}
+          onDownload={downloadVideo}
+          onShare={shareAsset}
+          sectionRef={(element) => {
+            sectionRefs.current["Films"] = element;
+          }}
+        />
+      ) : null}
 
       {/* ---------- LIGHTBOX ---------- */}
       {activeAsset ? (

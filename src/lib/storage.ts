@@ -93,6 +93,40 @@ export async function uploadMediaToStorage(path: string, file: File) {
   return { path };
 }
 
+export type SignedUploadTarget =
+  | { provider: "r2"; url: string; path: string }
+  | { provider: "supabase"; bucket: string; path: string; token: string };
+
+/**
+ * Creates a signed target the browser can upload to directly, bypassing the
+ * serverless request-body size limit. Used for large files such as videos.
+ */
+export async function createSignedUploadTarget(
+  path: string,
+  contentType: string,
+): Promise<SignedUploadTarget> {
+  if (useR2) {
+    const url = await getSignedUrl(
+      getR2Client(),
+      new PutObjectCommand({ Bucket: R2_BUCKET, Key: path, ContentType: contentType }),
+      { expiresIn: 60 * 15 },
+    );
+    return { provider: "r2", url, path };
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    throw new Error("Storage unavailable");
+  }
+
+  const { data, error } = await admin.storage.from(SUPABASE_BUCKET).createSignedUploadUrl(path);
+  if (error || !data) {
+    throw new Error(error?.message ?? "Could not create signed upload URL");
+  }
+
+  return { provider: "supabase", bucket: SUPABASE_BUCKET, path: data.path, token: data.token };
+}
+
 export async function getSignedMediaUrl(storagePath: string, expiresIn = 60 * 60) {
   // External / demo URLs pass straight through.
   if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {

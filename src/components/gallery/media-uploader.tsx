@@ -145,6 +145,107 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
     });
   }
 
+  // Videos can be large and exceed the serverless request-body limit, so they
+  // are uploaded directly to storage using a short-lived signed URL.
+  async function uploadVideoDirect(item: UploadProgress): Promise<void> {
+    const setEntry = (patch: Partial<UploadProgress>) => {
+      setProgress((prev) =>
+        prev.map((entry) => (entry.fileIndex === item.fileIndex ? { ...entry, ...patch } : entry)),
+      );
+    };
+
+    const urlResponse = await fetch("/api/admin/galleries/video-upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        galleryId,
+        fileName: item.file.name,
+        contentType: item.file.type || "video/mp4",
+      }),
+    });
+
+    if (!urlResponse.ok) {
+      const message = await urlResponse
+        .json()
+        .then((data: { error?: string }) => data.error)
+        .catch(() => null);
+      setEntry({ status: "failed", error: message || "Could not start video upload." });
+      throw new Error(message || "Could not start video upload.");
+    }
+
+    const { storagePath, target } = (await urlResponse.json()) as {
+      storagePath: string;
+      target:
+        | { provider: "r2"; url: string; path: string }
+        | { provider: "supabase"; bucket: string; path: string; token: string };
+    };
+
+    if (target.provider === "r2") {
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", target.url);
+        xhr.setRequestHeader("Content-Type", item.file.type || "video/mp4");
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          setEntry({ progress: Math.round((event.loaded / event.total) * 100) });
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Upload failed (${xhr.status}).`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error while uploading video."));
+        xhr.send(item.file);
+      });
+    } else {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      setEntry({ progress: 40 });
+      const { error } = await supabase.storage
+        .from(target.bucket)
+        .uploadToSignedUrl(target.path, target.token, item.file, {
+          contentType: item.file.type || "video/mp4",
+        });
+      if (error) {
+        setEntry({ status: "failed", error: error.message });
+        throw new Error(error.message);
+      }
+      setEntry({ progress: 90 });
+    }
+
+    const registerResponse = await fetch("/api/admin/galleries/register-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        galleryId,
+        sectionId: selectedSectionId || undefined,
+        storagePath,
+        originalName: item.file.name,
+        contentType: item.file.type || "video/mp4",
+      }),
+    });
+
+    if (!registerResponse.ok) {
+      const message = await registerResponse
+        .json()
+        .then((data: { error?: string }) => data.error)
+        .catch(() => null);
+      setEntry({ status: "failed", error: message || "Could not save video." });
+      throw new Error(message || "Could not save video.");
+    }
+
+    setEntry({ status: "completed", progress: 100, error: undefined });
+  }
+
+  async function uploadItem(item: UploadProgress): Promise<void> {
+    if ((item.file.type || "").startsWith("video/")) {
+      return uploadVideoDirect(item);
+    }
+    return uploadSingleFile(item);
+  }
+
   const handleUpload = async () => {
     if (selectedFiles.length === 0 || isUploading) {
       return;
@@ -165,7 +266,7 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
 
     try {
       for (const item of queued) {
-        await uploadSingleFile(item);
+        await uploadItem(item);
       }
 
       router.refresh();
@@ -199,7 +300,7 @@ export function MediaUploader({ galleryId, sections }: MediaUploaderProps) {
 
     try {
       for (const item of failed) {
-        await uploadSingleFile(item);
+        await uploadItem(item);
       }
       router.refresh();
     } finally {
