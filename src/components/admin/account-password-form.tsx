@@ -14,11 +14,53 @@ export function AccountPasswordForm() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      setReady(Boolean(data.session));
-    });
+
+    async function establishSession() {
+      try {
+        // Implicit recovery: tokens arrive in the URL hash.
+        const hash = window.location.hash.startsWith("#")
+          ? window.location.hash.slice(1)
+          : window.location.hash;
+        if (hash) {
+          const params = new URLSearchParams(hash);
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (!error) {
+              setReady(true);
+              window.history.replaceState(null, "", window.location.pathname);
+              return;
+            }
+          }
+        }
+
+        // PKCE recovery: a `code` arrives in the query string.
+        const code = new URLSearchParams(window.location.search).get("code");
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error) {
+            setReady(true);
+            window.history.replaceState(null, "", window.location.pathname);
+            return;
+          }
+        }
+
+        // Otherwise fall back to any existing session.
+        const { data } = await supabase.auth.getSession();
+        setReady(Boolean(data.session));
+      } catch {
+        setReady(false);
+      }
+    }
+
+    void establishSession();
+
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setReady(Boolean(session));
+      if (session) setReady(true);
     });
     return () => sub.subscription.unsubscribe();
   }, []);

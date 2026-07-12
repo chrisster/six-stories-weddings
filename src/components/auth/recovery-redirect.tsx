@@ -3,18 +3,28 @@
 import { useEffect } from "react";
 
 /**
- * Supabase password recovery links land on the site's configured Site URL with
- * the access token in the URL hash (e.g. `/#access_token=...&type=recovery`).
- * If that lands anywhere other than the reset page, forward the user there with
- * the hash preserved so they can set a new password.
+ * Supabase auth recovery links land on the configured Site URL with the token
+ * either in the URL hash (`#access_token=...&type=recovery`) or as a `?code=`
+ * query param (PKCE). If that lands anywhere other than the reset page, forward
+ * the user there with the token preserved so they can set a new password.
  */
 export function RecoveryRedirect() {
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const hash = window.location.hash || "";
-    if (!hash.includes("type=recovery") && !hash.includes("access_token")) return;
     if (window.location.pathname === "/reset-password") return;
-    window.location.replace(`/reset-password${hash}`);
+
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+
+    const isRecovery =
+      hash.includes("type=recovery") ||
+      hash.includes("access_token") ||
+      search.includes("type=recovery") ||
+      new URLSearchParams(search).has("code");
+
+    if (!isRecovery) return;
+
+    window.location.replace(`/reset-password${search}${hash}`);
   }, []);
 
   return null;
