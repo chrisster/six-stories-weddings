@@ -46,7 +46,7 @@ export async function getCurrentUserRole(): Promise<AppRole | null> {
     .maybeSingle();
 
   const role = String(data?.role || "").toLowerCase();
-  if (role === "crew" || role === "viewer") {
+  if (role === "crew") {
     return "crew";
   }
   return "admin";

@@ -28,6 +28,8 @@ export type CrewMember = {
   fullName: string;
   roleType: "photographer" | "videographer" | "editor" | "assistant" | "partner";
   contactInfo?: string | null;
+  email?: string | null;
+  authUserId?: string | null;
 };
 
 export type CrewAssignment = {

@@ -8,6 +8,7 @@ import {
   ContactRound,
   FolderKanban,
   ImageIcon,
+  UserCircle,
   Users,
   Wallet,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const links = [
   { href: "/admin/galleries", label: "Galleries", icon: ImageIcon },
   { href: "/admin/financials", label: "Financials", icon: Wallet, hideForCrew: true },
   { href: "/admin/team", label: "Team", icon: Users, adminOnly: true },
+  { href: "/admin/account", label: "Account", icon: UserCircle },
 ] as const;
 
 export function AdminNav({ role }: { role?: NavRole }) {

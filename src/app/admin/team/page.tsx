@@ -1,141 +1,202 @@
 import { requireAdminRole } from "@/lib/auth";
-import { hasSupabaseEnv } from "@/lib/env";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCrewMembers } from "@/lib/data";
 
-import { createCrewLoginAction, removeCrewLoginAction } from "./actions";
+import { createCrewAction, inviteCrewAction, removeCrewAction, updateCrewAction } from "./actions";
 
 type TeamPageProps = {
   searchParams: Promise<{ status?: string; reason?: string }>;
 };
 
-type CrewLogin = {
-  id: string;
-  authUserId: string | null;
-  email: string;
-  fullName: string | null;
-  active: boolean;
-};
+const specialties = [
+  { value: "photographer", label: "Photographer" },
+  { value: "videographer", label: "Videographer" },
+  { value: "editor", label: "Editor" },
+  { value: "assistant", label: "Assistant" },
+  { value: "partner", label: "Partner" },
+];
 
-async function getCrewLogins(): Promise<CrewLogin[]> {
-  if (!hasSupabaseEnv) return [];
-  const admin = createAdminClient();
-  if (!admin) return [];
-
-  const { data } = await admin
-    .from("users")
-    .select("id, auth_user_id, email, full_name, role, active")
-    .eq("role", "crew")
-    .order("email", { ascending: true });
-
-  return (data || []).map((row) => ({
-    id: String(row.id),
-    authUserId: (row.auth_user_id as string | null) || null,
-    email: String(row.email || ""),
-    fullName: (row.full_name as string | null) || null,
-    active: Boolean(row.active),
-  }));
+function specialtyLabel(value: string) {
+  return specialties.find((s) => s.value === value)?.label || value;
 }
 
 export default async function TeamPage({ searchParams }: TeamPageProps) {
   await requireAdminRole();
   const { status, reason } = await searchParams;
-  const crew = await getCrewLogins();
+  const crew = await getCrewMembers();
 
   return (
     <div className="space-y-6">
       <section className="soft-panel p-5">
         <p className="text-xs tracking-[0.25em] text-muted-foreground uppercase">Studio</p>
-        <h2 className="title-cinematic mt-2 text-3xl font-semibold">Team Access</h2>
+        <h2 className="title-cinematic mt-2 text-3xl font-semibold">Team</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Create logins for crew members. Crew can manage projects, tasks, and galleries, but cannot
-          see financials or client contacts.
+          Manage your crew and their specialties. Invite crew members to give them a login — they
+          receive an email to set their own password. Crew can manage projects, tasks, and galleries,
+          but never see financials or client contacts.
         </p>
       </section>
 
-      {status === "ok" ? (
+      {status === "created" ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-          Crew login created.
+          Crew member added.
+        </div>
+      ) : null}
+      {status === "updated" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+          Crew member updated.
+        </div>
+      ) : null}
+      {status === "invited" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+          Invitation email sent. The crew member can set their password from the link.
         </div>
       ) : null}
       {status === "removed" ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          Crew login removed.
+          Crew member removed.
         </div>
       ) : null}
       {status === "error" ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           {reason === "invalid"
-            ? "Enter a valid email and a password of at least 8 characters."
-            : reason === "unavailable"
-              ? "Team management is unavailable."
-              : `Could not create login: ${reason ? decodeURIComponent(reason) : "unknown error"}`}
+            ? "Enter a full name."
+            : reason === "no_email"
+              ? "Add a valid email address before inviting this crew member."
+              : reason === "email_failed"
+                ? "The invite could not be emailed. Check email settings."
+                : reason === "unavailable"
+                  ? "Team management is unavailable."
+                  : `Something went wrong: ${reason ? decodeURIComponent(reason) : "unknown error"}`}
         </div>
       ) : null}
 
       <section className="soft-panel p-5">
-        <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Add crew login</h3>
-        <form action={createCrewLoginAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Add crew member</h3>
+        <form action={createCrewAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input
             name="fullName"
+            required
             placeholder="Full name"
             className="h-10 rounded-xl border border-border px-3 text-sm"
           />
           <input
             name="email"
             type="email"
-            required
-            placeholder="Email"
+            placeholder="Email (for login invite)"
             className="h-10 rounded-xl border border-border px-3 text-sm"
           />
-          <input
-            name="password"
-            type="password"
-            minLength={8}
-            required
-            placeholder="Temporary password (min 8)"
-            className="h-10 rounded-xl border border-border px-3 text-sm"
-          />
+          <select name="roleType" defaultValue="photographer" className="h-10 rounded-xl border border-border bg-white px-3 text-sm">
+            {specialties.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background"
           >
-            Create login
+            Add crew member
           </button>
         </form>
       </section>
 
       <section className="soft-panel overflow-hidden p-0">
         <div className="border-b border-border/80 px-5 py-4">
-          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew logins</h3>
+          <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
         </div>
         {crew.length > 0 ? (
           <ul>
-            {crew.map((member) => (
-              <li
-                key={member.id}
-                className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-5 py-4 last:border-0"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {member.fullName || member.email}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{member.email}</p>
-                </div>
-                <form action={removeCrewLoginAction}>
-                  <input type="hidden" name="userId" value={member.id} />
-                  <input type="hidden" name="authUserId" value={member.authUserId || ""} />
-                  <button
-                    type="submit"
-                    className="h-9 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
-                  >
-                    Remove access
-                  </button>
-                </form>
-              </li>
-            ))}
+            {crew.map((member) => {
+              const hasLogin = Boolean(member.authUserId);
+              return (
+                <li
+                  key={member.id}
+                  className="border-b border-border/70 px-5 py-4 last:border-0"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{member.fullName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {specialtyLabel(member.roleType)}
+                        {member.email ? ` · ${member.email}` : ""}
+                      </p>
+                      <span
+                        className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] ${
+                          hasLogin ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500"
+                        }`}
+                      >
+                        {hasLogin ? "Has login" : "No login yet"}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <form action={inviteCrewAction}>
+                        <input type="hidden" name="crewMemberId" value={member.id} />
+                        <button
+                          type="submit"
+                          className="h-9 rounded-lg border border-border px-3 text-xs hover:border-foreground/40"
+                        >
+                          {hasLogin ? "Resend set-password email" : "Invite (set password)"}
+                        </button>
+                      </form>
+                      <form action={removeCrewAction}>
+                        <input type="hidden" name="crewMemberId" value={member.id} />
+                        <input type="hidden" name="authUserId" value={member.authUserId || ""} />
+                        <button
+                          type="submit"
+                          className="h-9 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
+                        >
+                          Remove
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  <details className="mt-3">
+                    <summary className="cursor-pointer list-none text-xs text-muted-foreground underline underline-offset-4">
+                      Edit details
+                    </summary>
+                    <form action={updateCrewAction} className="mt-3 grid gap-2 sm:grid-cols-4">
+                      <input type="hidden" name="crewMemberId" value={member.id} />
+                      <input
+                        name="fullName"
+                        required
+                        defaultValue={member.fullName}
+                        className="h-10 rounded-xl border border-border px-3 text-sm"
+                      />
+                      <input
+                        name="email"
+                        type="email"
+                        defaultValue={member.email || ""}
+                        placeholder="Email"
+                        className="h-10 rounded-xl border border-border px-3 text-sm"
+                      />
+                      <select
+                        name="roleType"
+                        defaultValue={member.roleType}
+                        className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+                      >
+                        {specialties.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/30"
+                      >
+                        Save
+                      </button>
+                    </form>
+                  </details>
+                </li>
+              );
+            })}
           </ul>
         ) : (
-          <p className="px-5 py-6 text-sm text-muted-foreground">No crew logins yet.</p>
+          <p className="px-5 py-6 text-sm text-muted-foreground">No crew members yet.</p>
         )}
       </section>
     </div>

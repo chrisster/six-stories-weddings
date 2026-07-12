@@ -1,13 +1,13 @@
-import { getContacts, getCrewMembers } from "@/lib/data";
+import { getContacts } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
 import { AddContactForm } from "./add-form";
-import { ClientContactRow, CrewContactRow } from "./contact-row";
+import { ClientContactRow } from "./contact-row";
 
 export const dynamic = "force-dynamic";
 
 export default async function ContactsPage() {
-  const [contacts, crewMembers] = await Promise.all([getContacts(), getCrewMembers()]);
+  const contacts = await getContacts();
 
   return (
     <div className="space-y-6">
@@ -42,10 +42,7 @@ export default async function ContactsPage() {
             {contacts.map((contact) => (
               <ClientContactRow key={`c-${contact.id}`} contact={contact} />
             ))}
-            {crewMembers.map((member) => (
-              <CrewContactRow key={`cr-${member.id}`} member={member} />
-            ))}
-            {contacts.length === 0 && crewMembers.length === 0 ? (
+            {contacts.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">
                   No contacts yet.

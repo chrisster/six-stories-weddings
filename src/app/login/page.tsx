@@ -19,6 +19,12 @@ export default function LoginPage() {
 
       <section className="flex min-h-[62vh] items-center justify-center bg-[linear-gradient(160deg,oklch(0.985_0.01_96),oklch(0.965_0.02_92))] px-6 py-10 sm:px-10 lg:min-h-screen lg:px-16">
         <div className="w-full max-w-lg rounded-3xl border border-border/70 bg-white/88 p-7 shadow-[0_24px_70px_-45px_rgba(0,0,0,0.6)] backdrop-blur sm:p-10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/six-stories-logo.png"
+            alt="Six Stories Studio"
+            className="mb-6 h-12 w-auto"
+          />
           <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">Six Stories Studio</p>
           <h1 className="title-cinematic mt-3 text-3xl leading-tight font-semibold sm:text-4xl">
             Welcome to the Six Stories Studio Admin
