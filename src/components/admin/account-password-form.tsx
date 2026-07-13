@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { setPasswordWithTokenAction } from "@/app/reset-password/actions";
 import { createClient } from "@/lib/supabase/client";
 
 export function AccountPasswordForm() {
@@ -13,8 +14,19 @@ export function AccountPasswordForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
+    // Self-owned token flow: no client session required. The password is set
+    // via a server action using the admin API, so it is immune to "Auth session
+    // missing" and to email link scanners consuming single-use recovery links.
+    const urlToken = new URLSearchParams(window.location.search).get("token");
+    if (urlToken) {
+      setToken(urlToken);
+      setReady(true);
+      return;
+    }
+
     const supabase = createClient();
 
     async function establishSession() {
@@ -83,6 +95,20 @@ export function AccountPasswordForm() {
 
     setLoading(true);
     try {
+      if (token) {
+        const result = await setPasswordWithTokenAction(token, password);
+        if (!result.ok) {
+          setError(result.error || "Could not set your password. Request a new link.");
+          return;
+        }
+        setMessage("Password set. Redirecting to sign in…");
+        setPassword("");
+        setConfirm("");
+        router.push("/login");
+        router.refresh();
+        return;
+      }
+
       const supabase = createClient();
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {

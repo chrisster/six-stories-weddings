@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserRole } from "@/lib/auth";
 import { getAppUrl, hasSupabaseEnv } from "@/lib/env";
 import { sendGalleryNotificationEmail } from "@/lib/gallery-notifications";
+import { createPasswordSetupToken } from "@/lib/password-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SPECIALTIES = ["photographer", "videographer", "editor", "assistant", "partner"] as const;
@@ -137,22 +138,21 @@ export async function inviteCrewAction(formData: FormData) {
     authUserId = created.user.id;
   }
 
-  // Generate a set-password (recovery) link and email it via our own SMTP.
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+  // Resolve the auth user id (needed even when the user already existed) using
+  // a Supabase-generated recovery link purely as a lookup; the emailed link is
+  // our own single-use token so scanners cannot invalidate it.
+  const { data: linkData } = await admin.auth.admin.generateLink({
     type: "recovery",
     email,
     options: { redirectTo },
   });
-
-  if (linkError || !linkData) {
-    redirect(`/admin/team?status=error&reason=${encodeURIComponent(linkError?.message || "link_failed")}`);
-  }
-
-  if (linkData.user?.id) {
+  if (linkData?.user?.id) {
     authUserId = linkData.user.id;
   }
-  const actionLink =
-    (linkData.properties?.action_link as string | undefined) || redirectTo;
+
+  if (!authUserId) {
+    redirect("/admin/team?status=error&reason=link_failed");
+  }
 
   await admin.from("users").upsert(
     {
@@ -166,6 +166,12 @@ export async function inviteCrewAction(formData: FormData) {
   );
 
   await admin.from("crew_members").update({ auth_user_id: authUserId }).eq("id", crewMemberId);
+
+  const rawToken = await createPasswordSetupToken(authUserId, email);
+  if (!rawToken) {
+    redirect("/admin/team?status=error&reason=link_failed");
+  }
+  const actionLink = `${appUrl}/reset-password?token=${rawToken}`;
 
   const subject = "Your Six Stories Studio crew access";
   const html = `

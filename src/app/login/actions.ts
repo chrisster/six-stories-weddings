@@ -2,12 +2,15 @@
 
 import { getAppUrl, hasSupabaseEnv } from "@/lib/env";
 import { sendGalleryNotificationEmail } from "@/lib/gallery-notifications";
+import { createPasswordSetupToken } from "@/lib/password-setup";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * Sends a password reset link using our own SMTP (via a Supabase-generated
- * recovery link), bypassing Supabase's low shared-email rate limit. Always
- * responds generically so it never reveals whether an account exists.
+ * Sends a password reset link using our own SMTP and a self-owned, single-use
+ * token (set-password via admin API), bypassing Supabase's low shared-email
+ * rate limit and the "Auth session missing" issues caused by recovery links
+ * being consumed by email scanners. Always responds generically so it never
+ * reveals whether an account exists.
  */
 export async function requestPasswordResetAction(
   email: string,
@@ -27,19 +30,23 @@ export async function requestPasswordResetAction(
   }
 
   const appUrl = getAppUrl().replace(/\/$/, "");
-  const redirectTo = `${appUrl}/reset-password`;
 
   try {
-    const { data, error } = await admin.auth.admin.generateLink({
+    // Resolve the auth user id via a Supabase recovery link (used only as a
+    // lookup). If the account does not exist, respond generically.
+    const { data } = await admin.auth.admin.generateLink({
       type: "recovery",
       email: normalized,
-      options: { redirectTo },
+      options: { redirectTo: `${appUrl}/reset-password` },
     });
 
-    const actionLink = (data?.properties?.action_link as string | undefined) || null;
-    if (!error && actionLink) {
-      const subject = "Reset your Six Stories Studio password";
-      const html = `
+    const authUserId = (data?.user?.id as string | undefined) || null;
+    if (authUserId) {
+      const rawToken = await createPasswordSetupToken(authUserId, normalized);
+      if (rawToken) {
+        const actionLink = `${appUrl}/reset-password?token=${rawToken}`;
+        const subject = "Reset your Six Stories Studio password";
+        const html = `
         <div style="font-family:Georgia,'Times New Roman',serif;background:#f3f1ee;padding:24px;">
           <div style="max-width:560px;margin:0 auto;background:#fff;padding:28px;">
             <p style="margin:0 0 8px;color:#2d2d2d;letter-spacing:0.12em;text-transform:uppercase;">Six Stories</p>
@@ -56,8 +63,9 @@ export async function requestPasswordResetAction(
             </p>
           </div>
         </div>`;
-      const text = `Reset your Six Stories Studio password:\n\n${actionLink}`;
-      await sendGalleryNotificationEmail({ to: normalized, subject, html, text });
+        const text = `Reset your Six Stories Studio password:\n\n${actionLink}`;
+        await sendGalleryNotificationEmail({ to: normalized, subject, html, text });
+      }
     }
   } catch {
     // Swallow errors so we never leak account existence or provider details.
