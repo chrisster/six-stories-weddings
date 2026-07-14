@@ -146,14 +146,162 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     });
   }
 
+  // Uploads a single part to its presigned URL and resolves with the ETag that
+  // R2 returns (required to complete the multipart upload). R2 CORS must expose
+  // the ETag response header for this to work from the browser.
+  function putPart(
+    url: string,
+    chunk: Blob,
+    uploadedBytes: number,
+    totalBytes: number,
+    setEntry: (patch: Partial<UploadProgress>) => void,
+  ): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const overall = Math.round(((uploadedBytes + event.loaded) / totalBytes) * 100);
+        setEntry({ progress: Math.min(99, overall) });
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const etag = xhr.getResponseHeader("ETag") || xhr.getResponseHeader("etag");
+          if (!etag) {
+            reject(
+              new Error("Missing ETag from storage. Configure R2 CORS to expose the ETag header."),
+            );
+            return;
+          }
+          resolve(etag);
+          return;
+        }
+        reject(new Error(`Upload failed (${xhr.status}).`));
+      };
+      xhr.onerror = () => reject(new Error("Network error while uploading video."));
+      xhr.send(chunk);
+    });
+  }
+
+  async function uploadVideoMultipart(
+    item: UploadProgress,
+    storagePath: string,
+    uploadId: string,
+    setEntry: (patch: Partial<UploadProgress>) => void,
+  ): Promise<void> {
+    const file = item.file;
+    const PART_SIZE = 100 * 1024 * 1024; // 100 MB per part.
+    const totalParts = Math.max(1, Math.ceil(file.size / PART_SIZE));
+    const parts: Array<{ partNumber: number; etag: string }> = [];
+    let uploadedBytes = 0;
+
+    try {
+      for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+        const start = (partNumber - 1) * PART_SIZE;
+        const end = Math.min(start + PART_SIZE, file.size);
+        const chunk = file.slice(start, end);
+
+        const signResponse = await fetch("/api/admin/galleries/video-multipart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "sign-part", storagePath, uploadId, partNumber }),
+        });
+        if (!signResponse.ok) {
+          throw new Error("Could not sign upload part.");
+        }
+        const { url } = (await signResponse.json()) as { url: string };
+
+        const etag = await putPart(url, chunk, uploadedBytes, file.size, setEntry);
+        parts.push({ partNumber, etag });
+        uploadedBytes += end - start;
+      }
+
+      const completeResponse = await fetch("/api/admin/galleries/video-multipart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", storagePath, uploadId, parts }),
+      });
+      if (!completeResponse.ok) {
+        throw new Error("Could not finalize video upload.");
+      }
+    } catch (error) {
+      // Discard any uploaded parts so they do not linger and incur storage cost.
+      await fetch("/api/admin/galleries/video-multipart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "abort", storagePath, uploadId }),
+      }).catch(() => null);
+      const message = error instanceof Error ? error.message : "Video upload failed.";
+      setEntry({ status: "failed", error: message });
+      throw new Error(message);
+    }
+
+    const registerResponse = await fetch("/api/admin/galleries/register-media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        galleryId,
+        sectionId: selectedSectionId || undefined,
+        storagePath,
+        originalName: item.file.name,
+        contentType: item.file.type || "video/mp4",
+      }),
+    });
+
+    if (!registerResponse.ok) {
+      const message = await registerResponse
+        .json()
+        .then((data: { error?: string }) => data.error)
+        .catch(() => null);
+      setEntry({ status: "failed", error: message || "Could not save video." });
+      throw new Error(message || "Could not save video.");
+    }
+
+    setEntry({ status: "completed", progress: 100, error: undefined });
+  }
+
   // Videos can be large and exceed the serverless request-body limit, so they
-  // are uploaded directly to storage using a short-lived signed URL.
+  // are uploaded directly to storage. On R2 we use multipart upload (chunked)
+  // because a single presigned PUT is capped at 5 GiB and its URL would expire
+  // before a multi-GB transfer finishes. Non-R2 storage falls back to a single
+  // short-lived signed URL.
   async function uploadVideoDirect(item: UploadProgress): Promise<void> {
     const setEntry = (patch: Partial<UploadProgress>) => {
       setProgress((prev) =>
         prev.map((entry) => (entry.fileIndex === item.fileIndex ? { ...entry, ...patch } : entry)),
       );
     };
+
+    // Try the R2 multipart path first. A 409 means R2 is not the active
+    // provider, so we fall back to the single signed-URL upload below.
+    const createResponse = await fetch("/api/admin/galleries/video-multipart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create",
+        galleryId,
+        fileName: item.file.name,
+        contentType: item.file.type || "video/mp4",
+      }),
+    });
+
+    if (createResponse.ok) {
+      const { storagePath, uploadId } = (await createResponse.json()) as {
+        storagePath: string;
+        uploadId: string;
+      };
+      await uploadVideoMultipart(item, storagePath, uploadId, setEntry);
+      return;
+    }
+
+    if (createResponse.status !== 409) {
+      const message = await createResponse
+        .json()
+        .then((data: { error?: string }) => data.error)
+        .catch(() => null);
+      setEntry({ status: "failed", error: message || "Could not start video upload." });
+      throw new Error(message || "Could not start video upload.");
+    }
 
     const urlResponse = await fetch("/api/admin/galleries/video-upload-url", {
       method: "POST",

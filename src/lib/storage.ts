@@ -1,4 +1,12 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -155,6 +163,104 @@ export async function getSignedMediaUrl(storagePath: string, expiresIn = 60 * 60
     throw new Error(error?.message ?? "Could not sign media URL");
   }
   return data.signedUrl;
+}
+
+/** Whether Cloudflare R2 is the active storage provider. */
+export function isR2Enabled() {
+  return useR2;
+}
+
+// ---------------------------------------------------------------------------
+// Multipart upload (R2 only)
+// ---------------------------------------------------------------------------
+// Single presigned PUT uploads are capped at 5 GiB by S3/R2 and the signed URL
+// must live long enough to transfer the whole file. Multi-GB videos therefore
+// use multipart upload: the object is split into parts that are each uploaded
+// with their own short-lived signed URL, then stitched together on completion.
+
+/** Starts a multipart upload and returns its upload id. */
+export async function createMultipartUpload(
+  path: string,
+  contentType: string,
+): Promise<{ uploadId: string }> {
+  if (!useR2) {
+    throw new Error("Multipart upload requires R2 storage.");
+  }
+
+  const result = await getR2Client().send(
+    new CreateMultipartUploadCommand({
+      Bucket: R2_BUCKET,
+      Key: path,
+      ContentType: contentType,
+    }),
+  );
+
+  if (!result.UploadId) {
+    throw new Error("Could not start multipart upload.");
+  }
+
+  return { uploadId: result.UploadId };
+}
+
+/** Returns a short-lived signed URL the browser can PUT a single part to. */
+export async function signMultipartPart(
+  path: string,
+  uploadId: string,
+  partNumber: number,
+): Promise<string> {
+  if (!useR2) {
+    throw new Error("Multipart upload requires R2 storage.");
+  }
+
+  return getSignedUrl(
+    getR2Client(),
+    new UploadPartCommand({
+      Bucket: R2_BUCKET,
+      Key: path,
+      UploadId: uploadId,
+      PartNumber: partNumber,
+    }),
+    { expiresIn: 60 * 60 },
+  );
+}
+
+/** Finalizes a multipart upload from the collected part ETags. */
+export async function completeMultipartUpload(
+  path: string,
+  uploadId: string,
+  parts: Array<{ partNumber: number; etag: string }>,
+): Promise<void> {
+  if (!useR2) {
+    throw new Error("Multipart upload requires R2 storage.");
+  }
+
+  await getR2Client().send(
+    new CompleteMultipartUploadCommand({
+      Bucket: R2_BUCKET,
+      Key: path,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: [...parts]
+          .sort((a, b) => a.partNumber - b.partNumber)
+          .map((part) => ({ PartNumber: part.partNumber, ETag: part.etag })),
+      },
+    }),
+  );
+}
+
+/** Cancels a multipart upload and discards any uploaded parts. */
+export async function abortMultipartUpload(path: string, uploadId: string): Promise<void> {
+  if (!useR2) return;
+
+  await getR2Client()
+    .send(
+      new AbortMultipartUploadCommand({
+        Bucket: R2_BUCKET,
+        Key: path,
+        UploadId: uploadId,
+      }),
+    )
+    .catch(() => null);
 }
 
 /** Returns the active bucket name used when storing metadata in the DB. */
