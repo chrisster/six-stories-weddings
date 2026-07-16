@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "react";
 
 type LocationSuggestion = {
   label: string;
-  lat: string;
-  lon: string;
 };
 
 type LocationAutocompleteProps = {
@@ -53,9 +51,7 @@ export function LocationAutocomplete({
         abortRef.current = controller;
         setLoading(true);
 
-        const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=0&limit=5&q=${encodeURIComponent(
-          query,
-        )}`;
+        const url = `/api/admin/places-autocomplete?q=${encodeURIComponent(query)}`;
         const response = await fetch(url, {
           signal: controller.signal,
           headers: { Accept: "application/json" },
@@ -66,19 +62,13 @@ export function LocationAutocomplete({
           return;
         }
 
-        const data = (await response.json()) as Array<{
-          display_name?: string;
-          lat?: string;
-          lon?: string;
-        }>;
+        const data = (await response.json()) as {
+          suggestions?: Array<{ label?: string }>;
+        };
 
-        const mapped = data
-          .filter((item) => item.display_name)
-          .map((item) => ({
-            label: String(item.display_name),
-            lat: String(item.lat || ""),
-            lon: String(item.lon || ""),
-          }));
+        const mapped = (data.suggestions || [])
+          .map((item) => ({ label: String(item.label || "").trim() }))
+          .filter((item) => item.label);
 
         setSuggestions(mapped);
         setOpen(mapped.length > 0);
@@ -148,7 +138,7 @@ export function LocationAutocomplete({
       {open && suggestions.length > 0 ? (
         <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-auto rounded-xl border border-border bg-white py-1 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]">
           {suggestions.map((suggestion, index) => (
-            <li key={`${suggestion.lat}-${suggestion.lon}-${index}`}>
+            <li key={`${suggestion.label}-${index}`}>
               <button
                 type="button"
                 onMouseDown={(event) => {

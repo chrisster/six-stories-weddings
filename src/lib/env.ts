@@ -23,6 +23,11 @@ export function getAppUrl() {
   return process.env.APP_URL || "https://admin.sixstoriesstudio.com";
 }
 
+/** Server-side Google Maps/Places API key (kept out of the browser). */
+export function getGoogleMapsApiKey() {
+  return process.env.GOOGLE_MAPS_API_KEY || "";
+}
+
 export function getClientPortalSecret() {
   return process.env.CLIENT_PORTAL_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 }
