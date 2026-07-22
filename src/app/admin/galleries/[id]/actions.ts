@@ -216,6 +216,7 @@ export async function updateGallerySettingsAction(formData: FormData) {
         try {
           const result = await sendGalleryNotificationEmail({
             to: email,
+            cc: "hello@photoshooters.co",
             subject: template.emailSubject,
             html: rendered.html,
             text: rendered.text,

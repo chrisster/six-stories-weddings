@@ -118,6 +118,7 @@ export async function sendGalleryNotificationEmail(args: {
   subject: string;
   html: string;
   text: string;
+  cc?: string | string[];
 }) {
   const {
     apiKey,
@@ -132,6 +133,10 @@ export async function sendGalleryNotificationEmail(args: {
   } = getGalleryEmailEnv();
 
   const from = formatFromAddress(fromEmail, fromName);
+
+  const ccList = (Array.isArray(args.cc) ? args.cc : args.cc ? [args.cc] : [])
+    .map((value) => value.trim())
+    .filter(Boolean);
 
   const hasSmtp = Boolean(smtpHost && smtpPort && smtpUser && smtpPass && fromEmail);
   if (hasSmtp) {
@@ -149,6 +154,7 @@ export async function sendGalleryNotificationEmail(args: {
     await transporter.sendMail({
       from,
       to: args.to,
+      cc: ccList.length > 0 ? ccList : undefined,
       subject: args.subject,
       html: args.html,
       text: args.text,
@@ -171,6 +177,7 @@ export async function sendGalleryNotificationEmail(args: {
     body: JSON.stringify({
       from,
       to: [args.to],
+      cc: ccList.length > 0 ? ccList : undefined,
       subject: args.subject,
       html: args.html,
       text: args.text,
