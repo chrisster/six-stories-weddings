@@ -463,6 +463,44 @@ export async function bulkDeleteMediaAction(formData: FormData) {
   revalidatePath(`/admin/galleries/${galleryId}`);
 }
 
+export async function moveMediaToSectionAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  const mediaIds = String(formData.get("mediaIds") || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  // Empty string means "Unsorted" (no section).
+  const sectionId = String(formData.get("sectionId") || "").trim() || null;
+
+  if (!galleryId || mediaIds.length === 0) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  // Chunk the ids so the request URL never exceeds the PostgREST / proxy
+  // length limit (which silently drops large batches).
+  const chunkSize = 100;
+  for (let i = 0; i < mediaIds.length; i += chunkSize) {
+    const chunk = mediaIds.slice(i, i + chunkSize);
+    // eslint-disable-next-line no-await-in-loop
+    await admin
+      .from("media_assets")
+      .update({ section_id: sectionId })
+      .eq("gallery_id", galleryId)
+      .in("id", chunk);
+  }
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+}
+
 export async function reorderMediaAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;

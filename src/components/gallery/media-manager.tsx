@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import {
   bulkDeleteMediaAction,
+  moveMediaToSectionAction,
   reorderMediaAction,
   setCoverMediaAction,
 } from "@/app/admin/galleries/[id]/actions";
@@ -170,6 +171,25 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     router.refresh();
   };
 
+  const handleMoveSelectedToSection = async (sectionId: string) => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+
+    const formData = new FormData();
+    formData.append("galleryId", galleryId);
+    formData.append("mediaIds", ids.join(","));
+    formData.append("sectionId", sectionId); // empty string => Unsorted
+
+    setMediaState((prev) =>
+      prev.map((item) =>
+        selectedIds.has(item.id) ? { ...item, sectionId: sectionId || null } : item,
+      ),
+    );
+    setSelectedIds(new Set());
+    await moveMediaToSectionAction(formData);
+    router.refresh();
+  };
+
   const handleSetCoverSelected = async () => {
     if (selectedIds.size !== 1) return;
     const [mediaId] = Array.from(selectedIds);
@@ -250,6 +270,26 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                 >
                   Set as cover
                 </button>
+              )}
+              {sections.length > 0 && (
+                <select
+                  value=""
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (!value) return;
+                    handleMoveSelectedToSection(value === "__unsorted__" ? "" : value);
+                    event.target.value = "";
+                  }}
+                  className="h-7 rounded-full border border-border bg-white px-3 text-xs"
+                >
+                  <option value="">Move to…</option>
+                  {sections.map((section) => (
+                    <option key={section.id} value={section.id}>
+                      {section.name}
+                    </option>
+                  ))}
+                  <option value="__unsorted__">Unsorted</option>
+                </select>
               )}
               <button
                 onClick={handleDeleteSelected}
