@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import {
   bulkDeleteMediaAction,
   reorderMediaAction,
@@ -27,6 +28,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>("");
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setMediaState(media);
@@ -134,6 +136,25 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
       newSelected.add(id);
     }
     setSelectedIds(newSelected);
+  };
+
+  const toggleSectionCollapsed = (sectionName: string) => {
+    setCollapsedSections((current) => ({
+      ...current,
+      [sectionName]: !current[sectionName],
+    }));
+  };
+
+  const handleSelectSection = (sectionMedia: Array<{ id: string }>) => {
+    const ids = sectionMedia.map((item) => item.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
+    const next = new Set(selectedIds);
+    if (allSelected) {
+      ids.forEach((id) => next.delete(id));
+    } else {
+      ids.forEach((id) => next.add(id));
+    }
+    setSelectedIds(next);
   };
 
   const handleDeleteSelected = async () => {
@@ -294,6 +315,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
           const visibleCount = visibleBySection[sectionName] ?? PAGE_SIZE;
           const visibleMedia = sectionMedia.slice(0, visibleCount);
           const remaining = sectionMedia.length - visibleMedia.length;
+          const isCollapsed = Boolean(collapsedSections[sectionName]);
+          const allSectionSelected =
+            sectionMedia.length > 0 && sectionMedia.every((item) => selectedIds.has(item.id));
 
           return (
             <div
@@ -301,91 +325,116 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
               key={sectionName}
               className="space-y-3 border-t border-border/70 pt-5"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => toggleSectionCollapsed(sectionName)}
+                  aria-expanded={!isCollapsed}
+                  className="flex items-center gap-2 text-left"
+                >
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                      isCollapsed ? "-rotate-90" : ""
+                    }`}
+                  />
                   <h4 className="text-sm font-medium">{sectionName}</h4>
                   <span className="text-xs text-muted-foreground">{sectionMedia.length} items</span>
-                </div>
-                {sectionId && !selectedSectionFilter && (
-                  <button
-                    onClick={() => handleDeleteSection(sectionId)}
-                    className="text-xs text-red-600 hover:underline"
-                  >
-                    Delete section
-                  </button>
-                )}
-              </div>
-
-              <div className="columns-2 gap-3 sm:columns-3 xl:columns-4 [&>*]:mb-3">
-                {visibleMedia.map((asset) => {
-                  const selected = selectedIds.has(asset.id);
-                  return (
-                    <div
-                      key={asset.id}
-                      draggable
-                      onDragStart={() => setDraggedId(asset.id)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => handleDropInSection(sectionName, asset.id)}
-                      onClick={() => handleSelectOne(asset.id)}
-                      className={`group relative block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-md border bg-muted/50 transition ${
-                        selected
-                          ? "border-foreground ring-2 ring-foreground"
-                          : "border-border hover:border-foreground/40"
-                      }`}
+                </button>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={allSectionSelected}
+                      onChange={() => handleSelectSection(sectionMedia)}
+                      className="h-3.5 w-3.5 rounded border-border"
+                    />
+                    Select all
+                  </label>
+                  {sectionId && !selectedSectionFilter && (
+                    <button
+                      onClick={() => handleDeleteSection(sectionId)}
+                      className="text-xs text-red-600 hover:underline"
                     >
-                      {/* Selection indicator */}
-                      <span
-                        className={`absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition ${
-                          selected
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-white bg-black/40 text-transparent group-hover:text-white"
-                        }`}
-                      >
-                        ✓
-                      </span>
-
-                      {asset.isCover && (
-                        <span className="absolute top-2 right-2 z-10 rounded-full bg-foreground px-2 py-0.5 text-[10px] font-medium text-background">
-                          Cover
-                        </span>
-                      )}
-
-                      {asset.mediaType === "photo" ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={asset.url}
-                          alt="Gallery asset"
-                          loading="lazy"
-                          className="block w-full"
-                        />
-                      ) : (
-                        <video
-                          src={asset.url}
-                          className="block w-full"
-                          preload="metadata"
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+                      Delete section
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {remaining > 0 ? (
-                <div className="flex justify-center pt-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setVisibleBySection((current) => ({
-                        ...current,
-                        [sectionName]: visibleCount + PAGE_SIZE,
-                      }))
-                    }
-                    className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
-                  >
-                    Load more ({remaining} remaining)
-                  </button>
-                </div>
-              ) : null}
+              {!isCollapsed && (
+                <>
+                  <div className="columns-2 gap-3 sm:columns-3 xl:columns-4 [&>*]:mb-3">
+                    {visibleMedia.map((asset) => {
+                      const selected = selectedIds.has(asset.id);
+                      return (
+                        <div
+                          key={asset.id}
+                          draggable
+                          onDragStart={() => setDraggedId(asset.id)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => handleDropInSection(sectionName, asset.id)}
+                          onClick={() => handleSelectOne(asset.id)}
+                          className={`group relative block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-md border bg-muted/50 transition ${
+                            selected
+                              ? "border-foreground ring-2 ring-foreground"
+                              : "border-border hover:border-foreground/40"
+                          }`}
+                        >
+                          {/* Selection indicator */}
+                          <span
+                            className={`absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition ${
+                              selected
+                                ? "border-foreground bg-foreground text-background"
+                                : "border-white bg-black/40 text-transparent group-hover:text-white"
+                            }`}
+                          >
+                            ✓
+                          </span>
+
+                          {asset.isCover && (
+                            <span className="absolute top-2 right-2 z-10 rounded-full bg-foreground px-2 py-0.5 text-[10px] font-medium text-background">
+                              Cover
+                            </span>
+                          )}
+
+                          {asset.mediaType === "photo" ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={asset.url}
+                              alt="Gallery asset"
+                              loading="lazy"
+                              className="block w-full"
+                            />
+                          ) : (
+                            <video
+                              src={asset.url}
+                              className="block w-full"
+                              preload="metadata"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {remaining > 0 ? (
+                    <div className="flex justify-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setVisibleBySection((current) => ({
+                            ...current,
+                            [sectionName]: visibleCount + PAGE_SIZE,
+                          }))
+                        }
+                        className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
+                      >
+                        Load more ({remaining} remaining)
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
           );
         })}
