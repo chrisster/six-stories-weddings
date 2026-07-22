@@ -104,6 +104,8 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 href={`/g/${detail.gallery.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex rounded-full border border-foreground bg-foreground px-4 py-2 text-sm text-background transition hover:opacity-90"
               >
                 Preview Gallery

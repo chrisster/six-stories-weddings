@@ -142,7 +142,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   const toggleSectionCollapsed = (sectionName: string) => {
     setCollapsedSections((current) => ({
       ...current,
-      [sectionName]: !current[sectionName],
+      [sectionName]: !(current[sectionName] ?? true),
     }));
   };
 
@@ -355,7 +355,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
           const visibleCount = visibleBySection[sectionName] ?? PAGE_SIZE;
           const visibleMedia = sectionMedia.slice(0, visibleCount);
           const remaining = sectionMedia.length - visibleMedia.length;
-          const isCollapsed = Boolean(collapsedSections[sectionName]);
+          const isCollapsed = collapsedSections[sectionName] ?? true;
           const allSectionSelected =
             sectionMedia.length > 0 && sectionMedia.every((item) => selectedIds.has(item.id));
 
