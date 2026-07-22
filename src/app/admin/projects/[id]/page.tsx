@@ -186,6 +186,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
             {linkedGallery ? (
               <Link
                 href={`/admin/galleries/${linkedGallery.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
               >
                 Open Gallery Manager

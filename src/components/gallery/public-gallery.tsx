@@ -502,18 +502,6 @@ export function PublicGallery({
           />
 
           <div className="flex flex-1 items-center gap-4 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              onClick={() => {
-                setFavoritesOnly(false);
-                scrollToGallery();
-              }}
-              className={`text-[11px] uppercase tracking-[0.22em] transition hover:text-foreground ${
-                favoritesOnly ? "text-muted-foreground" : "text-foreground"
-              }`}
-            >
-              Gallery
-            </button>
             {videoAssets.length > 0 ? (
               <button
                 type="button"
