@@ -257,12 +257,15 @@ export async function getProjects() {
   });
 
   const galleryIds = (galleries || []).map((row) => String(row.id));
-  const mediaByGalleryId = new Map<string, Array<{ id: string; storagePath: string; sortOrder: number }>>();
+  const mediaByGalleryId = new Map<
+    string,
+    Array<{ id: string; storagePath: string; sortOrder: number; isCover: boolean }>
+  >();
 
   if (galleryIds.length > 0) {
     const { data: media } = await admin
       .from("media_assets")
-      .select("id, gallery_id, storage_path, sort_order")
+      .select("id, gallery_id, storage_path, sort_order, is_cover")
       .in("gallery_id", galleryIds)
       .order("sort_order", { ascending: true });
 
@@ -273,6 +276,7 @@ export async function getProjects() {
         id: String(row.id),
         storagePath: String(row.storage_path),
         sortOrder: Number(row.sort_order || 0),
+        isCover: Boolean(row.is_cover),
       });
       mediaByGalleryId.set(key, current);
     });
@@ -288,10 +292,16 @@ export async function getProjects() {
       const gallery = galleryByProjectId.get(String(row.id));
       const galleryMedia = gallery ? mediaByGalleryId.get(gallery.id) || [] : [];
 
+      // Honor an explicitly selected cover: match cover_media_id first, then
+      // fall back to the asset flagged is_cover (in case the two are out of
+      // sync), and only then to the first uploaded photo.
       const preferred =
         (gallery?.coverMediaId
           ? galleryMedia.find((asset) => asset.id === gallery.coverMediaId)
-          : null) || galleryMedia[0] || null;
+          : null) ||
+        galleryMedia.find((asset) => asset.isCover) ||
+        galleryMedia[0] ||
+        null;
 
       let coverImageUrl: string | null = null;
       // A custom uploaded hero image takes precedence over the cover photo.
