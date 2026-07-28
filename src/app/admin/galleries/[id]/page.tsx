@@ -8,10 +8,11 @@ import {
 } from "@/app/admin/galleries/[id]/actions";
 import { MediaUploader } from "@/components/gallery/media-uploader";
 import { MediaManager } from "@/components/gallery/media-manager";
+import { HeroImageUploader } from "@/components/gallery/hero-image-uploader";
 import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
-import { getSignedMediaUrl } from "@/lib/storage";
+import { getMediaThumbUrl, getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
 type GalleryManagerPageProps = {
@@ -29,11 +30,17 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
     detail.mediaAssets.map(async (asset) => {
       try {
         const url = await getSignedMediaUrl(asset.storagePath);
-        return { ...asset, url, broken: false };
+        const thumbUrl =
+          asset.mediaType === "photo"
+            ? await getMediaThumbUrl(asset.storagePath, { width: 480 })
+            : url;
+        return { ...asset, url, thumbUrl, broken: false };
       } catch {
         return {
           ...asset,
           url: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1200&q=80",
+          thumbUrl:
+            "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=480&q=70",
           broken: true,
         };
       }
@@ -41,10 +48,14 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   );
 
   const cover = mediaWithUrl.find((asset) => asset.isCover) || mediaWithUrl[0] || null;
+  const customHeroUrl = detail.gallery.heroImagePath
+    ? await getSignedMediaUrl(detail.gallery.heroImagePath).catch(() => null)
+    : null;
+  const heroDisplayUrl = customHeroUrl || (cover?.mediaType === "photo" ? cover.url : null);
   const notificationTemplate = await getGalleryNotificationTemplate(detail.gallery.id, {
     projectTitle: detail.project.title,
     galleryTitle: detail.gallery.title,
-    heroImageUrl: cover?.mediaType === "photo" ? cover.url : null,
+    heroImageUrl: heroDisplayUrl,
   });
 
   const favorites = await getGalleryFavorites(detail.gallery.id);
@@ -65,13 +76,24 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
       <section className="admin-surface overflow-hidden">
         <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="relative min-h-[220px] border-b border-border/80 bg-zinc-200 lg:min-h-[280px] lg:border-r lg:border-b-0">
-            {cover?.mediaType === "photo" ? (
-              <Image src={cover.url} alt={detail.project.title} fill className="object-cover" unoptimized />
+            {heroDisplayUrl ? (
+              <Image src={heroDisplayUrl} alt={detail.project.title} fill className="object-cover" unoptimized />
             ) : null}
             <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/15 to-transparent" />
+            <div className="absolute inset-x-0 top-0 flex justify-end p-4">
+              <HeroImageUploader
+                galleryId={detail.gallery.id}
+                hasCustomHero={Boolean(customHeroUrl)}
+              />
+            </div>
             <div className="absolute inset-x-0 bottom-0 p-5 text-white">
               <p className="text-[10px] tracking-[0.28em] uppercase text-white/85">Gallery Manager</p>
               <h2 className="title-cinematic mt-2 text-3xl font-semibold">{detail.project.title}</h2>
+              {customHeroUrl ? (
+                <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-white/70">
+                  Custom hero image
+                </p>
+              ) : null}
             </div>
           </div>
 

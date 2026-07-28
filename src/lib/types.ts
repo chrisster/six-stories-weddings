@@ -119,6 +119,7 @@ export type Gallery = {
   hasPasscode: boolean;
   passcodeHash?: string | null;
   coverMediaId?: string | null;
+  heroImagePath?: string | null;
 };
 
 export type GallerySection = {

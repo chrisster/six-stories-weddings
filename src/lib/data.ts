@@ -404,6 +404,7 @@ export async function getGalleryById(galleryId: string): Promise<GalleryDetail |
       hasPasscode: Boolean(galleryRow.passcode_hash),
       passcodeHash: galleryRow.passcode_hash as string | null,
       coverMediaId: galleryRow.cover_media_id as string | null,
+      heroImagePath: (galleryRow.hero_image_path as string | null) || null,
     },
     project,
     sections: (sections.data || []).map((row) => ({

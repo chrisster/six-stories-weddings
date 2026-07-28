@@ -24,6 +24,7 @@ type PublicAsset = {
   sectionName: string;
   mediaType: "photo" | "video";
   url: string;
+  thumbUrl?: string;
   fileName?: string;
 };
 
@@ -1072,9 +1073,13 @@ function JustifiedGrid({
                 >
                   {asset.mediaType === "photo" ? (
                     <img
-                      src={asset.url}
+                      src={asset.thumbUrl ?? asset.url}
                       alt={displayName(asset.fileName)}
                       loading="lazy"
+                      onError={(event) => {
+                        const img = event.currentTarget;
+                        if (img.src !== asset.url) img.src = asset.url;
+                      }}
                       onLoad={(event) =>
                         handleRatio(
                           asset.id,

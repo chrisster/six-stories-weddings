@@ -326,6 +326,71 @@ export async function setCoverMediaAction(formData: FormData) {
   revalidatePath(`/admin/galleries/${galleryId}`);
 }
 
+export async function setGalleryHeroImageAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const galleryId = String(formData.get("galleryId") || "");
+  const file = formData.get("file");
+  if (!galleryId || !(file instanceof File) || file.size === 0) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  await ensureMediaBucket();
+
+  const extension = file.name.split(".").pop() || "jpg";
+  const storagePath = `${galleryId}/hero/${randomUUID()}.${extension}`;
+  await uploadMediaToStorage(storagePath, file);
+
+  await admin.from("galleries").update({ hero_image_path: storagePath }).eq("id", galleryId);
+
+  const { data: galleryRow } = await admin
+    .from("galleries")
+    .select("slug")
+    .eq("id", galleryId)
+    .maybeSingle();
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+  if (galleryRow?.slug) {
+    revalidatePath(`/g/${galleryRow.slug}`);
+  }
+}
+
+export async function clearGalleryHeroImageAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    return;
+  }
+
+  const galleryId = String(formData.get("galleryId") || "");
+  if (!galleryId) {
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return;
+  }
+
+  await admin.from("galleries").update({ hero_image_path: null }).eq("id", galleryId);
+
+  const { data: galleryRow } = await admin
+    .from("galleries")
+    .select("slug")
+    .eq("id", galleryId)
+    .maybeSingle();
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+  if (galleryRow?.slug) {
+    revalidatePath(`/g/${galleryRow.slug}`);
+  }
+}
+
 export async function addDemoMediaAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;

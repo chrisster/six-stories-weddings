@@ -12,7 +12,7 @@ import {
 import type { MediaAsset, GallerySection } from "@/lib/types";
 
 type MediaManagerProps = {
-  media: Array<MediaAsset & { url: string; broken: boolean }>;
+  media: Array<MediaAsset & { url: string; thumbUrl?: string; broken: boolean }>;
   sections: GallerySection[];
   galleryId: string;
 };
@@ -440,9 +440,13 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                           {asset.mediaType === "photo" ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={asset.url}
+                              src={asset.thumbUrl ?? asset.url}
                               alt="Gallery asset"
                               loading="lazy"
+                              onError={(event) => {
+                                const img = event.currentTarget;
+                                if (img.src !== asset.url) img.src = asset.url;
+                              }}
                               className="block w-full"
                             />
                           ) : (

@@ -4,7 +4,7 @@ import { PublicGallery } from "@/components/gallery/public-gallery";
 import { getCurrentUser } from "@/lib/auth";
 import { getGalleryCommentCounts, getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
-import { getSignedMediaUrl } from "@/lib/storage";
+import { getMediaThumbUrl, getSignedMediaUrl } from "@/lib/storage";
 
 type PublicGalleryPageProps = {
   params: Promise<{ gallerySlug: string }>;
@@ -54,12 +54,20 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
     visibleAssets.map(async (asset) => ({
       ...asset,
       url: await getSignedMediaUrl(asset.storagePath),
+      thumbUrl:
+        asset.mediaType === "photo"
+          ? await getMediaThumbUrl(asset.storagePath, { width: 1000 })
+          : await getSignedMediaUrl(asset.storagePath),
       sectionName: sectionById.get(asset.sectionId || "") || "Photos",
       fileName: asset.originalName || "",
     })),
   );
 
   const cover = media.find((asset) => asset.id === detail.gallery.coverMediaId) || media[0];
+  const customHeroUrl = detail.gallery.heroImagePath
+    ? await getSignedMediaUrl(detail.gallery.heroImagePath).catch(() => null)
+    : null;
+  const heroUrl = customHeroUrl || (cover && cover.mediaType === "photo" ? cover.url : null);
 
   const canComment = Boolean(adminUser || hasPortalAccess);
   const commenterName = portalSession?.email
@@ -79,7 +87,7 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
         allowDownloads={detail.gallery.allowDownloads}
         coupleNames={detail.project.title || detail.gallery.title}
         eventDate={detail.project.eventDate}
-        coverUrl={cover && cover.mediaType === "photo" ? cover.url : null}
+        coverUrl={heroUrl}
         sectionOrder={detail.sections.map((section) => section.name)}
         canComment={canComment}
         commenterName={commenterName}

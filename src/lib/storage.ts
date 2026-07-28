@@ -165,6 +165,69 @@ export async function getSignedMediaUrl(storagePath: string, expiresIn = 60 * 60
   return data.signedUrl;
 }
 
+export type ThumbOptions = { width?: number; quality?: number };
+
+/**
+ * Returns a resized preview URL for grid/thumbnail rendering so browsers don't
+ * download full-resolution photos just to show a small tile.
+ *
+ * The URL points at our own `/api/media/thumb` route, which fetches the
+ * original from storage, resizes it with sharp, and serves it with long-lived
+ * CDN cache headers. This works for every storage provider (R2 public, R2
+ * signed, Supabase) and for all existing images without a re-upload. External
+ * (demo) URLs are passed through unchanged.
+ */
+export function getMediaThumbUrl(
+  storagePath: string,
+  { width = 640, quality = 72 }: ThumbOptions = {},
+): string {
+  if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+    return storagePath;
+  }
+
+  const params = new URLSearchParams({
+    path: storagePath,
+    w: String(Math.round(width)),
+    q: String(Math.round(quality)),
+  });
+  return `/api/media/thumb?${params.toString()}`;
+}
+
+/**
+ * Downloads the raw bytes of a stored object. Used server-side by the thumbnail
+ * route to resize originals. Returns null when the object cannot be read.
+ */
+export async function getMediaBytes(
+  storagePath: string,
+): Promise<{ body: Buffer; contentType: string } | null> {
+  if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+    return null;
+  }
+
+  if (useR2) {
+    const result = await getR2Client().send(
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: storagePath }),
+    );
+    if (!result.Body) return null;
+    const bytes = await result.Body.transformToByteArray();
+    return {
+      body: Buffer.from(bytes),
+      contentType: result.ContentType || "application/octet-stream",
+    };
+  }
+
+  const admin = createAdminClient();
+  if (!admin) return null;
+
+  const { data, error } = await admin.storage.from(SUPABASE_BUCKET).download(storagePath);
+  if (error || !data) return null;
+  const arrayBuffer = await data.arrayBuffer();
+  return {
+    body: Buffer.from(arrayBuffer),
+    contentType: data.type || "application/octet-stream",
+  };
+}
+
 /** Whether Cloudflare R2 is the active storage provider. */
 export function isR2Enabled() {
   return useR2;
