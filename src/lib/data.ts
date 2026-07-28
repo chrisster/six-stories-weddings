@@ -244,16 +244,19 @@ export async function getProjects() {
     .select("id, project_id, cover_media_id, hero_image_path")
     .in("project_id", projectIds);
 
-  const galleryByProjectId = new Map<
+  const galleriesByProjectId = new Map<
     string,
-    { id: string; coverMediaId?: string | null; heroImagePath?: string | null }
+    Array<{ id: string; coverMediaId?: string | null; heroImagePath?: string | null }>
   >();
   (galleries || []).forEach((row) => {
-    galleryByProjectId.set(String(row.project_id), {
+    const key = String(row.project_id);
+    const list = galleriesByProjectId.get(key) || [];
+    list.push({
       id: String(row.id),
       coverMediaId: (row.cover_media_id as string | null) || null,
       heroImagePath: (row.hero_image_path as string | null) || null,
     });
+    galleriesByProjectId.set(key, list);
   });
 
   const galleryIds = (galleries || []).map((row) => String(row.id));
@@ -289,23 +292,48 @@ export async function getProjects() {
         clients: ((row.clients as { client: Record<string, unknown> }[]) || []).map((c) => c.client),
       };
 
-      const gallery = galleryByProjectId.get(String(row.id));
-      const galleryMedia = gallery ? mediaByGalleryId.get(gallery.id) || [] : [];
+      const projectGalleries = galleriesByProjectId.get(String(row.id)) || [];
 
-      // Honor an explicitly selected cover: match cover_media_id first, then
-      // fall back to the asset flagged is_cover (in case the two are out of
-      // sync), and only then to the first uploaded photo.
-      const preferred =
-        (gallery?.coverMediaId
-          ? galleryMedia.find((asset) => asset.id === gallery.coverMediaId)
-          : null) ||
-        galleryMedia.find((asset) => asset.isCover) ||
-        galleryMedia[0] ||
-        null;
+      // Resolve the cover across ALL of the project's galleries (a project can
+      // have more than one). Priority:
+      //   1. A custom uploaded hero image on any gallery.
+      //   2. An explicitly selected cover (cover_media_id, or the is_cover flag
+      //      when the two are out of sync) on any gallery.
+      //   3. The first uploaded photo of the first gallery that has media.
+      let coverStoragePath: string | null = null;
+
+      for (const g of projectGalleries) {
+        if (g.heroImagePath) {
+          coverStoragePath = g.heroImagePath;
+          break;
+        }
+      }
+
+      if (!coverStoragePath) {
+        for (const g of projectGalleries) {
+          const gm = mediaByGalleryId.get(g.id) || [];
+          const selected =
+            (g.coverMediaId ? gm.find((asset) => asset.id === g.coverMediaId) : null) ||
+            gm.find((asset) => asset.isCover) ||
+            null;
+          if (selected) {
+            coverStoragePath = selected.storagePath;
+            break;
+          }
+        }
+      }
+
+      if (!coverStoragePath) {
+        for (const g of projectGalleries) {
+          const gm = mediaByGalleryId.get(g.id) || [];
+          if (gm[0]) {
+            coverStoragePath = gm[0].storagePath;
+            break;
+          }
+        }
+      }
 
       let coverImageUrl: string | null = null;
-      // A custom uploaded hero image takes precedence over the cover photo.
-      const coverStoragePath = gallery?.heroImagePath || preferred?.storagePath || null;
       if (coverStoragePath) {
         try {
           coverImageUrl = await getSignedMediaUrl(coverStoragePath, 60 * 60 * 24 * 7);
