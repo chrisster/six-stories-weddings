@@ -241,14 +241,18 @@ export async function getProjects() {
 
   const { data: galleries } = await admin
     .from("galleries")
-    .select("id, project_id, cover_media_id")
+    .select("id, project_id, cover_media_id, hero_image_path")
     .in("project_id", projectIds);
 
-  const galleryByProjectId = new Map<string, { id: string; coverMediaId?: string | null }>();
+  const galleryByProjectId = new Map<
+    string,
+    { id: string; coverMediaId?: string | null; heroImagePath?: string | null }
+  >();
   (galleries || []).forEach((row) => {
     galleryByProjectId.set(String(row.project_id), {
       id: String(row.id),
       coverMediaId: (row.cover_media_id as string | null) || null,
+      heroImagePath: (row.hero_image_path as string | null) || null,
     });
   });
 
@@ -290,11 +294,13 @@ export async function getProjects() {
           : null) || galleryMedia[0] || null;
 
       let coverImageUrl: string | null = null;
-      if (preferred) {
+      // A custom uploaded hero image takes precedence over the cover photo.
+      const coverStoragePath = gallery?.heroImagePath || preferred?.storagePath || null;
+      if (coverStoragePath) {
         try {
-          coverImageUrl = await getSignedMediaUrl(preferred.storagePath, 60 * 60 * 24 * 7);
+          coverImageUrl = await getSignedMediaUrl(coverStoragePath, 60 * 60 * 24 * 7);
         } catch {
-          coverImageUrl = preferred.storagePath;
+          coverImageUrl = coverStoragePath;
         }
       }
 
@@ -936,7 +942,7 @@ export async function getPortalGalleriesForEmail(email: string): Promise<PortalG
   const [{ data: galleries }, { data: projects }] = await Promise.all([
     admin
       .from("galleries")
-      .select("id, project_id, slug, title, cover_media_id, is_published")
+      .select("id, project_id, slug, title, cover_media_id, hero_image_path, is_published")
       .in("project_id", projectIds)
       .eq("is_published", true),
     admin.from("projects").select("id, title, event_date").in("id", projectIds),
@@ -978,9 +984,11 @@ export async function getPortalGalleriesForEmail(email: string): Promise<PortalG
       const assets = mediaByGalleryId.get(galleryId) || [];
       const cover = assets.find((asset) => asset.isCover) || assets[0] || null;
       let coverUrl: string | null = null;
-      if (cover) {
+      // A custom uploaded hero image takes precedence over the cover photo.
+      const coverStoragePath = (row.hero_image_path as string | null) || cover?.storagePath || null;
+      if (coverStoragePath) {
         try {
-          coverUrl = await getSignedMediaUrl(cover.storagePath, 60 * 60 * 24 * 7);
+          coverUrl = await getSignedMediaUrl(coverStoragePath, 60 * 60 * 24 * 7);
         } catch {
           coverUrl = null;
         }
