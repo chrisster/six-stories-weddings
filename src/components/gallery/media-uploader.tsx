@@ -168,8 +168,16 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
         if (xhr.status >= 200 && xhr.status < 300) {
           const etag = xhr.getResponseHeader("ETag") || xhr.getResponseHeader("etag");
           if (!etag) {
+            // The bytes uploaded fine, but the browser can't read the ETag the
+            // storage returned, so the upload can't be finalized. This is
+            // almost always a missing `ExposeHeaders: ["ETag"]` entry in the R2
+            // bucket CORS policy. Surface an admin-actionable message rather
+            // than a silent failure that looks like the video "didn't appear".
             reject(
-              new Error("Missing ETag from storage. Configure R2 CORS to expose the ETag header."),
+              new Error(
+                "Video uploaded but could not be finalized: the storage ETag header was blocked by CORS. " +
+                  'Add ExposeHeaders: ["ETag"] to the R2 bucket CORS policy for this domain, then re-upload.',
+              ),
             );
             return;
           }
@@ -222,7 +230,11 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
         body: JSON.stringify({ action: "complete", storagePath, uploadId, parts }),
       });
       if (!completeResponse.ok) {
-        throw new Error("Could not finalize video upload.");
+        const detail = await completeResponse
+          .json()
+          .then((data: { error?: string }) => data.error)
+          .catch(() => null);
+        throw new Error(detail || "Could not finalize video upload.");
       }
     } catch (error) {
       // Discard any uploaded parts so they do not linger and incur storage cost.
