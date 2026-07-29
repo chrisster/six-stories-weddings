@@ -419,19 +419,38 @@ export async function getGalleryById(galleryId: string): Promise<GalleryDetail |
     return null;
   }
 
-  const [project, sections, media] = await Promise.all([
+  const [project, sections] = await Promise.all([
     getProjectById(String(galleryRow.project_id)),
     admin
       .from("gallery_sections")
       .select("*")
       .eq("gallery_id", galleryId)
       .order("sort_order", { ascending: true }),
-    admin
+  ]);
+
+  // Supabase caps a single select at 1000 rows. Galleries can hold more than
+  // that, so page through every media asset — otherwise the tail (e.g. videos,
+  // which are added last and therefore have the highest sort_order) is silently
+  // dropped and never rendered.
+  const mediaRows: Record<string, unknown>[] = [];
+  const MEDIA_PAGE_SIZE = 1000;
+  for (let from = 0; ; from += MEDIA_PAGE_SIZE) {
+    // eslint-disable-next-line no-await-in-loop
+    const { data, error } = await admin
       .from("media_assets")
       .select("*")
       .eq("gallery_id", galleryId)
-      .order("sort_order", { ascending: true }),
-  ]);
+      .order("sort_order", { ascending: true })
+      .range(from, from + MEDIA_PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) {
+      break;
+    }
+    mediaRows.push(...data);
+    if (data.length < MEDIA_PAGE_SIZE) {
+      break;
+    }
+  }
 
   if (!project) {
     return null;
@@ -457,7 +476,7 @@ export async function getGalleryById(galleryId: string): Promise<GalleryDetail |
       name: String(row.name),
       sortOrder: Number(row.sort_order),
     })),
-    mediaAssets: (media.data || []).map((row) => ({
+    mediaAssets: mediaRows.map((row) => ({
       id: String(row.id),
       galleryId: String(row.gallery_id),
       sectionId: (row.section_id as string | null) || null,
