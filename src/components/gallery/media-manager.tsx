@@ -247,7 +247,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="sticky top-0 z-30 -mx-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -420,16 +420,15 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                               : "border-border hover:border-foreground/40"
                           }`}
                         >
-                          {/* Selection indicator */}
-                          <span
-                            className={`absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition ${
-                              selected
-                                ? "border-foreground bg-foreground text-background"
-                                : "border-white bg-black/40 text-transparent group-hover:text-white"
-                            }`}
-                          >
-                            ✓
-                          </span>
+                          {/* Selection checkbox */}
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => handleSelectOne(asset.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label="Select media"
+                            className="absolute top-2 left-2 z-20 h-5 w-5 cursor-pointer rounded border border-white bg-white/90 shadow accent-foreground"
+                          />
 
                           {asset.isCover && (
                             <span className="absolute top-2 right-2 z-10 rounded-full bg-foreground px-2 py-0.5 text-[10px] font-medium text-background">
