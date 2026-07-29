@@ -9,7 +9,6 @@ import {
 import { MediaUploader } from "@/components/gallery/media-uploader";
 import { MediaManager } from "@/components/gallery/media-manager";
 import { HeroImageUploader } from "@/components/gallery/hero-image-uploader";
-import { AdminVideoPlayers } from "@/components/gallery/admin-video-players";
 import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
@@ -340,23 +339,11 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
           <MediaUploader galleryId={detail.gallery.id} sections={detail.sections} accept="video/*" />
         </div>
 
-        {videoMedia.length > 0 ? (
-          <div className="mt-5 border-t border-border/70 pt-5">
-            <p className="quiet-label mb-3">Video Player</p>
-            <AdminVideoPlayers
-              videos={videoMedia.map((asset) => ({
-                id: asset.id,
-                url: asset.url,
-                fileName: asset.originalName || "",
-              }))}
-              gallerySlug={detail.gallery.slug}
-              allowDownloads={detail.gallery.allowDownloads}
-            />
-          </div>
-        ) : null}
-
         <div className="mt-5 border-t border-border/70 pt-5">
           <p className="quiet-label mb-3">Video Library</p>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Double-click a video to preview it in a player.
+          </p>
           <MediaManager media={videoMedia} sections={detail.sections} galleryId={detail.gallery.id} />
         </div>
       </section>

@@ -30,6 +30,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [previewVideo, setPreviewVideo] = useState<
+    { url: string; name: string } | null
+  >(null);
 
   useEffect(() => {
     setMediaState(media);
@@ -414,6 +417,14 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={() => handleDropInSection(sectionName, asset.id)}
                           onClick={() => handleSelectOne(asset.id)}
+                          onDoubleClick={() => {
+                            if (asset.mediaType === "video") {
+                              setPreviewVideo({
+                                url: asset.url,
+                                name: asset.originalName || "Video",
+                              });
+                            }
+                          }}
                           className={`group relative block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-md border bg-muted/50 transition ${
                             selected
                               ? "border-foreground ring-2 ring-foreground"
@@ -458,7 +469,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                                 playsInline
                               />
                               <span className="pointer-events-none absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
-                                ▶ Video
+                                ▶ Double-click to play
                               </span>
                               {asset.originalName ? (
                                 <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pt-6 pb-1.5 text-[10px] text-white">
@@ -494,6 +505,36 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
           );
         })}
       </div>
+
+      {previewVideo ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setPreviewVideo(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-medium text-white">{previewVideo.name}</p>
+              <button
+                type="button"
+                onClick={() => setPreviewVideo(null)}
+                className="rounded-full border border-white/40 px-3 py-1 text-xs text-white hover:bg-white/10"
+              >
+                Close
+              </button>
+            </div>
+            <video
+              src={previewVideo.url}
+              className="max-h-[80vh] w-full rounded-lg bg-black"
+              controls
+              autoPlay
+              playsInline
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
