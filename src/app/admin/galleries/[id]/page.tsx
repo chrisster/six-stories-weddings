@@ -13,7 +13,7 @@ import { AdminVideoPlayers } from "@/components/gallery/admin-video-players";
 import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
-import { getMediaThumbUrl, getSignedMediaUrl } from "@/lib/storage";
+import { getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
 type GalleryManagerPageProps = {
@@ -30,7 +30,10 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   const mediaWithUrl = await Promise.all(
     detail.mediaAssets.map(async (asset) => {
       try {
-        const url = await getSignedMediaUrl(asset.storagePath);
+        const url =
+          asset.mediaType === "video"
+            ? getMediaStreamUrl(asset.storagePath)
+            : await getSignedMediaUrl(asset.storagePath);
         const thumbUrl =
           asset.mediaType === "photo"
             ? await getMediaThumbUrl(asset.storagePath, { width: 480 })

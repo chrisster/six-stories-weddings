@@ -194,6 +194,24 @@ export function getMediaThumbUrl(
 }
 
 /**
+ * Returns a same-origin URL that streams a stored video through our
+ * `/api/media/video` route instead of handing the browser a raw storage URL.
+ *
+ * Presigned R2 URLs are not reliably playable directly inside a browser
+ * `<video>` element (cross-origin), so — like image thumbnails — videos are
+ * proxied through our own origin with HTTP Range support. External (demo) URLs
+ * pass through unchanged.
+ */
+export function getMediaStreamUrl(storagePath: string): string {
+  if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+    return storagePath;
+  }
+
+  const params = new URLSearchParams({ path: storagePath });
+  return `/api/media/video?${params.toString()}`;
+}
+
+/**
  * Downloads the raw bytes of a stored object. Used server-side by the thumbnail
  * route to resize originals. Returns null when the object cannot be read.
  */

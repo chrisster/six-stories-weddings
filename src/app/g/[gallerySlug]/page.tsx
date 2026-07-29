@@ -4,7 +4,7 @@ import { PublicGallery } from "@/components/gallery/public-gallery";
 import { getCurrentUser } from "@/lib/auth";
 import { getGalleryCommentCounts, getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
-import { getMediaThumbUrl, getSignedMediaUrl } from "@/lib/storage";
+import { getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
 
 type PublicGalleryPageProps = {
   params: Promise<{ gallerySlug: string }>;
@@ -53,11 +53,14 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
   const media = await Promise.all(
     visibleAssets.map(async (asset) => ({
       ...asset,
-      url: await getSignedMediaUrl(asset.storagePath),
+      url:
+        asset.mediaType === "video"
+          ? getMediaStreamUrl(asset.storagePath)
+          : await getSignedMediaUrl(asset.storagePath),
       thumbUrl:
         asset.mediaType === "photo"
           ? await getMediaThumbUrl(asset.storagePath, { width: 1000 })
-          : await getSignedMediaUrl(asset.storagePath),
+          : getMediaStreamUrl(asset.storagePath),
       sectionName: sectionById.get(asset.sectionId || "") || "Photos",
       fileName: asset.originalName || "",
     })),
