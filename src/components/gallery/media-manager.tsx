@@ -450,11 +450,23 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                               className="block w-full"
                             />
                           ) : (
-                            <video
-                              src={asset.url}
-                              className="block w-full"
-                              preload="metadata"
-                            />
+                            <>
+                              <video
+                                src={asset.url}
+                                className="block w-full bg-black"
+                                preload="metadata"
+                                muted
+                                playsInline
+                              />
+                              <span className="pointer-events-none absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
+                                ▶ Video
+                              </span>
+                              {asset.originalName ? (
+                                <span className="pointer-events-none absolute inset-x-0 bottom-0 z-10 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pt-6 pb-1.5 text-[10px] text-white">
+                                  {asset.originalName}
+                                </span>
+                              ) : null}
+                            </>
                           )}
                         </div>
                       );
