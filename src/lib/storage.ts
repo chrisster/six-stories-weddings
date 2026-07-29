@@ -194,17 +194,22 @@ export function getMediaThumbUrl(
 }
 
 /**
- * Returns a same-origin URL that streams a stored video through our
- * `/api/media/video` route instead of handing the browser a raw storage URL.
+ * Returns a URL for playing a stored video in a browser `<video>` element.
  *
- * Presigned R2 URLs are not reliably playable directly inside a browser
- * `<video>` element (cross-origin), so — like image thumbnails — videos are
- * proxied through our own origin with HTTP Range support. External (demo) URLs
- * pass through unchanged.
+ * When a public R2 URL is configured (`CLOUDFLARE_R2_PUBLIC_URL`), the video is
+ * served straight from R2's CDN so multi-GB films don't stream through the
+ * serverless function. Otherwise it falls back to the same-origin
+ * `/api/media/video` proxy (which supports HTTP Range). Presigned R2 URLs are
+ * not reliably playable directly, so we never hand those to `<video>`. External
+ * (demo) URLs pass through unchanged.
  */
 export function getMediaStreamUrl(storagePath: string): string {
   if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
     return storagePath;
+  }
+
+  if (useR2 && R2_PUBLIC_URL) {
+    return `${R2_PUBLIC_URL.replace(/\/$/, "")}/${storagePath}`;
   }
 
   const params = new URLSearchParams({ path: storagePath });
