@@ -1,12 +1,12 @@
 import Link from "next/link";
 
 import { canSendContractEmails, resolveContractCcEmail } from "@/lib/contract-notifications";
-import { getOrgContractSettings, listContracts } from "@/lib/contract-data";
+import { getOrgContractSettings, listContractFolders, listContracts } from "@/lib/contract-data";
 import { getProjects } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
 import { SendContractForm } from "./send-form";
-import { ContractRow } from "./contract-row";
+import { ContractsManager } from "./contracts-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -18,18 +18,34 @@ const STATUS_MESSAGES: Record<string, { tone: "ok" | "warn" | "error"; text: str
     text: "Contract created, but email is not configured — copy the signing link manually.",
   },
   voided: { tone: "ok", text: "Contract voided and its signing link disabled." },
+  folder_created: { tone: "ok", text: "Folder created." },
+  folder_renamed: { tone: "ok", text: "Folder renamed." },
+  folder_deleted: {
+    tone: "ok",
+    text: "Folder deleted. Any contracts it held moved back to Active.",
+  },
+  moved: { tone: "ok", text: "Contracts moved." },
+  deleted: { tone: "warn", text: "Contracts permanently deleted." },
   error: { tone: "error", text: "Something went wrong." },
 };
 
 type ContractsPageProps = {
-  searchParams: Promise<{ status?: string; reason?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    reason?: string;
+    folder?: string;
+    count?: string;
+    signed?: string;
+  }>;
 };
 
 export default async function ContractsPage({ searchParams }: ContractsPageProps) {
-  const { status, reason } = await searchParams;
+  const { status, reason, folder, count, signed: signedDeletedCount } = await searchParams;
+  const activeFolderId = folder?.trim() || null;
 
-  const [contracts, projects, org] = await Promise.all([
-    listContracts(),
+  const [contracts, folders, projects, org] = await Promise.all([
+    listContracts(activeFolderId),
+    listContractFolders(),
     getProjects(),
     getOrgContractSettings(),
   ]);
@@ -67,6 +83,10 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
           >
             {banner.text}
             {status === "error" && reason ? ` ${reason}` : null}
+            {count && (status === "moved" || status === "deleted") ? ` (${count})` : null}
+            {status === "deleted" && Number(signedDeletedCount) > 0
+              ? ` ${signedDeletedCount} of them were signed.`
+              : null}
           </div>
         ) : null}
 
@@ -95,33 +115,17 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
         </details>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-border/80 bg-white/80">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
-              <th className="px-4 py-3">Recipient</th>
-              <th className="px-4 py-3">Project</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Updated</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {contracts.map((contract) => (
-              <ContractRow key={contract.id} contract={contract} />
-            ))}
-            {contracts.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  {hasSupabaseEnv
-                    ? "No contracts yet. Send one from a project or with the form above."
-                    : "Demo mode: configure Supabase to manage contracts."}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </section>
+      {hasSupabaseEnv ? (
+        <ContractsManager
+          contracts={contracts}
+          folders={folders}
+          activeFolderId={activeFolderId}
+        />
+      ) : (
+        <section className="rounded-2xl border border-border/80 bg-white/80 px-4 py-6 text-center text-sm text-muted-foreground">
+          Demo mode: configure Supabase to manage contracts.
+        </section>
+      )}
 
       <p className="text-xs text-muted-foreground">
         Wording is managed in the active contract template.{" "}

@@ -123,11 +123,41 @@ export default async function OrganizationPage({ searchParams }: OrganizationPag
             <p className="text-xs text-muted-foreground">Copied on every signed contract.</p>
           </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="signatureImageUrl" className={labelCls}>Studio signature image URL</label>
-            <input id="signatureImageUrl" name="signatureImageUrl" defaultValue={settings.signatureImageUrl} placeholder="https://…/signature.png" className={fieldCls} />
+          <div className="space-y-1.5 sm:col-span-2">
+            <label htmlFor="signatureImageFile" className={labelCls}>Studio stamp / signature</label>
+            {/* Carried through unchanged unless a new file is uploaded, so the
+                stored data URI never has to sit in a visible form field. */}
+            <input type="hidden" name="existingSignatureImage" value={settings.signatureImageUrl} />
+
+            {settings.signatureImageUrl ? (
+              <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border/70 bg-muted/30 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={settings.signatureImageUrl}
+                  alt="Studio stamp used to countersign contracts"
+                  className="h-16 w-auto max-w-[260px] object-contain"
+                />
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" name="removeSignatureImage" className="size-3.5 accent-red-600" />
+                  Remove
+                </label>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Not set — the «Η ΕΤΑΙΡΕΙΑ» block on contracts prints a blank line.
+              </p>
+            )}
+
+            <input
+              id="signatureImageFile"
+              name="signatureImageFile"
+              type="file"
+              accept="image/png,image/jpeg"
+              className="mt-2 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border file:border-border file:bg-white file:px-3 file:py-1.5 file:text-sm hover:file:border-foreground/40"
+            />
             <p className="text-xs text-muted-foreground">
-              Transparent PNG. Countersigns contracts automatically.
+              Upload a scan of your stamp. The white background is removed automatically so it sits
+              cleanly on the signature line.
             </p>
           </div>
 

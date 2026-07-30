@@ -5,7 +5,41 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUserRole } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
+import { prepareSignatureDataUri } from "@/lib/signature-image";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+/**
+ * Resolves the studio countersignature. A newly uploaded file wins; otherwise
+ * the existing stored value is carried through unchanged, unless the admin
+ * explicitly ticked "remove".
+ *
+ * The image is stored as a data URI, so it is never round-tripped through a form
+ * field — a 45 KB base64 string in a text input is unusable.
+ */
+async function resolveSignatureImage(formData: FormData): Promise<string | null> {
+  if (String(formData.get("removeSignatureImage") || "") === "on") {
+    return null;
+  }
+
+  const upload = formData.get("signatureImageFile");
+  if (upload instanceof File && upload.size > 0) {
+    if (upload.size > 5 * 1024 * 1024) {
+      redirect("/admin/organization?status=error&reason=" + encodeURIComponent("Signature image must be under 5MB."));
+    }
+    const buffer = Buffer.from(await upload.arrayBuffer());
+    try {
+      return await prepareSignatureDataUri(buffer);
+    } catch {
+      redirect(
+        "/admin/organization?status=error&reason=" +
+          encodeURIComponent("Could not read that image. Use a PNG or JPEG."),
+      );
+    }
+  }
+
+  const existing = String(formData.get("existingSignatureImage") || "").trim();
+  return existing || null;
+}
 
 export async function saveOrganizationSettingsAction(formData: FormData) {
   if (!hasSupabaseEnv) {
@@ -39,7 +73,7 @@ export async function saveOrganizationSettingsAction(formData: FormData) {
     city: String(formData.get("city") || "").trim() || null,
     bank_name: String(formData.get("bankName") || "").trim() || null,
     bank_iban: String(formData.get("bankIban") || "").trim() || null,
-    signature_image_url: String(formData.get("signatureImageUrl") || "").trim() || null,
+    signature_image_url: await resolveSignatureImage(formData),
     contract_cc_email: String(formData.get("contractCcEmail") || "").trim() || null,
     updated_at: new Date().toISOString(),
   };
