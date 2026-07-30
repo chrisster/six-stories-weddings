@@ -851,7 +851,9 @@ async function confirmProjectAfterSigning(contract: ContractRecord, clientName: 
           type: "contract_signed",
           title,
           body,
-          link: `/admin/contracts/${contract.id}`,
+          // The list page is the detail view for now; there is no
+          // /admin/contracts/[id] route yet.
+          link: "/admin/contracts",
         }),
       ),
   );
