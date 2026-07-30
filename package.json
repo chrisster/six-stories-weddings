@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "seed:contract-template": "tsx scripts/seed-contract-template.ts",
+    "seed:contract-template": "tsx --env-file=.env.local scripts/seed-contract-template.ts",
     "reset:password": "tsx scripts/reset-admin-password.ts"
   },
   "dependencies": {
