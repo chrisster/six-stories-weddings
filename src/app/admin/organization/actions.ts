@@ -30,6 +30,17 @@ export async function saveOrganizationSettingsAction(formData: FormData) {
     phone: String(formData.get("phone") || "").trim() || null,
     website: String(formData.get("website") || "").trim() || null,
     address: String(formData.get("address") || "").trim() || null,
+    // Legal identity used by contracts.
+    legal_name: String(formData.get("legalName") || "").trim() || null,
+    vat_id: String(formData.get("vatId") || "").trim() || null,
+    tax_office: String(formData.get("taxOffice") || "").trim() || null,
+    registry_no: String(formData.get("registryNo") || "").trim() || null,
+    representative_name: String(formData.get("representativeName") || "").trim() || null,
+    city: String(formData.get("city") || "").trim() || null,
+    bank_name: String(formData.get("bankName") || "").trim() || null,
+    bank_iban: String(formData.get("bankIban") || "").trim() || null,
+    signature_image_url: String(formData.get("signatureImageUrl") || "").trim() || null,
+    contract_cc_email: String(formData.get("contractCcEmail") || "").trim() || null,
     updated_at: new Date().toISOString(),
   };
 

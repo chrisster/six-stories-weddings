@@ -1,0 +1,267 @@
+"use client";
+
+import { useActionState, useState } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
+
+import { submitSignatureAction, type SignActionState } from "@/app/sign/[token]/actions";
+import { SignaturePad } from "@/components/contracts/signature-pad";
+
+const initialState: SignActionState = { status: "idle" };
+
+const fieldClass =
+  "w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200";
+const labelClass = "mb-1.5 block text-xs font-medium uppercase tracking-[0.1em] text-neutral-600";
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="mt-1.5 text-xs text-red-600">{message}</p>;
+}
+
+export function SignForm({
+  token,
+  consentText,
+  defaultFirstName,
+  defaultLastName,
+  recipientEmail,
+}: {
+  token: string;
+  consentText: string;
+  defaultFirstName: string;
+  defaultLastName: string;
+  recipientEmail: string;
+}) {
+  const [state, formAction, isPending] = useActionState(submitSignatureAction, initialState);
+  const [isCompany, setIsCompany] = useState(false);
+  const [signatureKind, setSignatureKind] = useState<"typed" | "drawn">("typed");
+  const [drawnSignature, setDrawnSignature] = useState("");
+  const [typedSignature, setTypedSignature] = useState("");
+
+  if (state.status === "success") {
+    return (
+      <div className="mt-8 rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-9 text-center">
+        <CheckCircle2 className="mx-auto size-9 text-emerald-600" strokeWidth={1.6} />
+        <h2 className="mt-3 text-base font-medium text-emerald-900">
+          Το συμφωνητικό υπογράφηκε
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-emerald-800">
+          {state.message}
+        </p>
+        <p className="mt-4 text-xs text-emerald-700">Μπορείτε να κλείσετε αυτή τη σελίδα.</p>
+      </div>
+    );
+  }
+
+  const errors = state.errors ?? {};
+
+  return (
+    <form action={formAction} className="mt-8 space-y-6">
+      <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="signatureKind" value={signatureKind} />
+      <input type="hidden" name="signatureDrawn" value={drawnSignature} />
+
+      <div>
+        <h2 className="text-sm font-medium uppercase tracking-[0.14em] text-neutral-800">
+          Τα στοιχεία σας
+        </h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          Θα συμπληρωθούν στο συμφωνητικό. Το email σας ({recipientEmail}) καταγράφεται αυτόματα.
+        </p>
+      </div>
+
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+        <input
+          type="checkbox"
+          name="isCompany"
+          checked={isCompany}
+          onChange={(event) => setIsCompany(event.target.checked)}
+          className="mt-0.5 size-4 shrink-0 accent-neutral-800"
+        />
+        <span className="text-sm text-neutral-700">
+          Υπογράφω για λογαριασμό εταιρείας
+          <span className="mt-0.5 block text-xs text-neutral-500">
+            Αφήστε το κενό αν υπογράφετε ως ιδιώτης.
+          </span>
+        </span>
+      </label>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className={labelClass} htmlFor="firstName">
+            Όνομα
+          </label>
+          <input
+            id="firstName"
+            name="firstName"
+            defaultValue={defaultFirstName}
+            autoComplete="given-name"
+            className={fieldClass}
+            required
+          />
+          <FieldError message={errors.firstName} />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="lastName">
+            Επώνυμο
+          </label>
+          <input
+            id="lastName"
+            name="lastName"
+            defaultValue={defaultLastName}
+            autoComplete="family-name"
+            className={fieldClass}
+            required
+          />
+          <FieldError message={errors.lastName} />
+        </div>
+      </div>
+
+      {isCompany ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelClass} htmlFor="companyName">
+              Επωνυμία εταιρείας
+            </label>
+            <input id="companyName" name="companyName" className={fieldClass} />
+            <FieldError message={errors.companyName} />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="taxOffice">
+              Δ.Ο.Υ.
+            </label>
+            <input id="taxOffice" name="taxOffice" className={fieldClass} />
+            <FieldError message={errors.taxOffice} />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className={labelClass} htmlFor="city">
+            Πόλη
+          </label>
+          <input
+            id="city"
+            name="city"
+            autoComplete="address-level2"
+            className={fieldClass}
+            required
+          />
+          <FieldError message={errors.city} />
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="street">
+            Οδός &amp; αριθμός
+          </label>
+          <input
+            id="street"
+            name="street"
+            autoComplete="street-address"
+            className={fieldClass}
+            required
+          />
+          <FieldError message={errors.street} />
+        </div>
+      </div>
+
+      <div className="sm:max-w-xs">
+        <label className={labelClass} htmlFor="vatId">
+          ΑΦΜ
+        </label>
+        <input
+          id="vatId"
+          name="vatId"
+          inputMode="numeric"
+          maxLength={12}
+          placeholder="9 ψηφία"
+          className={fieldClass}
+          required
+        />
+        <FieldError message={errors.vatId} />
+      </div>
+
+      {/* --- Signature ---------------------------------------------------- */}
+      <div className="border-t border-neutral-200 pt-6">
+        <h2 className="text-sm font-medium uppercase tracking-[0.14em] text-neutral-800">
+          Υπογραφή
+        </h2>
+
+        <div className="mt-3 inline-flex rounded-lg border border-neutral-300 p-0.5">
+          {(
+            [
+              ["typed", "Πληκτρολόγηση"],
+              ["drawn", "Σχέδιο"],
+            ] as const
+          ).map(([kind, label]) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => setSignatureKind(kind)}
+              className={
+                signatureKind === kind
+                  ? "rounded-md bg-neutral-900 px-3.5 py-1.5 text-xs font-medium text-white"
+                  : "rounded-md px-3.5 py-1.5 text-xs text-neutral-600 hover:text-neutral-900"
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4">
+          {signatureKind === "typed" ? (
+            <div>
+              <label className={labelClass} htmlFor="signatureTyped">
+                Γράψτε το ονοματεπώνυμό σας
+              </label>
+              <input
+                id="signatureTyped"
+                name="signatureTyped"
+                value={typedSignature}
+                onChange={(event) => setTypedSignature(event.target.value)}
+                autoComplete="off"
+                className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-3 font-serif text-xl text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
+              />
+              <p className="mt-1.5 text-xs text-neutral-500">
+                Η πληκτρολογημένη υπογραφή έχει την ίδια νομική ισχύ με τη σχεδιασμένη.
+              </p>
+            </div>
+          ) : (
+            <SignaturePad
+              value={drawnSignature}
+              onChange={setDrawnSignature}
+              ariaLabel="Πεδίο υπογραφής"
+            />
+          )}
+          <FieldError message={errors.signature} />
+        </div>
+      </div>
+
+      {/* --- Consent ------------------------------------------------------ */}
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3.5 py-3">
+        <input
+          type="checkbox"
+          name="consent"
+          className="mt-0.5 size-4 shrink-0 accent-neutral-800"
+          required
+        />
+        <span className="text-sm leading-relaxed text-neutral-700">{consentText}</span>
+      </label>
+      <FieldError message={errors.consent} />
+
+      {state.status === "error" && state.message ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          {state.message}
+        </p>
+      ) : null}
+
+      <button
+        type="submit"
+        disabled={isPending}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-5 py-3.5 text-sm font-medium uppercase tracking-[0.16em] text-white transition hover:bg-neutral-800 disabled:opacity-60"
+      >
+        {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+        {isPending ? "Υπογραφή…" : "Υπογραφή συμφωνητικού"}
+      </button>
+    </form>
+  );
+}

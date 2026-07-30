@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   CheckSquare,
   ContactRound,
+  FileSignature,
   FolderKanban,
   ImageIcon,
   Users,
@@ -20,6 +21,7 @@ const links = [
   { href: "/admin/galleries", label: "Galleries", icon: ImageIcon },
   { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/admin/contacts", label: "Contacts", icon: ContactRound, hideForCrew: true },
+  { href: "/admin/contracts", label: "Contracts", icon: FileSignature, hideForCrew: true },
   { href: "/admin/financials", label: "Financials", icon: Wallet, hideForCrew: true },
   { href: "/admin/team", label: "Team", icon: Users, adminOnly: true },
 ] as const;

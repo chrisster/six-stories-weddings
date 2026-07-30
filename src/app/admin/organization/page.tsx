@@ -68,6 +68,69 @@ export default async function OrganizationPage({ searchParams }: OrganizationPag
             <textarea id="address" name="address" defaultValue={settings.address} rows={2} className="w-full rounded-xl border border-border px-3 py-2 text-sm" />
           </div>
 
+          {/* --- Contract identity ---------------------------------------- */}
+          <div className="mt-2 border-t border-border/70 pt-5 sm:col-span-2">
+            <p className={labelCls}>Contract details</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              These appear in the counterparty block of every contract you send. Leave blank to use
+              the built-in Photoshooters O.E. defaults.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="legalName" className={labelCls}>Legal name</label>
+            <input id="legalName" name="legalName" defaultValue={settings.legalName} placeholder="Photoshooters O.E." className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="city" className={labelCls}>City (place of signing)</label>
+            <input id="city" name="city" defaultValue={settings.city} placeholder="Θεσσαλονίκη" className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="vatId" className={labelCls}>ΑΦΜ</label>
+            <input id="vatId" name="vatId" defaultValue={settings.vatId} placeholder="801971850" className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="taxOffice" className={labelCls}>Δ.Ο.Υ.</label>
+            <input id="taxOffice" name="taxOffice" defaultValue={settings.taxOffice} placeholder="Δ’ Θεσσαλονίκης" className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="registryNo" className={labelCls}>ΓΕΜΗ</label>
+            <input id="registryNo" name="registryNo" defaultValue={settings.registryNo} placeholder="167326506000" className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="representativeName" className={labelCls}>Legal representatives</label>
+            <input id="representativeName" name="representativeName" defaultValue={settings.representativeName} placeholder="Αριστομένη Καραμπουρνιώτη και Χρήστο Στεργιόπουλο" className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="bankName" className={labelCls}>Bank</label>
+            <input id="bankName" name="bankName" defaultValue={settings.bankName} className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="bankIban" className={labelCls}>IBAN</label>
+            <input id="bankIban" name="bankIban" defaultValue={settings.bankIban} className={fieldCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="contractCcEmail" className={labelCls}>Contract CC email</label>
+            <input id="contractCcEmail" name="contractCcEmail" type="email" defaultValue={settings.contractCcEmail} placeholder="sixstoriesstudio@gmail.com" className={fieldCls} />
+            <p className="text-xs text-muted-foreground">Copied on every signed contract.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="signatureImageUrl" className={labelCls}>Studio signature image URL</label>
+            <input id="signatureImageUrl" name="signatureImageUrl" defaultValue={settings.signatureImageUrl} placeholder="https://…/signature.png" className={fieldCls} />
+            <p className="text-xs text-muted-foreground">
+              Transparent PNG. Countersigns contracts automatically.
+            </p>
+          </div>
+
           <div className="sm:col-span-2">
             <button
               type="submit"
