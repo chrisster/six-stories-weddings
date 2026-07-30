@@ -2,6 +2,7 @@ import path from "path";
 
 import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 
+import { strings, type ContractLanguage } from "@/lib/contract-i18n";
 import type { RenderedContract } from "@/lib/contracts";
 
 // ---------------------------------------------------------------------------
@@ -142,6 +143,7 @@ const styles = StyleSheet.create({
 
 export type ContractPdfInput = {
   rendered: RenderedContract;
+  language: ContractLanguage;
   /** Studio side. */
   studioLabel: string;
   studioName: string;
@@ -167,6 +169,7 @@ export type ContractPdfInput = {
 
 function ContractDocument(input: ContractPdfInput) {
   const { rendered, audit } = input;
+  const t = strings(input.language);
 
   return (
     <Document
@@ -241,18 +244,22 @@ function ContractDocument(input: ContractPdfInput) {
 
         {audit ? (
           <View style={styles.auditBox} wrap={false}>
-            <Text style={styles.auditTitle}>ΣΤΟΙΧΕΙΑ ΗΛΕΚΤΡΟΝΙΚΗΣ ΥΠΟΓΡΑΦΗΣ</Text>
-            <Text style={styles.auditLine}>Κωδικός συμβολαίου: {audit.contractId}</Text>
+            <Text style={styles.auditTitle}>{t.auditTitle}</Text>
             <Text style={styles.auditLine}>
-              Αποστολή: {audit.sentAtLabel} · Προβολή: {audit.viewedAtLabel}
+              {t.auditContractId}: {audit.contractId}
             </Text>
             <Text style={styles.auditLine}>
-              Υπογραφή: {audit.signedAtLabel} · Email: {audit.signerEmail}
+              {t.auditSent}: {audit.sentAtLabel} · {t.auditViewed}: {audit.viewedAtLabel}
             </Text>
             <Text style={styles.auditLine}>
-              IP: {audit.ip} · Πρόγραμμα: {audit.userAgent}
+              {t.auditSigned}: {audit.signedAtLabel} · {t.auditEmail}: {audit.signerEmail}
             </Text>
-            <Text style={styles.auditLine}>Συναίνεση: «{audit.consentText}»</Text>
+            <Text style={styles.auditLine}>
+              {t.auditIp}: {audit.ip} · {t.auditBrowser}: {audit.userAgent}
+            </Text>
+            <Text style={styles.auditLine}>
+              {t.auditConsent}: “{audit.consentText}”
+            </Text>
           </View>
         ) : null}
 

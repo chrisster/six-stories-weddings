@@ -31,6 +31,7 @@ export async function sendContractAction(formData: FormData) {
     projectId: String(formData.get("projectId") || "").trim() || null,
     recipientEmail: String(formData.get("recipientEmail") || ""),
     recipientName: String(formData.get("recipientName") || "") || null,
+    templateId: String(formData.get("templateId") || "").trim() || null,
     actorEmail,
   });
 

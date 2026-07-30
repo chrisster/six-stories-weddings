@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requireAdminRole } from "@/lib/auth";
 import { getOrganizationSettings } from "@/lib/data";
 
@@ -70,7 +72,15 @@ export default async function OrganizationPage({ searchParams }: OrganizationPag
 
           {/* --- Contract identity ---------------------------------------- */}
           <div className="mt-2 border-t border-border/70 pt-5 sm:col-span-2">
-            <p className={labelCls}>Contract details</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className={labelCls}>Contract details</p>
+              <Link
+                href="/admin/organization/templates"
+                className="rounded-lg border border-border px-2.5 py-1.5 text-xs transition hover:border-foreground/40"
+              >
+                Edit contract wording →
+              </Link>
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
               These appear in the counterparty block of every contract you send. Leave blank to use
               the built-in Photoshooters O.E. defaults.

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { strings, type ContractLanguage } from "@/lib/contract-i18n";
+
 /**
  * Signature capture with pointer events, so a finger on a phone, a stylus, and a
  * mouse all work through one code path.
@@ -14,11 +16,14 @@ export function SignaturePad({
   value,
   onChange,
   ariaLabel,
+  language = "el",
 }: {
   value: string;
   onChange: (dataUrl: string) => void;
   ariaLabel: string;
+  language?: ContractLanguage;
 }) {
+  const t = strings(language);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -123,7 +128,7 @@ export function SignaturePad({
         />
         {!hasInk ? (
           <p className="pointer-events-none absolute inset-x-0 bottom-5 text-center text-xs text-neutral-400">
-            Υπογράψτε εδώ με το δάχτυλο ή το ποντίκι
+            {t.drawPrompt}
           </p>
         ) : null}
         <div className="pointer-events-none absolute inset-x-6 bottom-4 border-b border-dashed border-neutral-300" />
@@ -135,7 +140,7 @@ export function SignaturePad({
           onClick={handleClear}
           className="text-xs text-neutral-500 underline underline-offset-2 hover:text-neutral-800"
         >
-          Καθαρισμός
+          {t.clear}
         </button>
       </div>
     </div>

@@ -2,7 +2,8 @@
 
 import { headers } from "next/headers";
 
-import { signContract } from "@/lib/contract-data";
+import { getContractForSigning, signContract } from "@/lib/contract-data";
+import { normalizeLanguage, strings } from "@/lib/contract-i18n";
 
 export type SignActionState = {
   status: "idle" | "error" | "success";
@@ -20,10 +21,18 @@ export async function submitSignatureAction(
     headerList.get("x-real-ip") ||
     null;
 
+  const rawToken = String(formData.get("token") || "");
   const signatureKind = String(formData.get("signatureKind") || "typed");
 
+  // Read the language before signing: signing nulls the token, after which the
+  // contract can no longer be resolved from it.
+  const before = await getContractForSigning(rawToken);
+  const language = before.ok
+    ? normalizeLanguage(before.contract.templateSnapshot.language)
+    : "el";
+
   const result = await signContract({
-    rawToken: String(formData.get("token") || ""),
+    rawToken,
     firstName: String(formData.get("firstName") || ""),
     lastName: String(formData.get("lastName") || ""),
     city: String(formData.get("city") || ""),
@@ -49,10 +58,9 @@ export async function submitSignatureAction(
     };
   }
 
+  const t = strings(language);
   return {
     status: "success",
-    message: result.emailed
-      ? "Το συμφωνητικό υπογράφηκε. Αντίγραφο σε PDF στάλθηκε στο email σας."
-      : "Το συμφωνητικό υπογράφηκε. Θα λάβετε σύντομα αντίγραφο σε PDF.",
+    message: result.emailed ? t.successMessageEmailed : t.successMessagePending,
   };
 }
