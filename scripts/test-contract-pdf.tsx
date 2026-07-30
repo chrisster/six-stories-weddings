@@ -50,7 +50,7 @@ const pdf = await renderContractPdf({
   rendered,
   studioLabel: "Η ΕΤΑΙΡΕΙΑ",
   studioName: merge.studioLegalName,
-  studioSignatureUrl: null,
+  studioSignatureUrl: process.env.SIG_DATA_URI || null,
   clientLabel: "Ο ΠΕΛΑΤΗΣ",
   clientName: `${signer.firstName} ${signer.lastName}`,
   signatureKind: "typed",

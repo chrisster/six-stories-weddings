@@ -87,6 +87,17 @@ const styles = StyleSheet.create({
     objectFit: "contain",
     objectPositionX: 0,
   },
+  // The studio stamp is a wide text block (roughly 2.7:1), so it is sized by
+  // width to fill the signature column instead of being pinned by height.
+  stampImage: {
+    width: 160,
+    height: 59,
+    // Slightly more clearance than a signature needs, so the stamp's last line
+    // does not sit directly on the rule.
+    marginBottom: 6,
+    objectFit: "contain",
+    objectPositionX: 0,
+  },
   typedSignature: {
     fontSize: 13,
     marginBottom: 2,
@@ -205,7 +216,7 @@ function ContractDocument(input: ContractPdfInput) {
               // react-pdf's <Image> is a PDF primitive, not a DOM <img> — it has
               // no alt prop, so the jsx-a11y rule does not apply here.
               // eslint-disable-next-line jsx-a11y/alt-text
-              <Image src={input.studioSignatureUrl} style={styles.signatureImage} />
+              <Image src={input.studioSignatureUrl} style={styles.stampImage} />
             ) : (
               <Text style={styles.typedSignature}> </Text>
             )}

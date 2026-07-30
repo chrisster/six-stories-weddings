@@ -29,7 +29,12 @@ import { createNotification } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { sendGalleryNotificationEmail } from "@/lib/gallery-notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getMediaBytes, getSignedMediaUrl, uploadMediaToStorage } from "@/lib/storage";
+import {
+  deleteStoredObjects,
+  getMediaBytes,
+  getSignedMediaUrl,
+  uploadMediaToStorage,
+} from "@/lib/storage";
 
 const CONTRACT_STORAGE_PREFIX = "contracts";
 
@@ -63,6 +68,7 @@ export type ContractRecord = {
   pdfPath: string | null;
   pdfSha256: string | null;
   voidReason: string | null;
+  folderId: string | null;
   createdAt: string;
 };
 
@@ -244,6 +250,7 @@ function mapContract(row: ContractRow): ContractRecord {
     pdfPath: (row.pdf_path as string) ?? null,
     pdfSha256: (row.pdf_sha256 as string) ?? null,
     voidReason: (row.void_reason as string) ?? null,
+    folderId: (row.folder_id as string) ?? null,
     createdAt: String(row.created_at),
   };
 }
@@ -253,19 +260,24 @@ const CONTRACT_COLUMNS =
   "status, expires_at, sent_at, viewed_at, signed_at, signer_first_name, signer_last_name, " +
   "signer_city, signer_street, signer_is_company, signer_company_name, signer_vat_id, " +
   "signer_tax_office, signer_email, signature_kind, signature_data, consent_text, pdf_path, " +
-  "pdf_sha256, void_reason, created_at";
+  "pdf_sha256, void_reason, folder_id, created_at";
 
 // ---------------------------------------------------------------------------
 // Admin reads
 // ---------------------------------------------------------------------------
 
-export async function listContracts(): Promise<ContractRecord[]> {
+/**
+ * @param folderId  A folder id to show only that folder, or `null` for the
+ *                  default view of unfiled contracts.
+ */
+export async function listContracts(folderId: string | null = null): Promise<ContractRecord[]> {
   const admin = createAdminClient();
   if (!admin) return [];
-  const { data } = await admin
-    .from("contracts")
-    .select(`${CONTRACT_COLUMNS}, projects(title)`)
-    .order("created_at", { ascending: false });
+
+  let query = admin.from("contracts").select(`${CONTRACT_COLUMNS}, projects(title)`);
+  query = folderId ? query.eq("folder_id", folderId) : query.is("folder_id", null);
+
+  const { data } = await query.order("created_at", { ascending: false });
   return (data ?? []).map((row) => mapContract(row as ContractRow));
 }
 
@@ -857,6 +869,174 @@ async function confirmProjectAfterSigning(contract: ContractRecord, clientName: 
         }),
       ),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Folders
+// ---------------------------------------------------------------------------
+
+export type ContractFolder = {
+  id: string;
+  name: string;
+  isArchive: boolean;
+  contractCount: number;
+};
+
+export async function listContractFolders(): Promise<ContractFolder[]> {
+  const admin = createAdminClient();
+  if (!admin) return [];
+
+  const [{ data: folders }, { data: contracts }] = await Promise.all([
+    admin
+      .from("contract_folders")
+      .select("id, name, is_archive")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true }),
+    admin.from("contracts").select("folder_id"),
+  ]);
+
+  const counts = new Map<string, number>();
+  for (const row of contracts ?? []) {
+    const key = (row.folder_id as string) ?? "";
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return (folders ?? []).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    isArchive: Boolean(row.is_archive),
+    contractCount: counts.get(String(row.id)) ?? 0,
+  }));
+}
+
+export async function createContractFolder(
+  name: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, error: "Το Supabase δεν έχει ρυθμιστεί." };
+
+  const trimmed = (name || "").trim();
+  if (trimmed.length < 1) return { ok: false, error: "Give the folder a name." };
+  if (trimmed.length > 60) return { ok: false, error: "Folder name is too long." };
+
+  const { error } = await admin.from("contract_folders").insert({ name: trimmed });
+  if (error) {
+    // Unique index on lower(name).
+    if (error.code === "23505") return { ok: false, error: "A folder with that name already exists." };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+export async function renameContractFolder(
+  folderId: string,
+  name: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, error: "Το Supabase δεν έχει ρυθμιστεί." };
+
+  const trimmed = (name || "").trim();
+  if (!trimmed) return { ok: false, error: "Give the folder a name." };
+
+  const { error } = await admin
+    .from("contract_folders")
+    .update({ name: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", folderId);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Deletes the folder itself. Contracts inside it are preserved — the FK is
+ * `on delete set null`, so they simply return to the unfiled view.
+ */
+export async function deleteContractFolder(
+  folderId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, error: "Το Supabase δεν έχει ρυθμιστεί." };
+
+  const { error } = await admin.from("contract_folders").delete().eq("id", folderId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function moveContractsToFolder(
+  contractIds: string[],
+  folderId: string | null,
+): Promise<{ ok: boolean; moved: number; error?: string }> {
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, moved: 0, error: "Το Supabase δεν έχει ρυθμιστεί." };
+
+  const ids = contractIds.filter(Boolean);
+  if (ids.length === 0) return { ok: false, moved: 0, error: "Nothing selected." };
+
+  const { data, error } = await admin
+    .from("contracts")
+    .update({ folder_id: folderId, updated_at: new Date().toISOString() })
+    .in("id", ids)
+    .select("id");
+
+  if (error) return { ok: false, moved: 0, error: error.message };
+  return { ok: true, moved: (data ?? []).length };
+}
+
+// ---------------------------------------------------------------------------
+// Deletion
+// ---------------------------------------------------------------------------
+
+/**
+ * Permanently deletes contracts, including their stored PDFs and audit trail
+ * (contract_events cascades on the FK).
+ *
+ * This destroys the evidence behind a signed contract, so callers must confirm
+ * explicitly. Filing into an archive folder is the non-destructive alternative
+ * and is what the UI steers towards.
+ */
+export async function deleteContracts(
+  contractIds: string[],
+): Promise<{ ok: boolean; deleted: number; signedDeleted: number; error?: string }> {
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, deleted: 0, signedDeleted: 0, error: "Το Supabase δεν έχει ρυθμιστεί." };
+
+  const ids = contractIds.filter(Boolean);
+  if (ids.length === 0) return { ok: false, deleted: 0, signedDeleted: 0, error: "Nothing selected." };
+
+  const { data: rows } = await admin
+    .from("contracts")
+    .select("id, status, pdf_path")
+    .in("id", ids);
+
+  const targets = rows ?? [];
+
+  // Remove stored PDFs first. A failure here is logged but not fatal — an
+  // orphaned object in the bucket is preferable to a half-deleted record set.
+  const paths = targets
+    .map((row) => row.pdf_path as string | null)
+    .filter((path): path is string => Boolean(path));
+
+  if (paths.length > 0) {
+    try {
+      await deleteStoredObjects(paths);
+    } catch {
+      // Intentionally swallowed — see above.
+    }
+  }
+
+  const { data: deleted, error } = await admin
+    .from("contracts")
+    .delete()
+    .in("id", ids)
+    .select("id");
+
+  if (error) return { ok: false, deleted: 0, signedDeleted: 0, error: error.message };
+
+  return {
+    ok: true,
+    deleted: (deleted ?? []).length,
+    signedDeleted: targets.filter((row) => row.status === "signed").length,
+  };
 }
 
 // ---------------------------------------------------------------------------

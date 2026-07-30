@@ -2,6 +2,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -249,6 +250,35 @@ export async function getMediaBytes(
     body: Buffer.from(arrayBuffer),
     contentType: data.type || "application/octet-stream",
   };
+}
+
+/**
+ * Permanently removes objects from the active storage provider. Used when
+ * deleting contracts so their PDFs do not linger in the bucket.
+ */
+export async function deleteStoredObjects(storagePaths: string[]): Promise<void> {
+  const paths = storagePaths.filter((path) => path && !path.includes("://"));
+  if (paths.length === 0) return;
+
+  if (useR2) {
+    // DeleteObjects caps at 1000 keys per request.
+    for (let i = 0; i < paths.length; i += 1000) {
+      const batch = paths.slice(i, i + 1000);
+      await getR2Client().send(
+        new DeleteObjectsCommand({
+          Bucket: R2_BUCKET,
+          Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+    }
+    return;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  const { error } = await admin.storage.from(SUPABASE_BUCKET).remove(paths);
+  if (error) throw new Error(error.message);
 }
 
 /** Whether Cloudflare R2 is the active storage provider. */

@@ -35,13 +35,35 @@ function formatWhen(contract: ContractRecord) {
   });
 }
 
-export function ContractRow({ contract }: { contract: ContractRecord }) {
+export function ContractRow({
+  contract,
+  selected,
+  onToggle,
+}: {
+  contract: ContractRecord;
+  selected: boolean;
+  onToggle: (id: string) => void;
+}) {
   const [confirmingVoid, setConfirmingVoid] = useState(false);
   const canResend = contract.status === "sent" || contract.status === "viewed";
   const canVoid = contract.status !== "signed" && contract.status !== "void";
 
   return (
-    <tr className="border-b border-border/60 last:border-b-0 align-top">
+    <tr
+      className={`border-b border-border/60 last:border-b-0 align-top ${
+        selected ? "bg-foreground/[0.035]" : ""
+      }`}
+    >
+      <td className="px-4 py-3">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggle(contract.id)}
+          aria-label={`Select contract for ${contract.recipientName || contract.recipientEmail}`}
+          className="size-4 accent-neutral-800"
+        />
+      </td>
+
       <td className="px-4 py-3">
         <p className="font-medium text-foreground">{contract.recipientName || "—"}</p>
         <p className="text-xs text-muted-foreground">{contract.recipientEmail}</p>
