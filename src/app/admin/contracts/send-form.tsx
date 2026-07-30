@@ -4,6 +4,13 @@ import { useState } from "react";
 
 import { sendContractAction } from "./actions";
 
+type TemplateOption = {
+  id: string;
+  name: string;
+  language: string;
+  isActive: boolean;
+};
+
 type ProjectOption = {
   id: string;
   title: string;
@@ -15,7 +22,15 @@ const fieldClass =
   "w-full rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none transition focus:border-foreground/40";
 const labelClass = "mb-1.5 block text-xs uppercase tracking-wide text-muted-foreground";
 
-export function SendContractForm({ projects }: { projects: ProjectOption[] }) {
+const LANGUAGE_LABELS: Record<string, string> = { el: "Ελληνικά", en: "English" };
+
+export function SendContractForm({
+  projects,
+  templates,
+}: {
+  projects: ProjectOption[];
+  templates: TemplateOption[];
+}) {
   const [projectId, setProjectId] = useState("");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -55,6 +70,28 @@ export function SendContractForm({ projects }: { projects: ProjectOption[] }) {
         </select>
         <p className="mt-1.5 text-xs text-muted-foreground">
           Linking a project flips it to <span className="font-medium">confirmed</span> once signed.
+        </p>
+      </div>
+
+      <div className="sm:col-span-3">
+        <label className={labelClass} htmlFor="templateId">
+          Contract template
+        </label>
+        <select
+          id="templateId"
+          name="templateId"
+          defaultValue={templates.find((t) => t.isActive)?.id ?? templates[0]?.id ?? ""}
+          className={fieldClass}
+        >
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name} — {LANGUAGE_LABELS[template.language] ?? template.language}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          The template&rsquo;s language also sets the language of the signing page and the emails the
+          client receives.
         </p>
       </div>
 

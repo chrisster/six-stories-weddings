@@ -13,10 +13,15 @@ import {
   isExpired,
 } from "@/lib/contract-tokens";
 import {
+  formatContractDate,
+  formatContractDateFromIso,
+  normalizeLanguage,
+  strings,
+  type ContractLanguage,
+} from "@/lib/contract-i18n";
+import {
   buildMergeValues,
   buildPreviewValues,
-  formatGreekDate,
-  formatGreekDateFromIso,
   renderContract,
   sha256Hex,
   validateSigner,
@@ -209,6 +214,117 @@ export async function getActiveContractTemplate(): Promise<{
   };
 }
 
+export type ContractTemplateRecord = {
+  id: string;
+  snapshot: ContractTemplateSnapshot;
+  isActive: boolean;
+  updatedAt: string;
+};
+
+const TEMPLATE_COLUMNS =
+  "id, name, version, language, title, intro, clauses, closing, consent_text, is_active, updated_at";
+
+function mapTemplate(row: Record<string, unknown>): ContractTemplateRecord {
+  return {
+    id: String(row.id),
+    isActive: Boolean(row.is_active),
+    updatedAt: String(row.updated_at),
+    snapshot: {
+      name: String(row.name),
+      version: Number(row.version),
+      language: String(row.language || "el"),
+      title: String(row.title),
+      intro: String(row.intro || ""),
+      clauses: Array.isArray(row.clauses) ? (row.clauses as ContractTemplateSnapshot["clauses"]) : [],
+      closing: String(row.closing || ""),
+      consentText: String(row.consent_text || DEFAULT_CONTRACT_TEMPLATE.consentText),
+    },
+  };
+}
+
+export async function listContractTemplates(): Promise<ContractTemplateRecord[]> {
+  const admin = createAdminClient();
+  if (!admin) return [];
+  const { data } = await admin
+    .from("contract_templates")
+    .select(TEMPLATE_COLUMNS)
+    .order("language", { ascending: true })
+    .order("version", { ascending: false });
+  return (data ?? []).map((row) => mapTemplate(row as Record<string, unknown>));
+}
+
+export async function getContractTemplateById(
+  id: string,
+): Promise<{ id: string; snapshot: ContractTemplateSnapshot } | null> {
+  const admin = createAdminClient();
+  if (!admin || !id) return null;
+  const { data } = await admin
+    .from("contract_templates")
+    .select(TEMPLATE_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const mapped = mapTemplate(data as Record<string, unknown>);
+  return { id: mapped.id, snapshot: mapped.snapshot };
+}
+
+/**
+ * Saves wording in place rather than creating a new version.
+ *
+ * This is safe because every contract freezes its own `template_snapshot` at
+ * send time — editing a template can never alter a contract that has already
+ * been sent or signed. Versioning each save would just accumulate clutter.
+ */
+export async function updateContractTemplate(
+  id: string,
+  snapshot: ContractTemplateSnapshot,
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, error: "Supabase is not configured." };
+
+  const title = snapshot.title.trim();
+  if (!title) return { ok: false, error: "The contract needs a title." };
+  if (!snapshot.name.trim()) return { ok: false, error: "The template needs a name." };
+
+  const clauses = snapshot.clauses
+    .map((clause) => ({ heading: clause.heading.trim(), body: clause.body.trim() }))
+    .filter((clause) => clause.heading || clause.body);
+
+  const { error } = await admin
+    .from("contract_templates")
+    .update({
+      name: snapshot.name.trim(),
+      language: normalizeLanguage(snapshot.language),
+      title,
+      intro: snapshot.intro.trim(),
+      clauses,
+      closing: snapshot.closing.trim(),
+      consent_text: snapshot.consentText.trim() || DEFAULT_CONTRACT_TEMPLATE.consentText,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Exactly one template is the default offered when sending. */
+export async function setActiveContractTemplate(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = createAdminClient();
+  if (!admin) return { ok: false, error: "Supabase is not configured." };
+
+  await admin.from("contract_templates").update({ is_active: false }).neq("id", id);
+  const { error } = await admin
+    .from("contract_templates")
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Row mapping
 // ---------------------------------------------------------------------------
@@ -304,6 +420,8 @@ export async function createAndSendContract(args: {
   projectId: string | null;
   recipientEmail: string;
   recipientName: string | null;
+  /** Omit to use whichever template is marked active. */
+  templateId?: string | null;
   actorEmail?: string | null;
 }): Promise<SendContractResult> {
   if (!hasSupabaseEnv) return { ok: false, error: "Το Supabase δεν έχει ρυθμιστεί." };
@@ -317,8 +435,14 @@ export async function createAndSendContract(args: {
 
   const [org, template] = await Promise.all([
     getOrgContractSettings(),
-    getActiveContractTemplate(),
+    args.templateId ? getContractTemplateById(args.templateId) : getActiveContractTemplate(),
   ]);
+
+  if (!template) {
+    return { ok: false, error: "Το πρότυπο συμβολαίου δεν βρέθηκε." };
+  }
+
+  const language = normalizeLanguage(template.snapshot.language);
 
   // Freeze project details into merge_data so a later project rename cannot
   // change the wording of an already-issued contract.
@@ -331,7 +455,7 @@ export async function createAndSendContract(args: {
       .eq("id", args.projectId)
       .maybeSingle();
     projectTitle = project?.title || "";
-    eventDate = formatGreekDateFromIso(project?.event_date as string | null) || "";
+    eventDate = formatContractDateFromIso(project?.event_date as string | null, language) || "";
   }
 
   // Listed explicitly rather than spreading `org` so mutable operational
@@ -390,6 +514,8 @@ export async function createAndSendContract(args: {
     studioName: org.studioName,
     expiresAt,
     isReminder: false,
+    language,
+    actorEmail: args.actorEmail,
   });
 
   return { ok: true, contractId, signingUrl, emailed };
@@ -405,6 +531,7 @@ async function sendContractInvite(args: {
   studioName: string;
   expiresAt: string | null;
   isReminder: boolean;
+  language: ContractLanguage;
   actorEmail?: string | null;
 }): Promise<boolean> {
   if (!canSendContractEmails()) {
@@ -420,7 +547,8 @@ async function sendContractInvite(args: {
     projectTitle: args.projectTitle,
     signingUrl: args.signingUrl,
     studioName: args.studioName,
-    expiresLabel: formatGreekDateFromIso(args.expiresAt, false) || "—",
+    expiresLabel: formatContractDateFromIso(args.expiresAt, args.language, false) || "—",
+    language: args.language,
     isReminder: args.isReminder,
   });
 
@@ -485,6 +613,7 @@ export async function resendContract(
     studioName: contract.mergeData.studioName ?? "Six Stories Studio",
     expiresAt,
     isReminder: true,
+    language: normalizeLanguage(contract.templateSnapshot.language),
     actorEmail,
   });
 
@@ -559,7 +688,12 @@ export async function getContractForSigning(rawToken: string): Promise<SigningVi
   return {
     ok: true,
     contract,
-    previewHtmlValues: buildPreviewValues(contract.mergeData, null, null),
+    previewHtmlValues: buildPreviewValues(
+      contract.mergeData,
+      null,
+      null,
+      normalizeLanguage(contract.templateSnapshot.language),
+    ),
   };
 }
 
@@ -625,43 +759,53 @@ export async function signContract(input: SignContractInput): Promise<SignContra
 
   const view = await getContractForSigning(input.rawToken);
   if (!view.ok) {
+    // The contract's language is unknown when the token does not resolve, so
+    // these fall back to the studio's default.
+    const fallback = strings("el");
     const messages: Record<string, string> = {
-      not_found: "Ο σύνδεσμος δεν είναι έγκυρος.",
-      expired: "Ο σύνδεσμος έχει λήξει. Ζητήστε νέο.",
-      signed: "Το συμβόλαιο έχει ήδη υπογραφεί.",
-      void: "Το συμβόλαιο έχει ακυρωθεί.",
+      not_found: fallback.errInvalidLink,
+      expired: fallback.errExpiredLink,
+      signed: fallback.errAlreadySigned,
+      void: fallback.errVoided,
     };
     return { ok: false, error: messages[view.reason] };
   }
 
   const contract = view.contract;
+  const language = normalizeLanguage(contract.templateSnapshot.language);
+  const t = strings(language);
 
   if (!input.consentAccepted) {
-    return { ok: false, errors: { consent: "Απαιτείται η συναίνεσή σας για την ηλεκτρονική υπογραφή." } };
+    return { ok: false, errors: { consent: t.errConsent } };
   }
 
-  const validation = validateSigner(input);
+  const validation = validateSigner(input, language);
   if (!validation.ok) return { ok: false, errors: validation.errors };
   const signer = validation.signer;
 
   const signature = (input.signatureData || "").trim();
   if (input.signatureKind === "drawn") {
     if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signature)) {
-      return { ok: false, errors: { signature: "Σχεδιάστε την υπογραφή σας." } };
+      return { ok: false, errors: { signature: t.errDrawSignature } };
     }
     // ~1.4MB of base64 is a generous ceiling for a signature canvas.
     if (signature.length > 1_400_000) {
-      return { ok: false, errors: { signature: "Η υπογραφή είναι πολύ μεγάλη." } };
+      return { ok: false, errors: { signature: t.errSignatureTooLarge } };
     }
   } else if (signature.length < 3) {
-    return { ok: false, errors: { signature: "Γράψτε το ονοματεπώνυμό σας." } };
+    return { ok: false, errors: { signature: t.errTypeSignature } };
   }
 
   const signedAt = new Date();
   const consentText = contract.templateSnapshot.consentText;
 
   // ---- Render the immutable artifact -------------------------------------
-  const values = buildMergeValues(contract.mergeData, signer, formatGreekDate(signedAt));
+  const values = buildMergeValues(
+    contract.mergeData,
+    signer,
+    formatContractDate(signedAt, language),
+    language,
+  );
   const rendered = renderContract(contract.templateSnapshot, values);
 
   const org = await getOrgContractSettings();
@@ -676,22 +820,23 @@ export async function signContract(input: SignContractInput): Promise<SignContra
 
   const pdf = await renderContractPdf({
     rendered,
-    studioLabel: "Η ΕΤΑΙΡΕΙΑ",
+    language,
+    studioLabel: t.companyLabel,
     studioName: contract.mergeData.studioLegalName,
     studioSignatureUrl,
-    clientLabel: "Ο ΠΕΛΑΤΗΣ",
+    clientLabel: t.clientLabel,
     clientName,
     signatureKind: input.signatureKind,
     signatureData: signature,
     audit: {
       contractId: contract.id,
-      signedAtLabel: formatGreekDate(signedAt),
+      signedAtLabel: formatContractDate(signedAt, language),
       signerEmail: contract.recipientEmail,
       ip: input.ip || "—",
       userAgent: (input.userAgent || "—").slice(0, 160),
       consentText,
-      sentAtLabel: formatGreekDateFromIso(contract.sentAt) || "—",
-      viewedAtLabel: formatGreekDateFromIso(contract.viewedAt) || "—",
+      sentAtLabel: formatContractDateFromIso(contract.sentAt, language) || "—",
+      viewedAtLabel: formatContractDateFromIso(contract.viewedAt, language) || "—",
     },
   });
 
@@ -760,6 +905,7 @@ export async function signContract(input: SignContractInput): Promise<SignContra
     pdfPath,
     ccEmail: resolveContractCcEmail(org.contractCcEmail),
     clientName,
+    language,
   });
 
   await confirmProjectAfterSigning(contract, clientName);
@@ -775,6 +921,7 @@ async function emailSignedCopy(args: {
   pdfPath: string;
   ccEmail: string;
   clientName: string;
+  language: ContractLanguage;
 }): Promise<boolean> {
   if (!canSendContractEmails()) {
     await logContractEvent(args.contract.id, "copy_emailed", {
@@ -795,7 +942,8 @@ async function emailSignedCopy(args: {
     contractTitle: args.contract.templateSnapshot.title,
     projectTitle: args.contract.projectTitle,
     studioName: args.contract.mergeData.studioLegalName,
-    signedAtLabel: formatGreekDate(args.signedAt),
+    signedAtLabel: formatContractDate(args.signedAt, args.language),
+    language: args.language,
     pdfSha256: args.pdfSha256,
     downloadUrl,
   });

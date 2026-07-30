@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 
 import { submitSignatureAction, type SignActionState } from "@/app/sign/[token]/actions";
 import { SignaturePad } from "@/components/contracts/signature-pad";
+import { strings, type ContractLanguage } from "@/lib/contract-i18n";
 
 const initialState: SignActionState = { status: "idle" };
 
@@ -19,17 +20,20 @@ function FieldError({ message }: { message?: string }) {
 
 export function SignForm({
   token,
+  language,
   consentText,
   defaultFirstName,
   defaultLastName,
   recipientEmail,
 }: {
   token: string;
+  language: ContractLanguage;
   consentText: string;
   defaultFirstName: string;
   defaultLastName: string;
   recipientEmail: string;
 }) {
+  const t = strings(language);
   const [state, formAction, isPending] = useActionState(submitSignatureAction, initialState);
   const [isCompany, setIsCompany] = useState(false);
   const [signatureKind, setSignatureKind] = useState<"typed" | "drawn">("typed");
@@ -41,12 +45,12 @@ export function SignForm({
       <div className="mt-8 rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-9 text-center">
         <CheckCircle2 className="mx-auto size-9 text-emerald-600" strokeWidth={1.6} />
         <h2 className="mt-3 text-base font-medium text-emerald-900">
-          Το συμφωνητικό υπογράφηκε
+          {t.successTitle}
         </h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-emerald-800">
           {state.message}
         </p>
-        <p className="mt-4 text-xs text-emerald-700">Μπορείτε να κλείσετε αυτή τη σελίδα.</p>
+        <p className="mt-4 text-xs text-emerald-700">{t.successClose}</p>
       </div>
     );
   }
@@ -61,10 +65,10 @@ export function SignForm({
 
       <div>
         <h2 className="text-sm font-medium uppercase tracking-[0.14em] text-neutral-800">
-          Τα στοιχεία σας
+          {t.yourDetails}
         </h2>
         <p className="mt-1 text-xs text-neutral-500">
-          Θα συμπληρωθούν στο συμφωνητικό. Το email σας ({recipientEmail}) καταγράφεται αυτόματα.
+          {t.detailsNote} ({recipientEmail})
         </p>
       </div>
 
@@ -77,17 +81,15 @@ export function SignForm({
           className="mt-0.5 size-4 shrink-0 accent-neutral-800"
         />
         <span className="text-sm text-neutral-700">
-          Υπογράφω για λογαριασμό εταιρείας
-          <span className="mt-0.5 block text-xs text-neutral-500">
-            Αφήστε το κενό αν υπογράφετε ως ιδιώτης.
-          </span>
+          {t.companyToggle}
+          <span className="mt-0.5 block text-xs text-neutral-500">{t.companyToggleHint}</span>
         </span>
       </label>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className={labelClass} htmlFor="firstName">
-            Όνομα
+            {t.firstName}
           </label>
           <input
             id="firstName"
@@ -101,7 +103,7 @@ export function SignForm({
         </div>
         <div>
           <label className={labelClass} htmlFor="lastName">
-            Επώνυμο
+            {t.lastName}
           </label>
           <input
             id="lastName"
@@ -119,14 +121,14 @@ export function SignForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={labelClass} htmlFor="companyName">
-              Επωνυμία εταιρείας
+              {t.companyName}
             </label>
             <input id="companyName" name="companyName" className={fieldClass} />
             <FieldError message={errors.companyName} />
           </div>
           <div>
             <label className={labelClass} htmlFor="taxOffice">
-              Δ.Ο.Υ.
+              {t.taxOffice}
             </label>
             <input id="taxOffice" name="taxOffice" className={fieldClass} />
             <FieldError message={errors.taxOffice} />
@@ -137,7 +139,7 @@ export function SignForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className={labelClass} htmlFor="city">
-            Πόλη
+            {t.city}
           </label>
           <input
             id="city"
@@ -150,7 +152,7 @@ export function SignForm({
         </div>
         <div>
           <label className={labelClass} htmlFor="street">
-            Οδός &amp; αριθμός
+            {t.street}
           </label>
           <input
             id="street"
@@ -165,14 +167,14 @@ export function SignForm({
 
       <div className="sm:max-w-xs">
         <label className={labelClass} htmlFor="vatId">
-          ΑΦΜ
+          {t.vatId}
         </label>
         <input
           id="vatId"
           name="vatId"
           inputMode="numeric"
           maxLength={12}
-          placeholder="9 ψηφία"
+          placeholder={t.vatIdPlaceholder}
           className={fieldClass}
           required
         />
@@ -182,15 +184,15 @@ export function SignForm({
       {/* --- Signature ---------------------------------------------------- */}
       <div className="border-t border-neutral-200 pt-6">
         <h2 className="text-sm font-medium uppercase tracking-[0.14em] text-neutral-800">
-          Υπογραφή
+          {t.signature}
         </h2>
 
         <div className="mt-3 inline-flex rounded-lg border border-neutral-300 p-0.5">
           {(
             [
-              ["typed", "Πληκτρολόγηση"],
-              ["drawn", "Σχέδιο"],
-            ] as const
+              ["typed", t.typeTab],
+              ["drawn", t.drawTab],
+            ] as [typeof signatureKind, string][]
           ).map(([kind, label]) => (
             <button
               key={kind}
@@ -211,7 +213,7 @@ export function SignForm({
           {signatureKind === "typed" ? (
             <div>
               <label className={labelClass} htmlFor="signatureTyped">
-                Γράψτε το ονοματεπώνυμό σας
+                {t.typePrompt}
               </label>
               <input
                 id="signatureTyped"
@@ -222,14 +224,15 @@ export function SignForm({
                 className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-3 font-serif text-xl text-neutral-900 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200"
               />
               <p className="mt-1.5 text-xs text-neutral-500">
-                Η πληκτρολογημένη υπογραφή έχει την ίδια νομική ισχύ με τη σχεδιασμένη.
+                {t.typedNote}
               </p>
             </div>
           ) : (
             <SignaturePad
               value={drawnSignature}
               onChange={setDrawnSignature}
-              ariaLabel="Πεδίο υπογραφής"
+              ariaLabel={t.signature}
+              language={language}
             />
           )}
           <FieldError message={errors.signature} />
@@ -260,7 +263,7 @@ export function SignForm({
         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-5 py-3.5 text-sm font-medium uppercase tracking-[0.16em] text-white transition hover:bg-neutral-800 disabled:opacity-60"
       >
         {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-        {isPending ? "Υπογραφή…" : "Υπογραφή συμφωνητικού"}
+        {isPending ? t.submitting : t.submit}
       </button>
     </form>
   );

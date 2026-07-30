@@ -1,7 +1,12 @@
 import Link from "next/link";
 
 import { canSendContractEmails, resolveContractCcEmail } from "@/lib/contract-notifications";
-import { getOrgContractSettings, listContractFolders, listContracts } from "@/lib/contract-data";
+import {
+  getOrgContractSettings,
+  listContractFolders,
+  listContractTemplates,
+  listContracts,
+} from "@/lib/contract-data";
 import { getProjects } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
@@ -43,9 +48,10 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
   const { status, reason, folder, count, signed: signedDeletedCount } = await searchParams;
   const activeFolderId = folder?.trim() || null;
 
-  const [contracts, folders, projects, org] = await Promise.all([
+  const [contracts, folders, templates, projects, org] = await Promise.all([
     listContracts(activeFolderId),
     listContractFolders(),
+    listContractTemplates(),
     getProjects(),
     getOrgContractSettings(),
   ]);
@@ -104,6 +110,12 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
           </summary>
           <div className="mt-4">
             <SendContractForm
+              templates={templates.map((template) => ({
+                id: template.id,
+                name: template.snapshot.name,
+                language: template.snapshot.language,
+                isActive: template.isActive,
+              }))}
               projects={projects.map((project) => ({
                 id: project.id,
                 title: project.title,

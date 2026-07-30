@@ -1,5 +1,7 @@
 import { createHash } from "crypto";
 
+import { strings, type ContractLanguage } from "@/lib/contract-i18n";
+
 export type ContractClause = {
   heading: string;
   /** Paragraphs are separated by a blank line. */
@@ -95,23 +97,39 @@ export function applyMergeFields(text: string, values: Record<string, string>): 
  * form with its Δ.Ο.Υ. and representative instead. Keeping this in code rather
  * than as two templates means the clause wording stays in one place.
  */
-export function buildClientPartyLine(signer: ContractSigner | null): string {
+export function buildClientPartyLine(
+  signer: ContractSigner | null,
+  language: ContractLanguage = "el",
+): string {
   if (!signer) return "";
 
   const city = signer.city || UNFILLED;
   const street = signer.street || UNFILLED;
   const vatId = signer.vatId || UNFILLED;
+  const name = `${signer.firstName} ${signer.lastName}`.trim() || UNFILLED;
 
-  if (signer.isCompany) {
-    const rep = `${signer.firstName} ${signer.lastName}`.trim() || UNFILLED;
+  if (language === "en") {
+    if (signer.isCompany) {
+      return (
+        `the company ${signer.companyName || UNFILLED}, headquartered in the city of ${city}, ` +
+        `at ${street}, with TIN ${vatId}, registered at the ${signer.taxOffice || UNFILLED} Tax Office, ` +
+        `legally represented by ${name}, hereinafter referred to as the "Client"`
+      );
+    }
     return (
-      `η εταιρεία ${signer.companyName || UNFILLED}, που εδρεύει στη πόλη ${city}, ` +
-      `επί της οδού ${street}, με ΑΦΜ ${vatId}, της Δ.Ο.Υ ${signer.taxOffice || UNFILLED}, ` +
-      `νομίμως εκπροσωπούμενη από τον/την ${rep}, εφεξής ο «Πελάτης»`
+      `the individual ${name}, residing in the city of ${city}, ` +
+      `at ${street}, with TIN ${vatId}, hereinafter referred to as the "Client"`
     );
   }
 
-  const name = `${signer.firstName} ${signer.lastName}`.trim() || UNFILLED;
+  if (signer.isCompany) {
+    return (
+      `η εταιρεία ${signer.companyName || UNFILLED}, που εδρεύει στη πόλη ${city}, ` +
+      `επί της οδού ${street}, με ΑΦΜ ${vatId}, της Δ.Ο.Υ ${signer.taxOffice || UNFILLED}, ` +
+      `νομίμως εκπροσωπούμενη από τον/την ${name}, εφεξής ο «Πελάτης»`
+    );
+  }
+
   return (
     `ο ιδιώτης ${name} που κατοικεί στη πόλη ${city}, ` +
     `επί της οδού ${street}, με ΑΦΜ ${vatId}, εφεξής ο «Πελάτης»`
@@ -122,6 +140,7 @@ export function buildMergeValues(
   merge: ContractMergeData,
   signer: ContractSigner | null,
   signedDate: string | null,
+  language: ContractLanguage = "el",
 ): Record<string, string> {
   const signerName = signer
     ? signer.isCompany && signer.companyName
@@ -130,7 +149,7 @@ export function buildMergeValues(
     : "";
 
   return {
-    client_party: buildClientPartyLine(signer),
+    client_party: buildClientPartyLine(signer, language),
     place: merge.place,
     signed_date: signedDate || "",
     studio_name: merge.studioName,
@@ -172,10 +191,11 @@ export function buildPreviewValues(
   merge: ContractMergeData,
   signer: ContractSigner | null,
   signedDate: string | null,
+  language: ContractLanguage = "el",
 ): Record<string, string> {
   // Fall back to a blank signer so the counterparty sentence still renders with
   // dotted placeholders, the way the original document reads before signing.
-  const values = buildMergeValues(merge, signer ?? BLANK_SIGNER, signedDate);
+  const values = buildMergeValues(merge, signer ?? BLANK_SIGNER, signedDate, language);
   for (const key of [
     "client_name",
     "client_city",
@@ -232,35 +252,6 @@ export function sha256Hex(bytes: Uint8Array | Buffer): string {
 }
 
 // ---------------------------------------------------------------------------
-// Formatting
-// ---------------------------------------------------------------------------
-
-const EL_MONTHS = [
-  "Ιανουαρίου", "Φεβρουαρίου", "Μαρτίου", "Απριλίου", "Μαΐου", "Ιουνίου",
-  "Ιουλίου", "Αυγούστου", "Σεπτεμβρίου", "Οκτωβρίου", "Νοεμβρίου", "Δεκεμβρίου",
-];
-
-const EL_WEEKDAYS = [
-  "Κυριακή", "Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο",
-];
-
-/** "Τρίτη 12 Μαΐου 2026" — matches how the studio's contracts write dates. */
-export function formatGreekDate(date: Date, withWeekday = true): string {
-  const day = date.getDate();
-  const month = EL_MONTHS[date.getMonth()];
-  const year = date.getFullYear();
-  const base = `${day} ${month} ${year}`;
-  return withWeekday ? `${EL_WEEKDAYS[date.getDay()]} ${base}` : base;
-}
-
-export function formatGreekDateFromIso(iso: string | null | undefined, withWeekday = true): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return formatGreekDate(date, withWeekday);
-}
-
-// ---------------------------------------------------------------------------
 // Signer validation
 // ---------------------------------------------------------------------------
 
@@ -268,16 +259,20 @@ export type SignerValidationResult =
   | { ok: true; signer: ContractSigner }
   | { ok: false; errors: Record<string, string> };
 
-export function validateSigner(input: {
-  firstName: string;
-  lastName: string;
-  city: string;
-  street: string;
-  isCompany: boolean;
-  companyName: string;
-  vatId: string;
-  taxOffice: string;
-}): SignerValidationResult {
+export function validateSigner(
+  input: {
+    firstName: string;
+    lastName: string;
+    city: string;
+    street: string;
+    isCompany: boolean;
+    companyName: string;
+    vatId: string;
+    taxOffice: string;
+  },
+  language: ContractLanguage = "el",
+): SignerValidationResult {
+  const t = strings(language);
   const errors: Record<string, string> = {};
 
   const firstName = (input.firstName || "").trim();
@@ -288,20 +283,20 @@ export function validateSigner(input: {
   const taxOffice = (input.taxOffice || "").trim();
   const vatId = normalizeAfm(input.vatId);
 
-  if (firstName.length < 2) errors.firstName = "Συμπληρώστε το όνομά σας.";
-  if (lastName.length < 2) errors.lastName = "Συμπληρώστε το επώνυμό σας.";
-  if (city.length < 2) errors.city = "Συμπληρώστε την πόλη σας.";
-  if (street.length < 2) errors.street = "Συμπληρώστε τη διεύθυνσή σας.";
+  if (firstName.length < 2) errors.firstName = t.errFirstName;
+  if (lastName.length < 2) errors.lastName = t.errLastName;
+  if (city.length < 2) errors.city = t.errCity;
+  if (street.length < 2) errors.street = t.errStreet;
 
   if (!vatId) {
-    errors.vatId = "Συμπληρώστε το ΑΦΜ σας.";
+    errors.vatId = t.errVatMissing;
   } else if (!isValidAfm(vatId)) {
-    errors.vatId = "Το ΑΦΜ δεν είναι έγκυρο. Ελέγξτε τα 9 ψηφία.";
+    errors.vatId = t.errVatInvalid;
   }
 
   if (input.isCompany) {
-    if (companyName.length < 2) errors.companyName = "Συμπληρώστε την επωνυμία της εταιρείας.";
-    if (taxOffice.length < 2) errors.taxOffice = "Συμπληρώστε τη Δ.Ο.Υ.";
+    if (companyName.length < 2) errors.companyName = t.errCompanyName;
+    if (taxOffice.length < 2) errors.taxOffice = t.errTaxOffice;
   }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
