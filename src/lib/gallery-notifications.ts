@@ -113,12 +113,20 @@ export function canSendGalleryNotificationEmails() {
   return hasSmtp || hasResend;
 }
 
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+};
+
 export async function sendGalleryNotificationEmail(args: {
   to: string;
   subject: string;
   html: string;
   text: string;
   cc?: string | string[];
+  /** Used by the contract flow to attach the signed PDF. */
+  attachments?: EmailAttachment[];
 }) {
   const {
     apiKey,
@@ -159,6 +167,11 @@ export async function sendGalleryNotificationEmail(args: {
       html: args.html,
       text: args.text,
       replyTo: replyTo || undefined,
+      attachments: args.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content,
+        contentType: attachment.contentType,
+      })),
     });
 
     return { sent: true as const };
@@ -182,6 +195,12 @@ export async function sendGalleryNotificationEmail(args: {
       html: args.html,
       text: args.text,
       reply_to: replyTo || undefined,
+      // Resend expects base64-encoded attachment content.
+      attachments: args.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content.toString("base64"),
+        content_type: attachment.contentType,
+      })),
     }),
   });
 

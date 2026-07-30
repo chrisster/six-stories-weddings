@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The contract PDF embeds DejaVu Serif for Greek glyph coverage. These .ttf
+  // files are read from node_modules at runtime, which file tracing cannot infer
+  // on its own, so declare them explicitly or the deployed PDF route 500s.
+  outputFileTracingIncludes: {
+    "/api/contracts/**": ["./node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf"],
+    "/sign/**": ["./node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf"],
+    "/admin/contracts/**": ["./node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf"],
+  },
   images: {
     remotePatterns: [
       // Supabase Storage

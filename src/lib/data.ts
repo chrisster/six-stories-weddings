@@ -552,6 +552,17 @@ export type OrganizationSettings = {
   phone: string;
   website: string;
   address: string;
+  // Legal identity — appears in the counterparty block of contracts.
+  legalName: string;
+  vatId: string;
+  taxOffice: string;
+  registryNo: string;
+  representativeName: string;
+  city: string;
+  bankName: string;
+  bankIban: string;
+  signatureImageUrl: string;
+  contractCcEmail: string;
 };
 
 export async function getOrganizationSettings(): Promise<OrganizationSettings> {
@@ -562,6 +573,16 @@ export async function getOrganizationSettings(): Promise<OrganizationSettings> {
     phone: "",
     website: "",
     address: "",
+    legalName: "",
+    vatId: "",
+    taxOffice: "",
+    registryNo: "",
+    representativeName: "",
+    city: "",
+    bankName: "",
+    bankIban: "",
+    signatureImageUrl: "",
+    contractCcEmail: "",
   };
 
   if (!hasSupabaseEnv) {
@@ -590,6 +611,16 @@ export async function getOrganizationSettings(): Promise<OrganizationSettings> {
     phone: String(data.phone || ""),
     website: String(data.website || ""),
     address: String(data.address || ""),
+    legalName: String(data.legal_name || ""),
+    vatId: String(data.vat_id || ""),
+    taxOffice: String(data.tax_office || ""),
+    registryNo: String(data.registry_no || ""),
+    representativeName: String(data.representative_name || ""),
+    city: String(data.city || ""),
+    bankName: String(data.bank_name || ""),
+    bankIban: String(data.bank_iban || ""),
+    signatureImageUrl: String(data.signature_image_url || ""),
+    contractCcEmail: String(data.contract_cc_email || ""),
   };
 }
 
