@@ -246,42 +246,110 @@ export async function getProjects() {
 
   const galleriesByProjectId = new Map<
     string,
-    Array<{ id: string; coverMediaId?: string | null; heroImagePath?: string | null }>
+    Array<{ id: string; heroImagePath?: string | null }>
   >();
   (galleries || []).forEach((row) => {
     const key = String(row.project_id);
     const list = galleriesByProjectId.get(key) || [];
     list.push({
       id: String(row.id),
-      coverMediaId: (row.cover_media_id as string | null) || null,
       heroImagePath: (row.hero_image_path as string | null) || null,
     });
     galleriesByProjectId.set(key, list);
   });
 
   const galleryIds = (galleries || []).map((row) => String(row.id));
-  const mediaByGalleryId = new Map<
-    string,
-    Array<{ id: string; storagePath: string; sortOrder: number; isCover: boolean }>
-  >();
+
+  // Storage path of the photo chosen as each gallery's cover, looked up by id
+  // rather than by scanning every media row: fetching a project's whole media
+  // list runs into PostgREST's row cap once galleries hold hundreds of photos,
+  // and the cover row is then silently missing.
+  const coverPathByGalleryId = new Map<string, string>();
 
   if (galleryIds.length > 0) {
-    const { data: media } = await admin
-      .from("media_assets")
-      .select("id, gallery_id, storage_path, sort_order, is_cover")
-      .in("gallery_id", galleryIds)
-      .order("sort_order", { ascending: true });
+    const selectedCoverIds = Array.from(
+      new Set(
+        (galleries || [])
+          .map((row) => (row.cover_media_id as string | null) || null)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
 
-    (media || []).forEach((row) => {
-      const key = String(row.gallery_id);
-      const current = mediaByGalleryId.get(key) || [];
-      current.push({
-        id: String(row.id),
-        storagePath: String(row.storage_path),
-        sortOrder: Number(row.sort_order || 0),
-        isCover: Boolean(row.is_cover),
-      });
-      mediaByGalleryId.set(key, current);
+    const [selectedCoverRows, flaggedCoverRows] = await Promise.all([
+      (async () => {
+        if (selectedCoverIds.length === 0) {
+          return [];
+        }
+        const { data: rows } = await admin
+          .from("media_assets")
+          .select("id, storage_path")
+          .in("id", selectedCoverIds);
+        return rows || [];
+      })(),
+      (async () => {
+        const { data: rows } = await admin
+          .from("media_assets")
+          .select("gallery_id, storage_path")
+          .in("gallery_id", galleryIds)
+          .eq("is_cover", true);
+        return rows || [];
+      })(),
+    ]);
+
+    const selectedPathByMediaId = new Map(
+      selectedCoverRows.map((row) => [String(row.id), String(row.storage_path)]),
+    );
+
+    (galleries || []).forEach((row) => {
+      const selectedPath = row.cover_media_id
+        ? selectedPathByMediaId.get(String(row.cover_media_id))
+        : null;
+      if (selectedPath) {
+        coverPathByGalleryId.set(String(row.id), selectedPath);
+      }
+    });
+
+    // The is_cover flag covers galleries where it and cover_media_id are out of sync.
+    flaggedCoverRows.forEach((row) => {
+      const galleryId = String(row.gallery_id);
+      if (!coverPathByGalleryId.has(galleryId)) {
+        coverPathByGalleryId.set(galleryId, String(row.storage_path));
+      }
+    });
+  }
+
+  // Only projects without a cover photo and without a hero image fall back to
+  // their first uploaded photo, so that lookup stays at one row per gallery.
+  const firstPhotoPathByGalleryId = new Map<string, string>();
+  const fallbackGalleryIds = data.flatMap((row) => {
+    const projectGalleries = galleriesByProjectId.get(String(row.id)) || [];
+    const alreadyResolved = projectGalleries.some(
+      (gallery) => coverPathByGalleryId.has(gallery.id) || gallery.heroImagePath,
+    );
+    return alreadyResolved ? [] : projectGalleries.map((gallery) => gallery.id);
+  });
+
+  if (fallbackGalleryIds.length > 0) {
+    const firstPhotos = await Promise.all(
+      fallbackGalleryIds.map(async (galleryId) => {
+        const { data: firstPhoto } = await admin
+          .from("media_assets")
+          .select("storage_path")
+          .eq("gallery_id", galleryId)
+          .order("sort_order", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        return {
+          galleryId,
+          storagePath: (firstPhoto?.storage_path as string | null) || null,
+        };
+      }),
+    );
+
+    firstPhotos.forEach(({ galleryId, storagePath }) => {
+      if (storagePath) {
+        firstPhotoPathByGalleryId.set(galleryId, storagePath);
+      }
     });
   }
 
@@ -294,30 +362,27 @@ export async function getProjects() {
 
       const projectGalleries = galleriesByProjectId.get(String(row.id)) || [];
 
-      // Resolve the cover across ALL of the project's galleries (a project can
+      // The photo chosen as a gallery's cover is what the project thumbnail
+      // shows. Resolved across ALL of the project's galleries (a project can
       // have more than one). Priority:
-      //   1. A custom uploaded hero image on any gallery.
-      //   2. An explicitly selected cover (cover_media_id, or the is_cover flag
+      //   1. The selected cover photo (cover_media_id, or the is_cover flag
       //      when the two are out of sync) on any gallery.
+      //   2. A custom uploaded hero image on any gallery.
       //   3. The first uploaded photo of the first gallery that has media.
       let coverStoragePath: string | null = null;
 
       for (const g of projectGalleries) {
-        if (g.heroImagePath) {
-          coverStoragePath = g.heroImagePath;
+        const selectedCover = coverPathByGalleryId.get(g.id);
+        if (selectedCover) {
+          coverStoragePath = selectedCover;
           break;
         }
       }
 
       if (!coverStoragePath) {
         for (const g of projectGalleries) {
-          const gm = mediaByGalleryId.get(g.id) || [];
-          const selected =
-            (g.coverMediaId ? gm.find((asset) => asset.id === g.coverMediaId) : null) ||
-            gm.find((asset) => asset.isCover) ||
-            null;
-          if (selected) {
-            coverStoragePath = selected.storagePath;
+          if (g.heroImagePath) {
+            coverStoragePath = g.heroImagePath;
             break;
           }
         }
@@ -325,9 +390,9 @@ export async function getProjects() {
 
       if (!coverStoragePath) {
         for (const g of projectGalleries) {
-          const gm = mediaByGalleryId.get(g.id) || [];
-          if (gm[0]) {
-            coverStoragePath = gm[0].storagePath;
+          const firstPhoto = firstPhotoPathByGalleryId.get(g.id);
+          if (firstPhoto) {
+            coverStoragePath = firstPhoto;
             break;
           }
         }
