@@ -324,6 +324,9 @@ export async function setCoverMediaAction(formData: FormData) {
   await admin.from("galleries").update({ cover_media_id: mediaId }).eq("id", galleryId);
 
   revalidatePath(`/admin/galleries/${galleryId}`);
+  // The cover photo is also the project thumbnail on both listing pages.
+  revalidatePath("/admin");
+  revalidatePath("/admin/galleries");
 }
 
 export async function setGalleryHeroImageAction(formData: FormData) {
@@ -357,6 +360,8 @@ export async function setGalleryHeroImageAction(formData: FormData) {
     .maybeSingle();
 
   revalidatePath(`/admin/galleries/${galleryId}`);
+  revalidatePath("/admin");
+  revalidatePath("/admin/galleries");
   if (galleryRow?.slug) {
     revalidatePath(`/g/${galleryRow.slug}`);
   }
@@ -386,6 +391,8 @@ export async function clearGalleryHeroImageAction(formData: FormData) {
     .maybeSingle();
 
   revalidatePath(`/admin/galleries/${galleryId}`);
+  revalidatePath("/admin");
+  revalidatePath("/admin/galleries");
   if (galleryRow?.slug) {
     revalidatePath(`/g/${galleryRow.slug}`);
   }
@@ -469,6 +476,8 @@ export async function deleteMediaAction(formData: FormData) {
   await admin.from("media_assets").delete().eq("id", mediaId);
 
   revalidatePath(`/admin/galleries/${galleryId}`);
+  revalidatePath("/admin");
+  revalidatePath("/admin/galleries");
 }
 
 export async function bulkDeleteMediaAction(formData: FormData) {
@@ -527,6 +536,8 @@ export async function bulkDeleteMediaAction(formData: FormData) {
   }
 
   revalidatePath(`/admin/galleries/${galleryId}`);
+  revalidatePath("/admin");
+  revalidatePath("/admin/galleries");
 }
 
 export async function moveMediaToSectionAction(formData: FormData) {
