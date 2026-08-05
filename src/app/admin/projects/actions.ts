@@ -47,6 +47,16 @@ function parsePayments(formData: FormData): Array<{ date: string; amount: number
   return payments;
 }
 
+/** Today's date as YYYY-MM-DD in the studio's timezone, not the server's. */
+function todayInStudioTimezone(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Athens",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 function parseTimeplan(
   formData: FormData,
 ): Array<{ time: string; action: string; location: string | null; notes: string | null }> {
@@ -185,6 +195,19 @@ export async function createProjectAction(formData: FormData) {
   const offerAmount = toNumber(formData.get("offerAmount")) || toNumber(formData.get("budgetTotal"));
   const payments = parsePayments(formData);
   const amountPaidInput = toNumber(formData.get("amountPaid"));
+
+  // The create form takes a single "Amount Paid" figure with no date or note of
+  // its own. Record it as the project's first payment so it shows up in the
+  // payments list, instead of only ever appearing in the paid/remaining totals.
+  // The note is left blank rather than guessed at: the create form doesn't say
+  // whether this is a deposit or the full amount, and it stays editable.
+  if (payments.length === 0 && amountPaidInput > 0) {
+    payments.push({
+      date: todayInStudioTimezone(),
+      amount: amountPaidInput,
+    });
+  }
+
   const paymentsTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
   const amountPaid = payments.length > 0 ? paymentsTotal : amountPaidInput;
   const budgetTotal = offerAmount;
