@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
 import { LocationAutocomplete } from "@/components/admin/location-autocomplete";
 import type { TimeplanItem } from "@/lib/types";
 
 type TimeplanRow = {
+  id: string;
   time: string;
   action: string;
   location: string;
@@ -18,7 +20,8 @@ type ProjectTimeplanFieldsProps = {
 };
 
 function toRows(initialTimeplan: TimeplanItem[]): TimeplanRow[] {
-  return initialTimeplan.map((item) => ({
+  return initialTimeplan.map((item, index) => ({
+    id: `initial-${index}`,
     time: item.time || "",
     action: item.action || "",
     location: item.location || "",
@@ -27,14 +30,41 @@ function toRows(initialTimeplan: TimeplanItem[]): TimeplanRow[] {
 }
 
 export function ProjectTimeplanFields({ formId, initialTimeplan }: ProjectTimeplanFieldsProps) {
-  const [rows, setRows] = useState<TimeplanRow[]>(toRows(initialTimeplan));
+  const [rows, setRows] = useState<TimeplanRow[]>(() => toRows(initialTimeplan));
+  const nextIdRef = useRef(0);
 
-  const addRow = () => {
-    setRows((current) => [...current, { time: "", action: "", location: "", notes: "" }]);
+  // Reordering and removing rows happen via buttons, which never emit the
+  // input/change events the autosave listens for. Nudge a form control so the
+  // change is picked up and persisted.
+  const notifyFormChanged = () => {
+    const form = document.getElementById(formId) as HTMLFormElement | null;
+    form?.elements[0]?.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  const removeRow = (index: number) => {
-    setRows((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  const addRow = () => {
+    nextIdRef.current += 1;
+    setRows((current) => [
+      ...current,
+      { id: `new-${nextIdRef.current}`, time: "", action: "", location: "", notes: "" },
+    ]);
+  };
+
+  const removeRow = (id: string) => {
+    setRows((current) => current.filter((row) => row.id !== id));
+    notifyFormChanged();
+  };
+
+  const moveRow = (index: number, direction: -1 | 1) => {
+    setRows((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    notifyFormChanged();
   };
 
   return (
@@ -50,7 +80,7 @@ export function ProjectTimeplanFields({ formId, initialTimeplan }: ProjectTimepl
       {rows.length > 0 ? (
         rows.map((row, index) => (
           <div
-            key={index}
+            key={row.id}
             className="grid gap-2 rounded-xl border border-border/80 bg-zinc-50 p-3 sm:grid-cols-[110px_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto]"
           >
             <input
@@ -83,13 +113,35 @@ export function ProjectTimeplanFields({ formId, initialTimeplan }: ProjectTimepl
               placeholder="Note"
               className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
             />
-            <button
-              type="button"
-              onClick={() => removeRow(index)}
-              className="h-10 rounded-xl border border-red-200 px-3 text-sm text-red-600 hover:border-red-400"
-            >
-              Remove
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => moveRow(index, -1)}
+                disabled={index === 0}
+                aria-label="Move row up"
+                title="Move up"
+                className="flex h-10 w-9 items-center justify-center rounded-xl border border-border bg-white text-muted-foreground hover:border-foreground/30 disabled:cursor-default disabled:opacity-30 disabled:hover:border-border"
+              >
+                <ChevronUpIcon className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => moveRow(index, 1)}
+                disabled={index === rows.length - 1}
+                aria-label="Move row down"
+                title="Move down"
+                className="flex h-10 w-9 items-center justify-center rounded-xl border border-border bg-white text-muted-foreground hover:border-foreground/30 disabled:cursor-default disabled:opacity-30 disabled:hover:border-border"
+              >
+                <ChevronDownIcon className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeRow(row.id)}
+                className="h-10 rounded-xl border border-red-200 px-3 text-sm text-red-600 hover:border-red-400"
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))
       ) : (
