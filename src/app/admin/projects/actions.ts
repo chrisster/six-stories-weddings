@@ -838,6 +838,7 @@ export async function addClientToProjectAction(formData: FormData) {
   }
 
   const projectId = String(formData.get("projectId") || "").trim();
+  const contactId = String(formData.get("contactId") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim();
   const email = String(formData.get("email") || "").trim() || null;
   const phone = String(formData.get("phone") || "").trim() || null;
@@ -851,32 +852,72 @@ export async function addClientToProjectAction(formData: FormData) {
     return;
   }
 
-  const { data: client, error: clientError } = await admin
-    .from("clients")
-    .insert({
-      full_name: fullName,
-      email,
-      phone,
-    })
+  // When adding from the contact list, reuse the contact's existing client
+  // record instead of creating a duplicate.
+  let contact: { id: string; converted_client_id: string | null } | null = null;
+  let clientId: string | null = null;
+
+  if (contactId) {
+    const { data } = await admin
+      .from("contacts")
+      .select("id, converted_client_id")
+      .eq("id", contactId)
+      .maybeSingle();
+    contact = (data as { id: string; converted_client_id: string | null } | null) || null;
+
+    if (contact?.converted_client_id) {
+      const { data: existingClient } = await admin
+        .from("clients")
+        .select("id")
+        .eq("id", contact.converted_client_id)
+        .maybeSingle();
+      clientId = existingClient?.id || null;
+    }
+  }
+
+  if (!clientId) {
+    const { data: client, error: clientError } = await admin
+      .from("clients")
+      .insert({
+        full_name: fullName,
+        email,
+        phone,
+      })
+      .select("id")
+      .single();
+
+    if (clientError || !client) {
+      throw new Error(clientError?.message || "Could not create client");
+    }
+
+    clientId = client.id;
+  }
+
+  const { data: existingLink } = await admin
+    .from("project_clients")
     .select("id")
-    .single();
+    .match({ project_id: projectId, client_id: clientId })
+    .maybeSingle();
 
-  if (clientError || !client) {
-    throw new Error(clientError?.message || "Could not create client");
+  if (!existingLink) {
+    const { error: linkError } = await admin.from("project_clients").insert({
+      project_id: projectId,
+      client_id: clientId,
+      role: "couple",
+    });
+
+    if (linkError) {
+      throw new Error(linkError.message);
+    }
   }
 
-  const { error: linkError } = await admin.from("project_clients").insert({
-    project_id: projectId,
-    client_id: client.id,
-    role: "couple",
-  });
-
-  if (linkError) {
-    throw new Error(linkError.message);
-  }
-
-  // Also add to contacts list (skip if email already exists)
-  if (email) {
+  if (contact) {
+    await admin
+      .from("contacts")
+      .update({ status: "converted", converted_client_id: clientId })
+      .eq("id", contact.id);
+  } else if (email) {
+    // Also add to contacts list (skip if email already exists)
     const { data: existing } = await admin
       .from("contacts")
       .select("id")
@@ -889,7 +930,7 @@ export async function addClientToProjectAction(formData: FormData) {
         email,
         phone,
         status: "confirmed",
-        converted_client_id: client.id,
+        converted_client_id: clientId,
       });
     }
   } else {
@@ -898,7 +939,7 @@ export async function addClientToProjectAction(formData: FormData) {
       email: null,
       phone,
       status: "confirmed",
-      converted_client_id: client.id,
+      converted_client_id: clientId,
     });
   }
 

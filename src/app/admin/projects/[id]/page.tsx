@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
-  addClientToProjectAction,
   addCrewToProjectAction,
   removeClientFromProjectAction,
   removeCrewFromProjectAction,
@@ -13,12 +12,13 @@ import {
   updateProjectAction,
 } from "@/app/admin/projects/actions";
 import { createTaskAction, deleteTaskAction, updateTaskStatusAction } from "@/app/admin/tasks/actions";
+import { AddClientForm } from "@/components/admin/add-client-form";
 import { DeleteProjectButton } from "@/components/admin/delete-project-button";
 import { ProjectAutosave } from "@/components/admin/project-autosave";
 import { ProjectPaymentsFields } from "@/components/admin/project-payments-fields";
 import { ProjectSaveButton } from "@/components/admin/project-save-button";
 import { ProjectTimeplanFields } from "@/components/admin/project-timeplan-fields";
-import { getClientPortalAccountsByEmails, getAssignedProjectIdsForEmail, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
+import { getClientPortalAccountsByEmails, getAssignedProjectIdsForEmail, getContacts, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
 import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
@@ -103,7 +103,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
     notFound();
   }
 
-  const [galleries, crewMembers] = await Promise.all([getGalleries(), getCrewMembers()]);
+  const [galleries, crewMembers, contacts] = await Promise.all([getGalleries(), getCrewMembers(), getContacts()]);
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
   const role = await getCurrentUserRole();
   const isCrew = role === "crew";
@@ -126,6 +126,16 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
 
   const assignedIds = new Set(project.crewAssignments.map((a) => a.crewMemberId));
   const availableCrew = crewMembers.filter((m) => !assignedIds.has(m.id));
+
+  const projectClientIds = new Set(project.clients.map((client) => client.id));
+  const projectClientEmails = new Set(
+    project.clients.map((client) => (client.email || "").toLowerCase()).filter(Boolean),
+  );
+  const availableContacts = contacts.filter(
+    (contact) =>
+      !(contact.convertedClientId && projectClientIds.has(contact.convertedClientId)) &&
+      !(contact.email && projectClientEmails.has(contact.email.toLowerCase())),
+  );
 
   return (
     <div className="space-y-6">
@@ -205,22 +215,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 px-5 py-4">
           <h3 className="text-sm tracking-[0.2em] text-muted-foreground uppercase">Clients</h3>
           {!isCrew ? (
-          <details>
-            <summary className="cursor-pointer list-none rounded-xl border border-foreground bg-foreground px-3 py-2 text-sm text-background">
-              Add client
-            </summary>
-            <div className="mt-3 rounded-xl border border-border bg-white p-3">
-              <form action={addClientToProjectAction} className="grid gap-2 sm:grid-cols-3">
-                <input type="hidden" name="projectId" value={project.id} />
-                <input name="fullName" placeholder="Full name" required className="h-10 rounded-xl border border-border px-3 text-sm" />
-                <input name="email" type="email" placeholder="Email" className="h-10 rounded-xl border border-border px-3 text-sm" />
-                <input name="phone" placeholder="Phone" className="h-10 rounded-xl border border-border px-3 text-sm" />
-                <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-3 text-sm text-background sm:col-span-3 sm:justify-self-start">
-                  Add client
-                </button>
-              </form>
-            </div>
-          </details>
+          <AddClientForm projectId={project.id} contacts={availableContacts} />
           ) : null}
         </div>
 
