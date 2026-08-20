@@ -1,14 +1,20 @@
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { deleteStoredObjects, getMediaThumbUrl, uploadMediaToStorage } from "@/lib/storage";
+import { deleteStoredObjects, getSignedMediaUrl, uploadMediaToStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
+
+// The frame arrives from the admin browser already sized and encoded (canvas
+// capture, JPEG, ≤1600px wide), so it is stored as-is. Do not add sharp here:
+// importing sharp crashes this deployment's serverless functions at module
+// load, which is exactly the bug that shipped in the first version of this
+// route.
+const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
 // Receives a single video frame captured in the admin browser and stores it as
 // the video's poster/thumbnail. The storage path is kept in the asset's
@@ -39,6 +45,12 @@ export async function POST(request: Request) {
     if (!assetId || !(frame instanceof Blob) || frame.size === 0) {
       return NextResponse.json({ error: "Invalid request." }, { status: 400 });
     }
+    if (frame.size > MAX_FRAME_BYTES) {
+      return NextResponse.json({ error: "Frame is too large." }, { status: 413 });
+    }
+    if (!(frame.type || "").startsWith("image/")) {
+      return NextResponse.json({ error: "Frame must be an image." }, { status: 400 });
+    }
 
     const admin = createAdminClient();
     if (!admin) {
@@ -58,11 +70,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Thumbnails can only be set on videos." }, { status: 400 });
     }
 
-    const raw = Buffer.from(await frame.arrayBuffer());
-    const poster = await sharp(raw, { failOn: "none" })
-      .resize({ width: 1600, withoutEnlargement: true })
-      .jpeg({ quality: 82 })
-      .toBuffer();
+    const poster = Buffer.from(await frame.arrayBuffer());
 
     const galleryId = String(asset.gallery_id);
     // A fresh key per capture: poster URLs are cached as immutable, so
@@ -71,7 +79,7 @@ export async function POST(request: Request) {
 
     await uploadMediaToStorage(
       posterPath,
-      new File([new Uint8Array(poster)], "poster.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array(poster)], "poster.jpg", { type: frame.type || "image/jpeg" }),
     );
 
     const previousMetadata =
@@ -104,9 +112,13 @@ export async function POST(request: Request) {
       revalidatePath(`/g/${galleryRow.slug}`);
     }
 
+    // The poster is served directly from storage (public R2 URL or signed
+    // URL) — not through /api/media/thumb, which depends on sharp.
+    const thumbUrl = await getSignedMediaUrl(posterPath).catch(() => null);
+
     return NextResponse.json({
       thumbnailPath: posterPath,
-      thumbUrl: getMediaThumbUrl(posterPath, { width: 480 }),
+      thumbUrl,
     });
   } catch (error) {
     console.error("video-thumbnail route failed", error);

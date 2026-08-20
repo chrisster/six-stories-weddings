@@ -39,7 +39,7 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
             : url;
         const posterUrl =
           asset.mediaType === "video" && asset.thumbnailPath
-            ? getMediaThumbUrl(asset.thumbnailPath, { width: 640 })
+            ? await getSignedMediaUrl(asset.thumbnailPath).catch(() => null)
             : null;
         return { ...asset, url, thumbUrl, posterUrl, broken: false };
       } catch {

@@ -67,9 +67,10 @@ async function captureVideoFrame(storagePath: string, timeSeconds: number): Prom
       throw new Error("Video has no visible frames");
     }
 
-    // Cap the capture size so the upload stays well under the request limit;
-    // the server resizes again for the stored poster.
-    const scale = Math.min(1, 1920 / video.videoWidth);
+    // Cap the capture size so the upload stays well under the request limit.
+    // The frame is stored exactly as encoded here — the server does not
+    // re-process it.
+    const scale = Math.min(1, 1600 / video.videoWidth);
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(video.videoWidth * scale);
     canvas.height = Math.round(video.videoHeight * scale);
@@ -80,7 +81,7 @@ async function captureVideoFrame(storagePath: string, timeSeconds: number): Prom
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.9),
+      canvas.toBlob(resolve, "image/jpeg", 0.85),
     );
     if (!blob) {
       throw new Error("Could not encode frame");
@@ -105,6 +106,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     { id: string; url: string; name: string; storagePath: string } | null
   >(null);
   const [thumbnailStatus, setThumbnailStatus] = useState<ThumbnailStatus>("idle");
+  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -301,11 +303,19 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     const time = previewVideoRef.current?.currentTime ?? 0;
     previewVideoRef.current?.pause();
     setThumbnailStatus("capturing");
+    setThumbnailError(null);
 
+    let frame: Blob;
     try {
-      const frame = await captureVideoFrame(previewVideo.storagePath, time);
-      setThumbnailStatus("saving");
+      frame = await captureVideoFrame(previewVideo.storagePath, time);
+    } catch {
+      setThumbnailStatus("error");
+      setThumbnailError("Could not capture the frame. Let the video load a bit and try again.");
+      return;
+    }
 
+    setThumbnailStatus("saving");
+    try {
       const formData = new FormData();
       formData.append("assetId", previewVideo.id);
       formData.append("frame", frame, "frame.jpg");
@@ -315,7 +325,8 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
         body: formData,
       });
       if (!response.ok) {
-        throw new Error("Upload failed");
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `Save failed (${response.status})`);
       }
 
       const data = (await response.json()) as { thumbnailPath?: string; thumbUrl?: string };
@@ -332,8 +343,11 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
       );
       setThumbnailStatus("done");
       router.refresh();
-    } catch {
+    } catch (error) {
       setThumbnailStatus("error");
+      setThumbnailError(
+        `Could not save the thumbnail${error instanceof Error && error.message ? ` — ${error.message}` : ""}.`,
+      );
     }
   };
 
@@ -537,6 +551,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                           onDoubleClick={() => {
                             if (asset.mediaType === "video") {
                               setThumbnailStatus("idle");
+                              setThumbnailError(null);
                               setPreviewVideo({
                                 id: asset.id,
                                 url: asset.url,
@@ -671,7 +686,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                 {thumbnailStatus === "done" ? (
                   <span className="text-xs text-emerald-300">Thumbnail updated ✓</span>
                 ) : thumbnailStatus === "error" ? (
-                  <span className="text-xs text-red-300">Could not set thumbnail. Try again.</span>
+                  <span className="text-xs text-red-300">
+                    {thumbnailError || "Could not set thumbnail. Try again."}
+                  </span>
                 ) : (
                   <span className="text-xs text-white/60">
                     Pause on the frame you want, then set it as the video thumbnail.
