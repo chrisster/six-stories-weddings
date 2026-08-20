@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import {
@@ -12,14 +12,85 @@ import {
 import type { MediaAsset, GallerySection } from "@/lib/types";
 
 type MediaManagerProps = {
-  media: Array<MediaAsset & { url: string; thumbUrl?: string; broken: boolean }>;
+  media: Array<
+    MediaAsset & { url: string; thumbUrl?: string; posterUrl?: string | null; broken: boolean }
+  >;
   sections: GallerySection[];
   galleryId: string;
 };
 
 type SortOption = "date" | "name" | "section";
 
+type ThumbnailStatus = "idle" | "capturing" | "saving" | "done" | "error";
+
 const PAGE_SIZE = 24;
+
+/**
+ * Captures one frame of a stored video at `timeSeconds` and returns it as a
+ * JPEG blob. The frame is read through the same-origin `/api/media/video`
+ * proxy — drawing the public R2 URL onto a canvas would taint it (CORS).
+ */
+async function captureVideoFrame(storagePath: string, timeSeconds: number): Promise<Blob> {
+  const video = document.createElement("video");
+  video.preload = "auto";
+  video.muted = true;
+  video.playsInline = true;
+  video.src = `/api/media/video?path=${encodeURIComponent(storagePath)}`;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error("Video load timed out")), 30000);
+      video.onloadedmetadata = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      video.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(new Error("Could not load video"));
+      };
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error("Video seek timed out")), 30000);
+      video.onseeked = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      video.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(new Error("Could not seek video"));
+      };
+      video.currentTime = Math.min(Math.max(0, timeSeconds), Math.max(0, video.duration - 0.05));
+    });
+
+    if (!video.videoWidth || !video.videoHeight) {
+      throw new Error("Video has no visible frames");
+    }
+
+    // Cap the capture size so the upload stays well under the request limit;
+    // the server resizes again for the stored poster.
+    const scale = Math.min(1, 1920 / video.videoWidth);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Canvas unavailable");
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.9),
+    );
+    if (!blob) {
+      throw new Error("Could not encode frame");
+    }
+    return blob;
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+  }
+}
 
 export function MediaManager({ media, sections, galleryId }: MediaManagerProps) {
   const router = useRouter();
@@ -31,8 +102,10 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [previewVideo, setPreviewVideo] = useState<
-    { url: string; name: string } | null
+    { id: string; url: string; name: string; storagePath: string } | null
   >(null);
+  const [thumbnailStatus, setThumbnailStatus] = useState<ThumbnailStatus>("idle");
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     setMediaState(media);
@@ -218,6 +291,50 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     setMediaState((prev) => prev.filter((item) => item.sectionId !== sectionId));
     setSelectedIds(new Set());
     router.refresh();
+  };
+
+  const handleSetVideoThumbnail = async () => {
+    if (!previewVideo || thumbnailStatus === "capturing" || thumbnailStatus === "saving") {
+      return;
+    }
+
+    const time = previewVideoRef.current?.currentTime ?? 0;
+    previewVideoRef.current?.pause();
+    setThumbnailStatus("capturing");
+
+    try {
+      const frame = await captureVideoFrame(previewVideo.storagePath, time);
+      setThumbnailStatus("saving");
+
+      const formData = new FormData();
+      formData.append("assetId", previewVideo.id);
+      formData.append("frame", frame, "frame.jpg");
+
+      const response = await fetch("/api/admin/galleries/video-thumbnail", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const data = (await response.json()) as { thumbnailPath?: string; thumbUrl?: string };
+      setMediaState((prev) =>
+        prev.map((item) =>
+          item.id === previewVideo.id
+            ? {
+                ...item,
+                thumbnailPath: data.thumbnailPath || item.thumbnailPath,
+                posterUrl: data.thumbUrl || item.posterUrl,
+              }
+            : item,
+        ),
+      );
+      setThumbnailStatus("done");
+      router.refresh();
+    } catch {
+      setThumbnailStatus("error");
+    }
   };
 
   const handleDeleteAll = async () => {
@@ -419,9 +536,12 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                           onClick={() => handleSelectOne(asset.id)}
                           onDoubleClick={() => {
                             if (asset.mediaType === "video") {
+                              setThumbnailStatus("idle");
                               setPreviewVideo({
+                                id: asset.id,
                                 url: asset.url,
                                 name: asset.originalName || "Video",
+                                storagePath: asset.storagePath,
                               });
                             }
                           }}
@@ -463,8 +583,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                             <>
                               <video
                                 src={asset.url}
+                                poster={asset.posterUrl || undefined}
                                 className="block w-full bg-black"
-                                preload="metadata"
+                                preload={asset.posterUrl ? "none" : "metadata"}
                                 muted
                                 playsInline
                               />
@@ -526,12 +647,38 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
               </button>
             </div>
             <video
+              ref={previewVideoRef}
               src={previewVideo.url}
-              className="max-h-[80vh] w-full rounded-lg bg-black"
+              className="max-h-[75vh] w-full rounded-lg bg-black"
               controls
               autoPlay
               playsInline
             />
+            {!previewVideo.storagePath.includes("://") ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSetVideoThumbnail}
+                  disabled={thumbnailStatus === "capturing" || thumbnailStatus === "saving"}
+                  className="rounded-full border border-white/40 px-3 py-1.5 text-xs text-white hover:bg-white/10 disabled:opacity-50"
+                >
+                  {thumbnailStatus === "capturing"
+                    ? "Capturing frame…"
+                    : thumbnailStatus === "saving"
+                      ? "Saving thumbnail…"
+                      : "Use current frame as thumbnail"}
+                </button>
+                {thumbnailStatus === "done" ? (
+                  <span className="text-xs text-emerald-300">Thumbnail updated ✓</span>
+                ) : thumbnailStatus === "error" ? (
+                  <span className="text-xs text-red-300">Could not set thumbnail. Try again.</span>
+                ) : (
+                  <span className="text-xs text-white/60">
+                    Pause on the frame you want, then set it as the video thumbnail.
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

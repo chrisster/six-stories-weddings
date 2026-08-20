@@ -8,6 +8,7 @@ export type GalleryVideoAsset = {
   id: string;
   url: string;
   fileName?: string;
+  posterUrl?: string | null;
 };
 
 type VideoComment = {
@@ -200,6 +201,7 @@ function GalleryVideoItem({
         <video
           ref={videoRef}
           src={video.url}
+          poster={video.posterUrl || undefined}
           controls
           playsInline
           preload="metadata"

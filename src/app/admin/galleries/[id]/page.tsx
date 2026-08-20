@@ -37,13 +37,18 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
           asset.mediaType === "photo"
             ? await getMediaThumbUrl(asset.storagePath, { width: 480 })
             : url;
-        return { ...asset, url, thumbUrl, broken: false };
+        const posterUrl =
+          asset.mediaType === "video" && asset.thumbnailPath
+            ? getMediaThumbUrl(asset.thumbnailPath, { width: 640 })
+            : null;
+        return { ...asset, url, thumbUrl, posterUrl, broken: false };
       } catch {
         return {
           ...asset,
           url: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1200&q=80",
           thumbUrl:
             "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=480&q=70",
+          posterUrl: null,
           broken: true,
         };
       }
@@ -298,7 +303,7 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
                 {asset.mediaType === "photo" ? (
                   <Image src={asset.url} alt="Favorited media" fill className="object-cover" unoptimized />
                 ) : (
-                  <video src={asset.url} className="h-full w-full object-cover" preload="metadata" />
+                  <video src={asset.url} poster={asset.posterUrl || undefined} className="h-full w-full object-cover" preload="metadata" />
                 )}
                 <span className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
                   <span className="text-rose-400">&#9829;</span>

@@ -61,6 +61,10 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
         asset.mediaType === "photo"
           ? await getMediaThumbUrl(asset.storagePath, { width: 1000 })
           : getMediaStreamUrl(asset.storagePath),
+      posterUrl:
+        asset.mediaType === "video" && asset.thumbnailPath
+          ? getMediaThumbUrl(asset.thumbnailPath, { width: 1280, quality: 78 })
+          : null,
       sectionName: sectionById.get(asset.sectionId || "") || "Photos",
       fileName: asset.originalName || "",
     })),

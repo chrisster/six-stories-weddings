@@ -541,16 +541,20 @@ export async function getGalleryById(galleryId: string): Promise<GalleryDetail |
       name: String(row.name),
       sortOrder: Number(row.sort_order),
     })),
-    mediaAssets: mediaRows.map((row) => ({
-      id: String(row.id),
-      galleryId: String(row.gallery_id),
-      sectionId: (row.section_id as string | null) || null,
-      storagePath: String(row.storage_path),
-      mediaType: (row.media_type as "photo" | "video") || "photo",
-      sortOrder: Number(row.sort_order || 0),
-      isCover: Boolean(row.is_cover),
-      originalName: (row.original_name as string | null) || null,
-    })),
+    mediaAssets: mediaRows.map((row) => {
+      const metadata = (row.metadata_json as Record<string, unknown> | null) || null;
+      return {
+        id: String(row.id),
+        galleryId: String(row.gallery_id),
+        sectionId: (row.section_id as string | null) || null,
+        storagePath: String(row.storage_path),
+        mediaType: (row.media_type as "photo" | "video") || "photo",
+        sortOrder: Number(row.sort_order || 0),
+        isCover: Boolean(row.is_cover),
+        originalName: (row.original_name as string | null) || null,
+        thumbnailPath: metadata && typeof metadata.thumbnail_path === "string" ? metadata.thumbnail_path : null,
+      };
+    }),
   };
 }
 

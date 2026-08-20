@@ -138,6 +138,8 @@ export type MediaAsset = {
   sortOrder: number;
   isCover: boolean;
   originalName?: string | null;
+  /** Storage path of the poster frame chosen for a video (metadata_json.thumbnail_path). */
+  thumbnailPath?: string | null;
 };
 
 export type GalleryDetail = {

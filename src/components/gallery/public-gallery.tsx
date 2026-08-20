@@ -25,6 +25,7 @@ type PublicAsset = {
   mediaType: "photo" | "video";
   url: string;
   thumbUrl?: string;
+  posterUrl?: string | null;
   fileName?: string;
 };
 
@@ -747,6 +748,7 @@ export function PublicGallery({
             id: asset.id,
             url: asset.url,
             fileName: asset.fileName,
+            posterUrl: asset.posterUrl,
           }))}
           gallerySlug={gallerySlug}
           allowDownloads={allowDownloads}
@@ -1093,6 +1095,7 @@ function JustifiedGrid({
                   ) : (
                     <video
                       src={asset.url}
+                      poster={asset.posterUrl || undefined}
                       preload="metadata"
                       onLoadedMetadata={(event) =>
                         handleRatio(asset.id, event.currentTarget.videoWidth / event.currentTarget.videoHeight)
