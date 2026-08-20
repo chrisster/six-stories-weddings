@@ -84,6 +84,7 @@ export async function updateGallerySettingsAction(formData: FormData) {
   const galleryId = String(formData.get("galleryId") || "");
   const isPublished = formData.get("isPublished") === "on";
   const allowDownloads = formData.get("allowDownloads") === "on";
+  const allowComments = formData.get("allowComments") === "on";
   const notifyClients = formData.get("notifyClients") === "on";
   const passcode = String(formData.get("passcode") || "").trim();
   const emailSubject = String(formData.get("emailSubject") || "").trim();
@@ -135,6 +136,11 @@ export async function updateGallerySettingsAction(formData: FormData) {
   }
 
   await admin.from("galleries").update(payload).eq("id", galleryId);
+
+  // Applied separately so a database that has not run the allow_comments
+  // migration yet keeps saving the rest of the settings; comments then simply
+  // stay off (the column's default).
+  await admin.from("galleries").update({ allow_comments: allowComments }).eq("id", galleryId);
 
   await admin.from("gallery_notification_templates").upsert(
     {

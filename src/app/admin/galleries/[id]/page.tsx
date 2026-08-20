@@ -170,6 +170,11 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
               <input name="allowDownloads" type="checkbox" defaultChecked={detail.gallery.allowDownloads} />
             </label>
 
+            <label className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
+              <span className="text-sm">Enable comments</span>
+              <input name="allowComments" type="checkbox" defaultChecked={detail.gallery.allowComments} />
+            </label>
+
             <div className="space-y-2">
               <label htmlFor="passcode" className="text-sm">
                 Gallery passcode

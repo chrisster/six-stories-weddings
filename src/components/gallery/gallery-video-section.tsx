@@ -26,6 +26,8 @@ type GalleryVideoSectionProps = {
   onDownload: (video: GalleryVideoAsset) => void;
   onShare: (assetId: string) => void;
   canComment?: boolean;
+  /** Gallery-level toggle: when false, the comments block is hidden entirely. */
+  commentsEnabled?: boolean;
   commenterName?: string | null;
   sectionRef?: (element: HTMLElement | null) => void;
 };
@@ -49,6 +51,7 @@ export function GalleryVideoSection({
   onDownload,
   onShare,
   canComment = false,
+  commentsEnabled = true,
   commenterName = null,
   sectionRef,
 }: GalleryVideoSectionProps) {
@@ -73,6 +76,7 @@ export function GalleryVideoSection({
             onDownload={onDownload}
             onShare={onShare}
             canComment={canComment}
+            commentsEnabled={commentsEnabled}
             commenterName={commenterName}
           />
         ))}
@@ -88,6 +92,7 @@ function GalleryVideoItem({
   onDownload,
   onShare,
   canComment,
+  commentsEnabled,
   commenterName,
 }: {
   video: GalleryVideoAsset;
@@ -96,6 +101,7 @@ function GalleryVideoItem({
   onDownload: (video: GalleryVideoAsset) => void;
   onShare: (assetId: string) => void;
   canComment: boolean;
+  commentsEnabled: boolean;
   commenterName: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -120,6 +126,10 @@ function GalleryVideoItem({
   }, [commenterName]);
 
   const loadComments = useCallback(async () => {
+    if (!commentsEnabled) {
+      setLoaded(true);
+      return;
+    }
     try {
       const response = await fetch(
         `/g/${gallerySlug}/comments?asset=${encodeURIComponent(video.id)}`,
@@ -132,7 +142,7 @@ function GalleryVideoItem({
     } finally {
       setLoaded(true);
     }
-  }, [gallerySlug, video.id]);
+  }, [gallerySlug, video.id, commentsEnabled]);
 
   useEffect(() => {
     void loadComments();
@@ -233,6 +243,7 @@ function GalleryVideoItem({
         </div>
       </div>
 
+      {commentsEnabled ? (
       <div className="px-4 py-4">
         <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
           <MessageCircle className="size-4" />
@@ -332,6 +343,7 @@ function GalleryVideoItem({
           )}
         </div>
       </div>
+      ) : null}
     </article>
   );
 }

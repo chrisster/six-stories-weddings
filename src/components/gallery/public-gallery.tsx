@@ -40,6 +40,8 @@ type PublicGalleryProps = {
   studioName?: string;
   sectionOrder?: string[];
   canComment?: boolean;
+  /** Gallery-level toggle: when false, all comment UI is hidden entirely. */
+  commentsEnabled?: boolean;
   commenterName?: string | null;
   commentCounts?: Record<string, number>;
 };
@@ -74,6 +76,7 @@ export function PublicGallery({
   studioName = "Six Stories",
   sectionOrder = [],
   canComment = false,
+  commentsEnabled = true,
   commenterName = null,
   commentCounts = {},
 }: PublicGalleryProps) {
@@ -755,6 +758,7 @@ export function PublicGallery({
           onDownload={downloadVideo}
           onShare={shareAsset}
           canComment={canComment}
+          commentsEnabled={commentsEnabled}
           commenterName={commenterName}
           sectionRef={(element) => {
             sectionRefs.current["Film"] = element;
@@ -796,7 +800,7 @@ export function PublicGallery({
                   allowDownloads={allowDownloads}
                   selectMode={selectMode}
                   selected={selected}
-                  commentCounts={commentCounts}
+                  commentCounts={commentsEnabled ? commentCounts : {}}
                   onSelect={openAt}
                   onToggleFavorite={toggleFavorite}
                   onToggleSelect={toggleSelect}
@@ -883,7 +887,7 @@ export function PublicGallery({
           </div>
 
           {/* Comments panel */}
-          {showComments ? (
+          {commentsEnabled && showComments ? (
             <div
               className="absolute inset-y-0 right-0 z-20 w-full max-w-sm border-l border-border/40 bg-white p-5 shadow-2xl"
               onClick={(event) => event.stopPropagation()}
@@ -946,17 +950,19 @@ export function PublicGallery({
               >
                 <Share2 className="size-4" />
               </button>
-              <button
-                type="button"
-                onClick={() => setShowComments((value) => !value)}
-                aria-label="Comments"
-                aria-pressed={showComments}
-                className={`flex size-10 items-center justify-center rounded-full backdrop-blur transition ${
-                  showComments ? "bg-white text-foreground" : "bg-white/10 text-white/90 hover:bg-white/20"
-                }`}
-              >
-                <MessageCircle className="size-4" />
-              </button>
+              {commentsEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => setShowComments((value) => !value)}
+                  aria-label="Comments"
+                  aria-pressed={showComments}
+                  className={`flex size-10 items-center justify-center rounded-full backdrop-blur transition ${
+                    showComments ? "bg-white text-foreground" : "bg-white/10 text-white/90 hover:bg-white/20"
+                  }`}
+                >
+                  <MessageCircle className="size-4" />
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

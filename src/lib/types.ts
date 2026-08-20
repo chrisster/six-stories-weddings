@@ -116,6 +116,8 @@ export type Gallery = {
   title: string;
   isPublished: boolean;
   allowDownloads: boolean;
+  /** Whether clients can view and leave comments. Off by default. */
+  allowComments: boolean;
   hasPasscode: boolean;
   passcodeHash?: string | null;
   coverMediaId?: string | null;

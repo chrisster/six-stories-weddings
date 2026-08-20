@@ -180,6 +180,7 @@ export const demoGallery: Gallery = {
   title: "Joost & Stav",
   isPublished: true,
   allowDownloads: false,
+  allowComments: true,
   hasPasscode: true,
   passcodeHash: null,
   coverMediaId: "demo-media-1",

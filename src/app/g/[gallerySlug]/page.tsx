@@ -76,14 +76,15 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
     : null;
   const heroUrl = customHeroUrl || (cover && cover.mediaType === "photo" ? cover.url : null);
 
-  const canComment = Boolean(adminUser || hasPortalAccess);
+  const commentsEnabled = detail.gallery.allowComments;
+  const canComment = commentsEnabled && Boolean(adminUser || hasPortalAccess);
   const commenterName = portalSession?.email
     ? portalSession.email.split("@")[0]
     : adminUser?.email
       ? "Six Stories Studio"
       : null;
 
-  const commentCounts = await getGalleryCommentCounts(detail.gallery.id);
+  const commentCounts = commentsEnabled ? await getGalleryCommentCounts(detail.gallery.id) : {};
 
   return (
     <main className="min-h-screen bg-white">
@@ -97,6 +98,7 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
         coverUrl={heroUrl}
         sectionOrder={detail.sections.map((section) => section.name)}
         canComment={canComment}
+        commentsEnabled={commentsEnabled}
         commenterName={commenterName}
         commentCounts={commentCounts}
       />

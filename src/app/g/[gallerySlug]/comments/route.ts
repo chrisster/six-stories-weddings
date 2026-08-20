@@ -24,6 +24,10 @@ export async function GET(
     return NextResponse.json({ comments: [] });
   }
 
+  if (!detail.gallery.allowComments) {
+    return NextResponse.json({ comments: [] });
+  }
+
   const admin = createAdminClient();
   if (!admin) {
     return NextResponse.json({ comments: [] });
@@ -85,6 +89,10 @@ export async function POST(
   const detail = await resolveGallery(gallerySlug);
   if (!detail) {
     return NextResponse.json({ error: "Gallery not found" }, { status: 404 });
+  }
+
+  if (!detail.gallery.allowComments) {
+    return NextResponse.json({ error: "Comments are disabled for this gallery." }, { status: 403 });
   }
 
   // Comments are restricted to logged-in clients (portal) or studio admins.
