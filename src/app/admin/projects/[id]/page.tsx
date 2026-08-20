@@ -124,8 +124,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
   const displayedAmountPaid = project.payments.length > 0 ? amountPaidFromPayments : project.amountPaid;
   const displayedRemaining = Math.max(0, project.offerAmount - displayedAmountPaid);
 
-  const assignedIds = new Set(project.crewAssignments.map((a) => a.crewMemberId));
-  const availableCrew = crewMembers.filter((m) => !assignedIds.has(m.id));
+  // Every crew member stays selectable — the same person can hold several
+  // roles on one project (e.g. Photographer and Editor).
+  const availableCrew = crewMembers;
+  const taskAssignees = Array.from(
+    new Map(project.crewAssignments.map((a) => [a.crewMemberId, a.crewMember.fullName])).entries(),
+  );
 
   const projectClientIds = new Set(project.clients.map((client) => client.id));
   const projectClientEmails = new Set(
@@ -572,9 +576,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
               <button type="submit" className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background">Add crew</button>
             </form>
           ) : !isCrew ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {crewMembers.length === 0 ? "No crew in roster yet — add them in Team." : "All crew members are already assigned."}
-            </p>
+            <p className="mt-3 text-xs text-muted-foreground">No crew in roster yet — add them in Team.</p>
           ) : null}
       </section>
 
@@ -623,8 +625,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
             <input name="title" placeholder="New task..." required className="h-10 rounded-xl border border-border px-3 text-sm" />
             <select name="assigneeId" className="h-10 rounded-xl border border-border bg-white px-2 text-sm">
               <option value="">Assignee</option>
-              {project.crewAssignments.map((a) => (
-                <option key={a.crewMemberId} value={a.crewMemberId}>{a.crewMember.fullName}</option>
+              {taskAssignees.map(([crewMemberId, fullName]) => (
+                <option key={crewMemberId} value={crewMemberId}>{fullName}</option>
               ))}
             </select>
             <input name="dueDate" type="date" className="h-10 rounded-xl border border-border px-3 text-sm" />

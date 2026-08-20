@@ -749,10 +749,13 @@ export async function addCrewToProjectAction(formData: FormData) {
   if (!projectId || !crewMemberId) return;
   const admin = createAdminClient();
   if (!admin) return;
+  // The same crew member can be assigned more than once with different roles
+  // (e.g. Photographer and Editor); only an identical member+role pair is a
+  // duplicate.
   const { data: existing } = await admin
     .from("crew_assignments")
     .select("id")
-    .match({ project_id: projectId, crew_member_id: crewMemberId })
+    .match({ project_id: projectId, crew_member_id: crewMemberId, assignment_role: assignmentRole })
     .maybeSingle();
   if (!existing) {
     await admin.from("crew_assignments").insert({
