@@ -12,7 +12,7 @@ import { HeroImageUploader } from "@/components/gallery/hero-image-uploader";
 import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
-import { getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
+import { getMediaThumbFallbackUrl, getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
 type GalleryManagerPageProps = {
@@ -35,19 +35,24 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
             : await getSignedMediaUrl(asset.storagePath);
         const thumbUrl =
           asset.mediaType === "photo"
-            ? await getMediaThumbUrl(asset.storagePath, { width: 480 })
+            ? getMediaThumbUrl(asset.storagePath, { width: 480 })
             : url;
+        const thumbFallbackUrl =
+          asset.mediaType === "photo"
+            ? getMediaThumbFallbackUrl(asset.storagePath, { width: 480 })
+            : null;
         const posterUrl =
           asset.mediaType === "video" && asset.thumbnailPath
             ? await getSignedMediaUrl(asset.thumbnailPath).catch(() => null)
             : null;
-        return { ...asset, url, thumbUrl, posterUrl, broken: false };
+        return { ...asset, url, thumbUrl, thumbFallbackUrl, posterUrl, broken: false };
       } catch {
         return {
           ...asset,
           url: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1200&q=80",
           thumbUrl:
             "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=480&q=70",
+          thumbFallbackUrl: null,
           posterUrl: null,
           broken: true,
         };

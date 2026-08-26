@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getBucketName } from "@/lib/storage";
+import { getBucketName, getStorageProviderName } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -29,6 +29,8 @@ export async function POST(request: Request) {
       storagePath?: string;
       originalName?: string;
       contentType?: string;
+      width?: number;
+      height?: number;
     } | null;
 
     const galleryId = String(body?.galleryId || "").trim();
@@ -54,14 +56,19 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
+    const width = Number(body?.width);
+    const height = Number(body?.height);
+
     const { error } = await admin.from("media_assets").insert({
       gallery_id: galleryId,
       section_id: sectionId || null,
-      storage_provider: "supabase",
+      storage_provider: getStorageProviderName(),
       storage_bucket: getBucketName(),
       storage_path: storagePath,
       original_name: originalName || null,
       media_type: contentType.startsWith("video/") ? "video" : "photo",
+      width: Number.isFinite(width) && width > 0 ? Math.round(width) : null,
+      height: Number.isFinite(height) && height > 0 ? Math.round(height) : null,
       sort_order: (latestAsset?.sort_order || 0) + 1,
       is_cover: false,
     });

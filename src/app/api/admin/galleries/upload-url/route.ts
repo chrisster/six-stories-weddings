@@ -3,10 +3,15 @@ import { NextResponse } from "next/server";
 
 import { hasSupabaseEnv } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createSignedUploadTarget, ensureMediaBucket } from "@/lib/storage";
+import { createSignedUploadTarget, ensureMediaBucket, mediaThumbKey } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
+// Issues signed upload targets so the browser sends media bytes straight to
+// storage — they never pass through a function body (Vercel request-body
+// limits, Fast Origin Transfer). With `withThumb`, a second target for the
+// derived `thumbs/<path>.webp` preview is issued so the client can upload the
+// downscaled webp it generated alongside the original.
 export async function POST(request: Request) {
   try {
     if (!hasSupabaseEnv) {
@@ -26,6 +31,7 @@ export async function POST(request: Request) {
       galleryId?: string;
       fileName?: string;
       contentType?: string;
+      withThumb?: boolean;
     } | null;
 
     const galleryId = String(body?.galleryId || "").trim();
@@ -38,12 +44,15 @@ export async function POST(request: Request) {
 
     await ensureMediaBucket();
 
-    const extension = fileName.split(".").pop() || "mp4";
+    const extension = fileName.split(".").pop() || "bin";
     const storagePath = `${galleryId}/${randomUUID()}.${extension}`;
 
     const target = await createSignedUploadTarget(storagePath, contentType);
+    const thumbTarget = body?.withThumb
+      ? await createSignedUploadTarget(mediaThumbKey(storagePath), "image/webp")
+      : null;
 
-    return NextResponse.json({ storagePath, target });
+    return NextResponse.json({ storagePath, target, thumbTarget });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create upload URL.";
     return NextResponse.json({ error: message }, { status: 500 });

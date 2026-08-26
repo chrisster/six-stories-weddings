@@ -14,7 +14,7 @@ import {
 import { createGuestLink, revokeGuestLink } from "@/lib/data";
 import { createPortalClaimToken } from "@/lib/portal-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureMediaBucket, getBucketName, uploadMediaToStorage } from "@/lib/storage";
+import { ensureMediaBucket, getBucketName, getStorageProviderName, uploadMediaToStorage } from "@/lib/storage";
 
 export async function createGallerySectionAction(formData: FormData) {
   if (!hasSupabaseEnv) {
@@ -290,7 +290,7 @@ export async function uploadMediaAction(formData: FormData) {
     const { error } = await admin.from("media_assets").insert({
       gallery_id: galleryId,
       section_id: sectionId || null,
-      storage_provider: "supabase",
+      storage_provider: getStorageProviderName(),
       storage_bucket: getBucketName(),
       storage_path: storagePath,
       original_name: file.name,

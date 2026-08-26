@@ -18,6 +18,10 @@ type MediaUploaderProps = {
   accept?: string;
 };
 
+type SignedTarget =
+  | { provider: "r2"; url: string; path: string }
+  | { provider: "supabase"; bucket: string; path: string; token: string };
+
 export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" }: MediaUploaderProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,8 +31,9 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
   const [selectedSectionId, setSelectedSectionId] = useState<string>("");
 
   async function prepareFileForUpload(file: File): Promise<File> {
-    // Vercel serverless request bodies can fail on larger payloads.
-    // Compress only large images client-side to improve reliability.
+    // Legacy proxied-upload path only: Vercel serverless request bodies can
+    // fail on larger payloads, so large images are recompressed client-side.
+    // The signed direct-to-storage path has no such limit and keeps originals.
     const MAX_SAFE_BYTES = 4 * 1024 * 1024;
     if (!file.type.startsWith("image/") || file.size <= MAX_SAFE_BYTES) {
       return file;
@@ -61,13 +66,85 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
   }
 
+  // Downscaled webp preview generated in the browser at upload time and stored
+  // next to the original (thumbs/<path>.webp). Grids then load these directly
+  // from the storage CDN — no server-side sharp, no function transfer. Returns
+  // the photo's oriented pixel dimensions even when webp encoding fails; the
+  // thumb itself is optional (the on-demand sharp route remains the fallback
+  // for formats the browser cannot decode, e.g. HEIC outside Safari).
+  async function makeWebpThumb(
+    file: File,
+  ): Promise<{ blob: Blob | null; width: number | null; height: number | null }> {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      const width = bitmap.width;
+      const height = bitmap.height;
+
+      const THUMB_WIDTH = 1600;
+      const ratio = Math.min(1, THUMB_WIDTH / bitmap.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
+      canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        bitmap.close();
+        return { blob: null, width, height };
+      }
+
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((value) => resolve(value), "image/webp", 0.75);
+      });
+
+      // Some browsers silently fall back to PNG when webp encoding is
+      // unsupported; the stored key promises webp, so skip the upload then.
+      if (!blob || blob.type !== "image/webp") {
+        return { blob: null, width, height };
+      }
+
+      return { blob, width, height };
+    } catch {
+      return { blob: null, width: null, height: null };
+    }
+  }
+
+  // PUT a blob to a presigned R2 URL. The Content-Type header must match the
+  // one the URL was signed with.
+  function putSignedR2(
+    url: string,
+    body: Blob,
+    contentType: string,
+    onProgress?: (loaded: number, total: number) => void,
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", contentType);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) onProgress(event.loaded, event.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Upload failed (${xhr.status}).`));
+      };
+      xhr.onerror = () => reject(new Error("Network error while uploading."));
+      xhr.send(body);
+    });
+  }
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     setSelectedFiles(files);
     setProgress([]);
   };
 
+  // Legacy fallback: streams the file through /api/admin/galleries/upload.
+  // Only used when a signed upload target could not be issued.
   async function uploadSingleFile(item: UploadProgress): Promise<void> {
+    const fileToSend = await prepareFileForUpload(item.file);
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/api/admin/galleries/upload");
@@ -137,13 +214,121 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
 
       const formData = new FormData();
       formData.append("galleryId", galleryId);
-      formData.append("file", item.file);
+      formData.append("file", fileToSend);
       if (selectedSectionId) {
         formData.append("sectionId", selectedSectionId);
       }
 
       xhr.send(formData);
     });
+  }
+
+  // Photos go straight to storage like videos: request signed targets, PUT the
+  // original (and a browser-generated webp preview), then register the asset.
+  // Falls back to the legacy proxied route only when no target can be issued —
+  // never after bytes were uploaded, to avoid duplicate objects.
+  async function uploadPhotoDirect(item: UploadProgress): Promise<void> {
+    const setEntry = (patch: Partial<UploadProgress>) => {
+      setProgress((prev) =>
+        prev.map((entry) => (entry.fileIndex === item.fileIndex ? { ...entry, ...patch } : entry)),
+      );
+    };
+
+    const contentType = item.file.type || "image/jpeg";
+
+    let storagePath: string;
+    let target: SignedTarget;
+    let thumbTarget: SignedTarget | null;
+
+    try {
+      const urlResponse = await fetch("/api/admin/galleries/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          galleryId,
+          fileName: item.file.name,
+          contentType,
+          withThumb: true,
+        }),
+      });
+      if (!urlResponse.ok) {
+        throw new Error(`Could not create upload URL (${urlResponse.status}).`);
+      }
+      ({ storagePath, target, thumbTarget } = (await urlResponse.json()) as {
+        storagePath: string;
+        target: SignedTarget;
+        thumbTarget: SignedTarget | null;
+      });
+    } catch {
+      // Signed flow unavailable — fall back to the proxied upload.
+      return uploadSingleFile(item);
+    }
+
+    const thumb = await makeWebpThumb(item.file);
+
+    try {
+      if (target.provider === "r2") {
+        await putSignedR2(target.url, item.file, contentType, (loaded, total) => {
+          setEntry({ progress: Math.min(95, Math.round((loaded / total) * 95)) });
+        });
+      } else {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        setEntry({ progress: 40 });
+        const { error } = await supabase.storage
+          .from(target.bucket)
+          .uploadToSignedUrl(target.path, target.token, item.file, { contentType });
+        if (error) throw new Error(error.message);
+        setEntry({ progress: 90 });
+      }
+
+      // The preview is best-effort: a missing thumbs/ object just means grids
+      // fall back to the on-demand resize route for this photo.
+      if (thumb.blob && thumbTarget) {
+        try {
+          if (thumbTarget.provider === "r2") {
+            await putSignedR2(thumbTarget.url, thumb.blob, "image/webp");
+          } else {
+            const { createClient } = await import("@/lib/supabase/client");
+            const supabase = createClient();
+            await supabase.storage
+              .from(thumbTarget.bucket)
+              .uploadToSignedUrl(thumbTarget.path, thumbTarget.token, thumb.blob, {
+                contentType: "image/webp",
+              });
+          }
+        } catch {
+          // Ignore preview failures.
+        }
+      }
+
+      const registerResponse = await fetch("/api/admin/galleries/register-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          galleryId,
+          sectionId: selectedSectionId || undefined,
+          storagePath,
+          originalName: item.file.name,
+          contentType,
+          width: thumb.width ?? undefined,
+          height: thumb.height ?? undefined,
+        }),
+      });
+      if (!registerResponse.ok) {
+        const message = await registerResponse
+          .json()
+          .then((data: { error?: string }) => data.error)
+          .catch(() => null);
+        throw new Error(message || "Could not save photo.");
+      }
+
+      setEntry({ status: "completed", progress: 100, error: undefined });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload failed.";
+      setEntry({ status: "failed", error: message });
+      throw new Error(message);
+    }
   }
 
   // Uploads a single part to its presigned URL and resolves with the ETag that
@@ -315,7 +500,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
       throw new Error(message || "Could not start video upload.");
     }
 
-    const urlResponse = await fetch("/api/admin/galleries/video-upload-url", {
+    const urlResponse = await fetch("/api/admin/galleries/upload-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -336,9 +521,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
 
     const { storagePath, target } = (await urlResponse.json()) as {
       storagePath: string;
-      target:
-        | { provider: "r2"; url: string; path: string }
-        | { provider: "supabase"; bucket: string; path: string; token: string };
+      target: SignedTarget;
     };
 
     if (target.provider === "r2") {
@@ -404,7 +587,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     if ((item.file.type || "").startsWith("video/")) {
       return uploadVideoDirect(item);
     }
-    return uploadSingleFile(item);
+    return uploadPhotoDirect(item);
   }
 
   const handleUpload = async () => {
@@ -412,9 +595,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
       return;
     }
 
-    const prepared = await Promise.all(selectedFiles.map((file) => prepareFileForUpload(file)));
-
-    const queued: UploadProgress[] = prepared.map((file, index) => ({
+    const queued: UploadProgress[] = selectedFiles.map((file, index) => ({
       fileIndex: index,
       fileName: file.name,
       progress: 0,

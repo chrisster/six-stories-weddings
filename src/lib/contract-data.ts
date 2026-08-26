@@ -35,10 +35,10 @@ import { hasSupabaseEnv } from "@/lib/env";
 import { sendGalleryNotificationEmail } from "@/lib/gallery-notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  deleteStoredObjects,
-  getMediaBytes,
-  getSignedMediaUrl,
-  uploadMediaToStorage,
+  deleteStoredDocuments,
+  getDocumentBytes,
+  getSignedDocumentUrl,
+  uploadDocumentToStorage,
 } from "@/lib/storage";
 
 const CONTRACT_STORAGE_PREFIX = "contracts";
@@ -844,7 +844,7 @@ export async function signContract(input: SignContractInput): Promise<SignContra
   const pdfPath = `${CONTRACT_STORAGE_PREFIX}/${contract.id}.pdf`;
 
   try {
-    await uploadMediaToStorage(
+    await uploadDocumentToStorage(
       pdfPath,
       new File([new Uint8Array(pdf)], `${contract.id}.pdf`, { type: "application/pdf" }),
     );
@@ -932,7 +932,7 @@ async function emailSignedCopy(args: {
 
   let downloadUrl: string | null = null;
   try {
-    downloadUrl = await getSignedMediaUrl(args.pdfPath, 60 * 60 * 24 * 30);
+    downloadUrl = await getSignedDocumentUrl(args.pdfPath, 60 * 60 * 24 * 30);
   } catch {
     downloadUrl = null;
   }
@@ -1166,7 +1166,7 @@ export async function deleteContracts(
 
   if (paths.length > 0) {
     try {
-      await deleteStoredObjects(paths);
+      await deleteStoredDocuments(paths);
     } catch {
       // Intentionally swallowed — see above.
     }
@@ -1197,7 +1197,7 @@ export async function getContractPdfBytes(
   const contract = await getContractById(contractId);
   if (!contract?.pdfPath) return null;
 
-  const stored = await getMediaBytes(contract.pdfPath);
+  const stored = await getDocumentBytes(contract.pdfPath);
   if (!stored) return null;
 
   const filename = `${contract.templateSnapshot.title.replace(/[^\p{L}\p{N}]+/gu, "-")}-${

@@ -13,7 +13,14 @@ import type { MediaAsset, GallerySection } from "@/lib/types";
 
 type MediaManagerProps = {
   media: Array<
-    MediaAsset & { url: string; thumbUrl?: string; posterUrl?: string | null; broken: boolean }
+    MediaAsset & {
+      url: string;
+      thumbUrl?: string;
+      /** On-demand resize route retried when the stored thumbnail is missing. */
+      thumbFallbackUrl?: string | null;
+      posterUrl?: string | null;
+      broken: boolean;
+    }
   >;
   sections: GallerySection[];
   galleryId: string;
@@ -589,8 +596,16 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                               alt="Gallery asset"
                               loading="lazy"
                               onError={(event) => {
+                                // Stored thumb → on-demand resize route → original.
                                 const img = event.currentTarget;
-                                if (img.src !== asset.url) img.src = asset.url;
+                                const step = Number(img.dataset.fallbackStep || "0");
+                                if (step === 0 && asset.thumbFallbackUrl) {
+                                  img.dataset.fallbackStep = "1";
+                                  img.src = asset.thumbFallbackUrl;
+                                } else if (step < 2) {
+                                  img.dataset.fallbackStep = "2";
+                                  if (img.src !== asset.url) img.src = asset.url;
+                                }
                               }}
                               className="block w-full"
                             />

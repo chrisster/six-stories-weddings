@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { ensureMediaBucket, getBucketName, uploadMediaToStorage } from "@/lib/storage";
+import { ensureMediaBucket, getBucketName, getStorageProviderName, uploadMediaToStorage } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const { error } = await admin.from("media_assets").insert({
       gallery_id: galleryId,
       section_id: sectionId || null,
-      storage_provider: "supabase",
+      storage_provider: getStorageProviderName(),
       storage_bucket: getBucketName(),
       storage_path: storagePath,
       original_name: file.name,

@@ -2,11 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getGuestAccessByToken, getPublicGalleryBySlug, logGalleryEvent, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
-import { getSignedMediaUrl } from "@/lib/storage";
+import { getMediaDownloadUrl, getSignedMediaUrl } from "@/lib/storage";
 
-// Streams a gallery media file through our own origin so the browser can
-// download it directly (no new tab, no cross-origin CORS issue with R2). When
-// `download=1` is set, forces a save dialog with the original filename.
+// Authorizes and counts a gallery download, then redirects the browser to a
+// signed storage URL that carries the attachment Content-Disposition (and the
+// original filename), so the file bytes flow storage→browser without passing
+// through this function. Redirect navigation needs no CORS. External demo
+// URLs stream through as before since they cannot be signed.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ gallerySlug: string }> },
@@ -59,15 +61,23 @@ export async function GET(
     await logGalleryEvent(detail.gallery.id, "download", { mediaAssetId: asset.id });
   }
 
-  const signedUrl = await getSignedMediaUrl(asset.storagePath);
-  const upstream = await fetch(signedUrl);
-  if (!upstream.ok || !upstream.body) {
-    return new NextResponse("Upstream error", { status: 502 });
-  }
-
   const ext = asset.storagePath.split(".").pop() || "jpg";
   const base = asset.originalName || `photo-${asset.id}`;
   const fileName = /\.[a-z0-9]+$/i.test(base) ? base : `${base}.${ext}`;
+
+  const isExternal = asset.storagePath.startsWith("http://") || asset.storagePath.startsWith("https://");
+  if (!isExternal) {
+    const downloadUrl = forceDownload
+      ? await getMediaDownloadUrl(asset.storagePath, fileName)
+      : await getSignedMediaUrl(asset.storagePath);
+    return NextResponse.redirect(downloadUrl, 302);
+  }
+
+  // External (demo) URLs cannot carry a signed disposition — stream them.
+  const upstream = await fetch(asset.storagePath);
+  if (!upstream.ok || !upstream.body) {
+    return new NextResponse("Upstream error", { status: 502 });
+  }
 
   const headers = new Headers();
   headers.set("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");

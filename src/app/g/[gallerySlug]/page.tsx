@@ -4,7 +4,7 @@ import { PublicGallery } from "@/components/gallery/public-gallery";
 import { getCurrentUser } from "@/lib/auth";
 import { getGalleryCommentCounts, getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
-import { getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
+import { getMediaThumbFallbackUrl, getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
 
 type PublicGalleryPageProps = {
   params: Promise<{ gallerySlug: string }>;
@@ -59,8 +59,12 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
           : await getSignedMediaUrl(asset.storagePath),
       thumbUrl:
         asset.mediaType === "photo"
-          ? await getMediaThumbUrl(asset.storagePath, { width: 1000 })
+          ? getMediaThumbUrl(asset.storagePath, { width: 1000 })
           : getMediaStreamUrl(asset.storagePath),
+      thumbFallbackUrl:
+        asset.mediaType === "photo"
+          ? getMediaThumbFallbackUrl(asset.storagePath, { width: 1000 })
+          : null,
       posterUrl:
         asset.mediaType === "video" && asset.thumbnailPath
           ? await getSignedMediaUrl(asset.thumbnailPath).catch(() => null)
