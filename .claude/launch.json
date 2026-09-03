@@ -6,6 +6,19 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "six-stories-prod",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "CLOUDFLARE_R2_PUBLIC_URL=https://pub-9778789b046d4a4bbca4387c51cada22.r2.dev",
+        "npx",
+        "next",
+        "start",
+        "-p",
+        "3100"
+      ],
+      "port": 3100
     }
   ]
 }
