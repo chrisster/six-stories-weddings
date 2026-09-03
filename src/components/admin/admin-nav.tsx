@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CheckSquare,
@@ -25,6 +25,20 @@ const links = [
   { href: "/admin/financials", label: "Financials", icon: Wallet, hideForCrew: true },
   { href: "/admin/team", label: "Team", icon: Users, adminOnly: true },
 ] as const;
+
+/** Small pulse next to the link that was clicked while its page is loading. */
+function PendingIndicator() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "ml-auto size-1.5 rounded-full bg-foreground/50 transition-opacity",
+        pending ? "animate-pulse opacity-100" : "opacity-0",
+      )}
+    />
+  );
+}
 
 export function AdminNav({ role }: { role?: NavRole }) {
   const pathname = usePathname();
@@ -65,6 +79,7 @@ export function AdminNav({ role }: { role?: NavRole }) {
               strokeWidth={1.8}
             />
             {link.label}
+            <PendingIndicator />
           </Link>
         );
       })}
