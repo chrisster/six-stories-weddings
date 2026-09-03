@@ -9,6 +9,19 @@ import type { NextConfig } from "next";
 const sharpTraceIncludes = ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"];
 
 const nextConfig: NextConfig = {
+  // The *.vercel.app deployment URL forwards to the studio domain. Declared
+  // here so it is handled by the platform's router instead of the proxy
+  // function, which no longer runs on every request.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "(?<deployment>.*)\\.vercel\\.app" }],
+        destination: "https://admin.sixstoriesstudio.com/:path*",
+        permanent: true,
+      },
+    ];
+  },
   // sharp is in Next's default external list; keep it explicit so Turbopack
   // never tries to bundle the native module into server chunks.
   serverExternalPackages: ["sharp"],

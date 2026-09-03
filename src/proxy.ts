@@ -3,16 +3,36 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { hasSupabaseEnv } from "@/lib/env";
 
+// Only the studio routes need a verified (and refreshed) Supabase session
+// before rendering; the client portal, the signing pages and the route
+// handlers manage their own access. A tight matcher means guests never pay
+// for an auth round trip, and RSC prefetches outside /admin skip the proxy.
+export const config = {
+  matcher: ["/", "/admin/:path*", "/g/:path*"],
+};
+
+function hasSupabaseSessionCookie(request: NextRequest) {
+  return request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("-auth-token"));
+}
+
 export async function proxy(request: NextRequest) {
-  const host = request.headers.get("host") || "";
-  if (host.includes("vercel.app")) {
-    const url = request.nextUrl.clone();
-    url.protocol = "https:";
-    url.host = "admin.sixstoriesstudio.com";
-    return NextResponse.redirect(url, 308);
+  if (!hasSupabaseEnv) {
+    return NextResponse.next();
   }
 
-  if (!hasSupabaseEnv) {
+  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
+
+  // No session cookie at all: nothing to verify or refresh. Gallery guests
+  // and portal clients take this path, and an anonymous /admin visit goes
+  // straight to the login page without calling Supabase.
+  if (!hasSupabaseSessionCookie(request)) {
+    if (isAdminRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
     return NextResponse.next();
   }
 
@@ -45,7 +65,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (request.nextUrl.pathname.startsWith("/admin") && !user) {
+  if (isAdminRoute && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
@@ -59,7 +79,3 @@ export async function proxy(request: NextRequest) {
 
   return response;
 }
-
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api).*)"],
-};
