@@ -164,8 +164,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     const formData = new FormData();
     formData.append("galleryId", galleryId);
     formData.append("orderedIds", orderedIds);
+    // The action revalidates the gallery page itself, which already refreshes
+    // this route; a second router.refresh() would render it twice.
     await reorderMediaAction(formData);
-    router.refresh();
   }
 
   async function handleDropInSection(sectionName: string, targetId: string) {
@@ -253,7 +254,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     await bulkDeleteMediaAction(formData);
     setMediaState((prev) => prev.filter((item) => !selectedIds.has(item.id)));
     setSelectedIds(new Set());
-    router.refresh();
   };
 
   const handleMoveSelectedToSection = async (sectionId: string) => {
@@ -272,7 +272,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     );
     setSelectedIds(new Set());
     await moveMediaToSectionAction(formData);
-    router.refresh();
   };
 
   const handleSetCoverSelected = async () => {
@@ -285,7 +284,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
 
     await setCoverMediaAction(formData);
     setSelectedIds(new Set());
-    router.refresh();
   };
 
   const handleDeleteSection = async (sectionId: string) => {
@@ -299,7 +297,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     await bulkDeleteMediaAction(formData);
     setMediaState((prev) => prev.filter((item) => item.sectionId !== sectionId));
     setSelectedIds(new Set());
-    router.refresh();
   };
 
   const handleSetVideoThumbnail = async () => {
@@ -373,7 +370,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     await bulkDeleteMediaAction(formData);
     setMediaState([]);
     setSelectedIds(new Set());
-    router.refresh();
   };
 
   if (mediaState.length === 0) {

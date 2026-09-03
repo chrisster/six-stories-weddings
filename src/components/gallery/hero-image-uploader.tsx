@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 
 import {
@@ -50,7 +49,6 @@ async function prepareHeroImage(file: File): Promise<File> {
 }
 
 export function HeroImageUploader({ galleryId, hasCustomHero }: HeroImageUploaderProps) {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -66,8 +64,8 @@ export function HeroImageUploader({ galleryId, hasCustomHero }: HeroImageUploade
       const formData = new FormData();
       formData.append("galleryId", galleryId);
       formData.append("file", prepared);
+      // The action revalidates the page; no extra refresh needed.
       await setGalleryHeroImageAction(formData);
-      router.refresh();
     } finally {
       setBusy(false);
       if (fileInputRef.current) {
@@ -82,7 +80,6 @@ export function HeroImageUploader({ galleryId, hasCustomHero }: HeroImageUploade
       const formData = new FormData();
       formData.append("galleryId", galleryId);
       await clearGalleryHeroImageAction(formData);
-      router.refresh();
     } finally {
       setBusy(false);
     }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 
@@ -31,7 +30,6 @@ function timeAgo(iso: string) {
 }
 
 export function NotificationBell({ notifications }: { notifications: NotificationItem[] }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
@@ -47,9 +45,9 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
   }, []);
 
   const markAll = () => {
+    // The action revalidates the admin layout, which re-renders this bell.
     startTransition(async () => {
       await markAllNotificationsReadAction();
-      router.refresh();
     });
   };
 

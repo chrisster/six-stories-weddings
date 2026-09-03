@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { createProjectTaskAction, deleteTaskAction, updateTaskAction } from "@/app/admin/tasks/actions";
@@ -65,7 +64,6 @@ function isOverdue(due: string | null) {
 }
 
 export function PostProductionBoard({ tasks, assignees, projects, canManage }: PostProductionBoardProps) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [showAdd, setShowAdd] = useState(false);
@@ -86,9 +84,10 @@ export function PostProductionBoard({ tasks, assignees, projects, canManage }: P
     const formData = new FormData();
     formData.set("taskId", taskId);
     formData.set(field, value);
+    // Each action revalidates /admin/tasks, which refreshes this board on its
+    // own; a router.refresh() on top rendered the page a second time.
     startTransition(async () => {
       await updateTaskAction(formData);
-      router.refresh();
     });
   };
 
@@ -98,7 +97,6 @@ export function PostProductionBoard({ tasks, assignees, projects, canManage }: P
     formData.set("taskId", taskId);
     startTransition(async () => {
       await deleteTaskAction(formData);
-      router.refresh();
     });
   };
 
@@ -106,7 +104,6 @@ export function PostProductionBoard({ tasks, assignees, projects, canManage }: P
     startTransition(async () => {
       await createProjectTaskAction(formData);
       setShowAdd(false);
-      router.refresh();
     });
   };
 

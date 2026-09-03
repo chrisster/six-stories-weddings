@@ -11,7 +11,7 @@ type ProjectAutosaveProps = {
   debounceMs?: number;
 };
 
-export function ProjectAutosave({ formId, debounceMs = 1500 }: ProjectAutosaveProps) {
+export function ProjectAutosave({ formId, debounceMs = 3000 }: ProjectAutosaveProps) {
   const [status, setStatus] = useState<AutosaveStatus>("idle");
   const timerRef = useRef<number | null>(null);
   const savingRef = useRef(false);

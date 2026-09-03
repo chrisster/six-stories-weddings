@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, getCurrentUserRole, type AppRole } from "@/lib/auth";
 import { notifyCrewMemberById } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -433,7 +433,8 @@ export async function updateProjectAction(formData: FormData) {
     return;
   }
 
-  if ((await getCurrentUserRole()) === "crew") {
+  const role = await getCurrentUserRole();
+  if (role === "crew") {
     redirect(`/admin/projects/${projectId}`);
   }
 
@@ -443,7 +444,7 @@ export async function updateProjectAction(formData: FormData) {
     redirect(`/admin/projects/${projectId}?save=error&reason=date`);
   }
 
-  const result = await persistProjectFromForm(formData);
+  const result = await persistProjectFromForm(formData, role);
 
   if (!result.ok) {
     redirect(
@@ -469,7 +470,8 @@ export async function autosaveProjectAction(
     return { ok: false, reason: "missing_project" };
   }
 
-  if ((await getCurrentUserRole()) === "crew") {
+  const role = await getCurrentUserRole();
+  if (role === "crew") {
     return { ok: false, reason: "forbidden" };
   }
 
@@ -479,19 +481,20 @@ export async function autosaveProjectAction(
     return { ok: false, reason: "date" };
   }
 
-  const result = await persistProjectFromForm(formData);
+  // Autosave persists quietly: the form already holds the latest values, so
+  // re-rendering the whole page every few seconds while the admin types is
+  // pure cost. The explicit Save button still revalidates and redirects.
+  const result = await persistProjectFromForm(formData, role);
   if (!result.ok) {
     return { ok: false, reason: "server", detail: result.detail };
   }
 
-  revalidatePath(`/admin/projects/${projectId}`);
-  revalidatePath("/admin/projects");
-  revalidatePath("/admin");
   return { ok: true };
 }
 
 async function persistProjectFromForm(
   formData: FormData,
+  role: AppRole | null,
 ): Promise<{ ok: true } | { ok: false; detail?: string }> {
   const projectId = String(formData.get("projectId") || "").trim();
   if (!projectId) {
@@ -547,7 +550,6 @@ async function persistProjectFromForm(
   };
 
   // Crew members must not be able to change financial fields.
-  const role = await getCurrentUserRole();
   if (role === "crew") {
     delete payload.offer_amount;
     delete payload.budget_total;
