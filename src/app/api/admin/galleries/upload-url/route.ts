@@ -9,9 +9,10 @@ export const runtime = "nodejs";
 
 // Issues signed upload targets so the browser sends media bytes straight to
 // storage — they never pass through a function body (Vercel request-body
-// limits, Fast Origin Transfer). With `withThumb`, a second target for the
-// derived `thumbs/<path>.webp` preview is issued so the client can upload the
-// downscaled webp it generated alongside the original.
+// limits, Fast Origin Transfer). With `withThumb`, two more targets are
+// issued for the derived previews (`thumbs/<path>.webp` at 1600px and
+// `thumbs/sm/<path>.webp` at 480px) so the client can upload the downscaled
+// webp images it generated alongside the original.
 export async function POST(request: Request) {
   try {
     if (!hasSupabaseEnv) {
@@ -47,12 +48,13 @@ export async function POST(request: Request) {
     const extension = fileName.split(".").pop() || "bin";
     const storagePath = `${galleryId}/${randomUUID()}.${extension}`;
 
-    const target = await createSignedUploadTarget(storagePath, contentType);
-    const thumbTarget = body?.withThumb
-      ? await createSignedUploadTarget(mediaThumbKey(storagePath), "image/webp")
-      : null;
+    const [target, thumbTarget, smallThumbTarget] = await Promise.all([
+      createSignedUploadTarget(storagePath, contentType),
+      body?.withThumb ? createSignedUploadTarget(mediaThumbKey(storagePath, "lg"), "image/webp") : null,
+      body?.withThumb ? createSignedUploadTarget(mediaThumbKey(storagePath, "sm"), "image/webp") : null,
+    ]);
 
-    return NextResponse.json({ storagePath, target, thumbTarget });
+    return NextResponse.json({ storagePath, target, thumbTarget, smallThumbTarget });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create upload URL.";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -102,7 +102,10 @@ export type Project = {
   payments: ProjectPayment[];
   timeplan: TimeplanItem[];
   notes?: string | null;
+  /** Card-sized preview of the cover photo (or the custom hero image). */
   coverImageUrl?: string | null;
+  /** The cover's original file, used when the preview object is missing. */
+  coverOriginalUrl?: string | null;
   clients: Client[];
   crewAssignments: CrewAssignment[];
   tasks: ProjectTask[];

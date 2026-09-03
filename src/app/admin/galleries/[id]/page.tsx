@@ -64,9 +64,10 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   const customHeroUrl = detail.gallery.heroImagePath
     ? await getSignedMediaUrl(detail.gallery.heroImagePath).catch(() => null)
     : null;
-  // The hero shows the web preview, not the multi-megabyte original.
+  // The hero shows the 1600px preview, not the multi-megabyte original.
   const heroDisplayUrl =
-    customHeroUrl || (cover?.mediaType === "photo" ? cover.thumbUrl || cover.url : null);
+    customHeroUrl ||
+    (cover?.mediaType === "photo" ? getMediaThumbUrl(cover.storagePath, { size: "lg" }) : null);
 
   // Template, favorites, guest links and stats are independent of each other.
   const [notificationTemplate, favorites, guestLinks, eventStats] = await Promise.all([

@@ -14,25 +14,17 @@ import {
   X,
 } from "lucide-react";
 
+import { assetUrls, type GalleryAsset } from "@/lib/gallery-assets";
 import { formatDateLong } from "@/lib/utils";
 import { GalleryVideoSection, type GalleryVideoAsset } from "@/components/gallery/gallery-video-section";
 import { MediaComments } from "@/components/gallery/media-comments";
 
-type PublicAsset = {
-  id: string;
-  sectionId?: string | null;
-  sectionName: string;
-  mediaType: "photo" | "video";
-  url: string;
-  thumbUrl?: string;
-  /** On-demand resize route retried when the stored thumbnail is missing. */
-  thumbFallbackUrl?: string | null;
-  posterUrl?: string | null;
-  fileName?: string;
-};
+type PublicAsset = GalleryAsset;
 
 type PublicGalleryProps = {
   assets: PublicAsset[];
+  /** Public media domain; null when assets carry explicit URLs instead. */
+  mediaBase: string | null;
   galleryId: string;
   gallerySlug: string;
   allowDownloads: boolean;
@@ -69,6 +61,7 @@ function displayName(name?: string) {
 
 export function PublicGallery({
   assets,
+  mediaBase,
   galleryId: _galleryId,
   gallerySlug,
   allowDownloads,
@@ -156,9 +149,9 @@ export function PublicGallery({
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
       const link = document.createElement("a");
       link.href = `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}&download=1${tokenParam}`;
-      if (asset.fileName) {
+      if (asset.name) {
         // Hint the browser to keep the original filename for same-origin downloads.
-        link.download = asset.fileName;
+        link.download = asset.name;
       }
       link.rel = "noopener";
       document.body.appendChild(link);
@@ -224,18 +217,18 @@ export function PublicGallery({
   }, []);
 
   const photoAssets = useMemo(
-    () => assets.filter((asset) => asset.mediaType !== "video"),
+    () => assets.filter((asset) => asset.type !== "video"),
     [assets],
   );
   const videoAssets = useMemo(
-    () => assets.filter((asset) => asset.mediaType === "video"),
+    () => assets.filter((asset) => asset.type === "video"),
     [assets],
   );
 
   const grouped = useMemo<GroupedSection[]>(() => {
     const map = new Map<string, PublicAsset[]>();
     photoAssets.forEach((asset) => {
-      const key = asset.sectionName || "Photos";
+      const key = asset.section || "Photos";
       map.set(key, [...(map.get(key) || []), asset]);
     });
 
@@ -248,7 +241,7 @@ export function PublicGallery({
     });
 
     return orderedKeys.map((name) => ({ name, items: map.get(name) || [] }));
-  }, [assets, sectionOrder]);
+  }, [photoAssets, sectionOrder]);
 
   const displayedGroups = useMemo<GroupedSection[]>(() => {
     if (!favoritesOnly) return grouped;
@@ -303,6 +296,17 @@ export function PublicGallery({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [activeIndex, close, next, prev]);
+
+  // Warm the neighbours of the open photo so stepping through feels instant.
+  useEffect(() => {
+    if (activeIndex === null || flatOrdered.length < 2) return;
+    [activeIndex - 1, activeIndex + 1].forEach((index) => {
+      const neighbour = flatOrdered[(index + flatOrdered.length) % flatOrdered.length];
+      if (!neighbour || neighbour.type !== "photo") return;
+      const image = new window.Image();
+      image.src = assetUrls(neighbour, mediaBase).large;
+    });
+  }, [activeIndex, flatOrdered, mediaBase]);
 
   // Lock body scroll while the lightbox is open.
   useEffect(() => {
@@ -435,10 +439,14 @@ export function PublicGallery({
     (video: GalleryVideoAsset) => {
       downloadAsset({
         id: video.id,
-        sectionName: "Films",
-        mediaType: "video",
+        key: video.url,
+        type: "video",
+        section: "Films",
+        name: video.fileName || "",
+        w: null,
+        h: null,
+        poster: video.posterUrl ?? null,
         url: video.url,
-        fileName: video.fileName,
       });
     },
     [downloadAsset],
@@ -456,6 +464,7 @@ export function PublicGallery({
   }, [sharePreviewUrl]);
 
   const activeAsset = activeIndex !== null ? flatOrdered[activeIndex] : null;
+  const activeUrls = activeAsset ? assetUrls(activeAsset, mediaBase) : null;
   const dateLong = formatDateLong(eventDate);
   const favoriteCount = favorites.size;
 
@@ -472,7 +481,13 @@ export function PublicGallery({
         <div className="mt-12 flex flex-1 flex-col items-center justify-center gap-6 md:mt-0 md:flex-row md:gap-12">
           <div className="relative aspect-[3/4] w-[320px] max-w-[82vw] overflow-hidden bg-muted/40 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.5)] sm:w-[400px] md:w-[460px]">
             {coverUrl ? (
-              <img src={coverUrl} alt={coupleNames} className="h-full w-full object-cover" />
+              <img
+                src={coverUrl}
+                alt={coupleNames}
+                fetchPriority="high"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
             ) : (
               <div className="h-full w-full bg-[linear-gradient(135deg,#1c1c1c,#3a3a3a)]" />
             )}
@@ -751,9 +766,9 @@ export function PublicGallery({
         <GalleryVideoSection
           videos={videoAssets.map((asset) => ({
             id: asset.id,
-            url: asset.url,
-            fileName: asset.fileName,
-            posterUrl: asset.posterUrl,
+            url: asset.url ?? assetUrls(asset, mediaBase).full,
+            fileName: asset.name,
+            posterUrl: asset.poster,
           }))}
           gallerySlug={gallerySlug}
           allowDownloads={allowDownloads}
@@ -798,6 +813,7 @@ export function PublicGallery({
                 </h2>
                 <JustifiedGrid
                   items={visibleItems}
+                  mediaBase={mediaBase}
                   favorites={favorites}
                   allowDownloads={allowDownloads}
                   selectMode={selectMode}
@@ -877,14 +893,21 @@ export function PublicGallery({
             }`}
             onClick={(event) => event.stopPropagation()}
           >
-            {activeAsset.mediaType === "photo" ? (
+            {activeAsset.type === "photo" ? (
               <img
-                src={activeAsset.url}
-                alt={displayName(activeAsset.fileName)}
+                key={activeAsset.id}
+                src={activeUrls?.large}
+                alt={displayName(activeAsset.name)}
+                decoding="async"
+                onError={(event) => {
+                  // The 1600px preview is missing: show the original instead.
+                  const img = event.currentTarget;
+                  if (activeUrls && img.src !== activeUrls.full) img.src = activeUrls.full;
+                }}
                 className="max-h-[84vh] w-auto max-w-full object-contain"
               />
             ) : (
-              <video src={activeAsset.url} controls autoPlay className="max-h-[84vh] w-auto max-w-full" />
+              <video src={activeUrls?.full} controls autoPlay className="max-h-[84vh] w-auto max-w-full" />
             )}
           </div>
 
@@ -919,9 +942,9 @@ export function PublicGallery({
             className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-3 bg-gradient-to-t from-black/70 to-transparent pb-6 pt-10"
             onClick={(event) => event.stopPropagation()}
           >
-            {activeAsset.fileName ? (
+            {activeAsset.name ? (
               <p className="text-xs uppercase tracking-[0.28em] text-white/80">
-                {displayName(activeAsset.fileName)}
+                {displayName(activeAsset.name)}
               </p>
             ) : null}
             <div className="flex items-center gap-2">
@@ -976,9 +999,17 @@ export function PublicGallery({
 /* ----------------------------------------------------------------------- */
 /* Justified (Flickr/Pic-Time-style) row layout                            */
 /* ----------------------------------------------------------------------- */
+//
+// Rows are laid out by CSS alone: each tile's flex-basis and flex-grow are
+// proportional to its aspect ratio, so the tiles of a row share one height
+// and fill the width exactly, and the server renders the grid (with real
+// <img> tags) before any JavaScript runs. Ratios come from the stored photo
+// dimensions; photos that predate them start at 3:2 and correct themselves
+// as they load.
 
 type JustifiedGridProps = {
   items: PublicAsset[];
+  mediaBase: string | null;
   favorites: Set<string>;
   allowDownloads: boolean;
   selectMode: boolean;
@@ -990,8 +1021,12 @@ type JustifiedGridProps = {
   onDownload: (asset: PublicAsset) => void;
 };
 
+const DEFAULT_RATIO = 1.5;
+const GRID_GAP = 6;
+
 function JustifiedGrid({
   items,
+  mediaBase,
   favorites,
   allowDownloads,
   selectMode,
@@ -1002,184 +1037,148 @@ function JustifiedGrid({
   onToggleSelect,
   onDownload,
 }: JustifiedGridProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
-  const [ratios, setRatios] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) setWidth(entry.contentRect.width);
-    });
-    observer.observe(element);
-    setWidth(element.clientWidth);
-    return () => observer.disconnect();
-  }, []);
-
-  const gap = 6;
-  const targetRowHeight = width > 0 && width < 640 ? 300 : width < 1024 ? 430 : 540;
-
-  const rows = useMemo(() => {
-    if (!width) return [] as Array<{ items: Array<{ asset: PublicAsset; w: number; h: number }> }>;
-
-    const defaultRatio = 1.4;
-    const result: Array<{ items: Array<{ asset: PublicAsset; w: number; h: number }> }> = [];
-    let current: Array<{ asset: PublicAsset; ratio: number }> = [];
-    let ratioSum = 0;
-
-    const flush = (stretch: boolean) => {
-      if (current.length === 0) return;
-      const gaps = gap * (current.length - 1);
-      const rowHeight = stretch ? (width - gaps) / ratioSum : targetRowHeight;
-      result.push({
-        items: current.map(({ asset, ratio }) => ({
-          asset,
-          w: ratio * rowHeight,
-          h: rowHeight,
-        })),
-      });
-      current = [];
-      ratioSum = 0;
-    };
-
-    items.forEach((asset) => {
-      const ratio = ratios[asset.id] || defaultRatio;
-      current.push({ asset, ratio });
-      ratioSum += ratio;
-      const gaps = gap * (current.length - 1);
-      if (ratioSum * targetRowHeight + gaps >= width) {
-        flush(true);
-      }
-    });
-    flush(false);
-
-    return result;
-  }, [items, width, ratios, targetRowHeight]);
+  const [learnedRatios, setLearnedRatios] = useState<Record<string, number>>({});
 
   const handleRatio = useCallback((id: string, ratio: number) => {
     if (!Number.isFinite(ratio) || ratio <= 0) return;
-    setRatios((previous) => (previous[id] === ratio ? previous : { ...previous, [id]: ratio }));
+    setLearnedRatios((previous) => (previous[id] === ratio ? previous : { ...previous, [id]: ratio }));
   }, []);
 
   return (
-    <div ref={containerRef} className="w-full">
-      {rows.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex" style={{ gap, marginBottom: gap }}>
-          {row.items.map(({ asset, w, h }) => {
-            const isFavorite = favorites.has(asset.id);
-            const isSelected = selected.has(asset.id);
-            const commentCount = commentCounts[asset.id] || 0;
-            return (
-              <div
-                key={asset.id}
-                style={{ width: w, height: h }}
-                className="group relative shrink-0 overflow-hidden bg-muted/40"
-              >
+    <div
+      className="flex w-full flex-wrap [--row-h:220px] sm:[--row-h:320px] lg:[--row-h:400px]"
+      style={{ gap: GRID_GAP }}
+    >
+      {items.map((asset) => {
+        const ratio =
+          asset.w && asset.h ? asset.w / asset.h : learnedRatios[asset.id] || DEFAULT_RATIO;
+        const urls = assetUrls(asset, mediaBase);
+        const isFavorite = favorites.has(asset.id);
+        const isSelected = selected.has(asset.id);
+        const commentCount = commentCounts[asset.id] || 0;
+        return (
+          <div
+            key={asset.id}
+            style={{
+              flexGrow: ratio,
+              flexBasis: `calc(var(--row-h) * ${ratio})`,
+              aspectRatio: String(ratio),
+            }}
+            className="group relative min-w-0 overflow-hidden bg-muted/40"
+          >
+            <button
+              type="button"
+              onClick={() => (selectMode ? onToggleSelect(asset.id) : onSelect(asset.id))}
+              className="block h-full w-full"
+            >
+              {asset.type === "photo" ? (
+                <img
+                  src={urls.small}
+                  srcSet={`${urls.small} 480w, ${urls.large} 1600w`}
+                  sizes="(max-width: 640px) 160px, (max-width: 1024px) 45vw, 30vw"
+                  alt={displayName(asset.name)}
+                  loading="lazy"
+                  decoding="async"
+                  onError={(event) => {
+                    // Small preview → large preview → on-demand resize → original.
+                    const img = event.currentTarget;
+                    const step = Number(img.dataset.fallbackStep || "0");
+                    img.removeAttribute("srcset");
+                    img.removeAttribute("sizes");
+                    if (step === 0) {
+                      img.dataset.fallbackStep = "1";
+                      img.src = urls.large;
+                    } else if (step === 1 && urls.fallback) {
+                      img.dataset.fallbackStep = "2";
+                      img.src = urls.fallback;
+                    } else if (step < 3) {
+                      img.dataset.fallbackStep = "3";
+                      if (img.src !== urls.full) img.src = urls.full;
+                    }
+                  }}
+                  onLoad={(event) => {
+                    if (asset.w && asset.h) return;
+                    handleRatio(
+                      asset.id,
+                      event.currentTarget.naturalWidth / event.currentTarget.naturalHeight,
+                    );
+                  }}
+                  className={`h-full w-full object-cover transition duration-500 group-hover:scale-[1.04] ${
+                    selectMode && !isSelected ? "opacity-70" : ""
+                  }`}
+                />
+              ) : (
+                <video
+                  src={urls.full}
+                  poster={asset.poster || undefined}
+                  preload="metadata"
+                  onLoadedMetadata={(event) =>
+                    handleRatio(asset.id, event.currentTarget.videoWidth / event.currentTarget.videoHeight)
+                  }
+                  className="h-full w-full object-cover"
+                />
+              )}
+            </button>
+
+            {/* Filename overlay (hover) */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/55 to-transparent p-2.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+              {asset.name ? (
+                <span className="truncate text-[10px] uppercase tracking-[0.18em] text-white/90">
+                  {displayName(asset.name)}
+                </span>
+              ) : (
+                <span />
+              )}
+              {allowDownloads && !selectMode ? (
                 <button
                   type="button"
-                  onClick={() => (selectMode ? onToggleSelect(asset.id) : onSelect(asset.id))}
-                  className="block h-full w-full"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDownload(asset);
+                  }}
+                  aria-label="Download photo"
+                  className="pointer-events-auto flex size-9 shrink-0 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/60"
                 >
-                  {asset.mediaType === "photo" ? (
-                    <img
-                      src={asset.thumbUrl ?? asset.url}
-                      alt={displayName(asset.fileName)}
-                      loading="lazy"
-                      onError={(event) => {
-                        // Stored thumb → on-demand resize route → original.
-                        const img = event.currentTarget;
-                        const step = Number(img.dataset.fallbackStep || "0");
-                        if (step === 0 && asset.thumbFallbackUrl) {
-                          img.dataset.fallbackStep = "1";
-                          img.src = asset.thumbFallbackUrl;
-                        } else if (step < 2) {
-                          img.dataset.fallbackStep = "2";
-                          if (img.src !== asset.url) img.src = asset.url;
-                        }
-                      }}
-                      onLoad={(event) =>
-                        handleRatio(
-                          asset.id,
-                          event.currentTarget.naturalWidth / event.currentTarget.naturalHeight,
-                        )
-                      }
-                      className={`h-full w-full object-cover transition duration-500 group-hover:scale-[1.04] ${
-                        selectMode && !isSelected ? "opacity-70" : ""
-                      }`}
-                    />
-                  ) : (
-                    <video
-                      src={asset.url}
-                      poster={asset.posterUrl || undefined}
-                      preload="metadata"
-                      onLoadedMetadata={(event) =>
-                        handleRatio(asset.id, event.currentTarget.videoWidth / event.currentTarget.videoHeight)
-                      }
-                      className="h-full w-full object-cover"
-                    />
-                  )}
+                  <Download className="size-4" />
                 </button>
+              ) : null}
+            </div>
 
-                {/* Filename overlay (hover) */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/55 to-transparent p-2.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                  {asset.fileName ? (
-                    <span className="truncate text-[10px] uppercase tracking-[0.18em] text-white/90">
-                      {displayName(asset.fileName)}
-                    </span>
-                  ) : (
-                    <span />
-                  )}
-                  {allowDownloads && !selectMode ? (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDownload(asset);
-                      }}
-                      aria-label="Download photo"
-                      className="pointer-events-auto flex size-9 shrink-0 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition hover:bg-black/60"
-                    >
-                      <Download className="size-4" />
-                    </button>
-                  ) : null}
-                </div>
+            {selectMode ? (
+              <span
+                className={`pointer-events-none absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border-2 transition ${
+                  isSelected
+                    ? "border-white bg-foreground text-background"
+                    : "border-white/80 bg-black/30 text-transparent"
+                }`}
+              >
+                <Check className="size-3.5" />
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(asset.id)}
+                aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
+                aria-pressed={isFavorite}
+                className={`absolute right-2 top-2 flex size-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55 ${
+                  isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                }`}
+              >
+                <Heart className={`size-[18px] ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
+              </button>
+            )}
 
-                {selectMode ? (
-                  <span
-                    className={`pointer-events-none absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border-2 transition ${
-                      isSelected
-                        ? "border-white bg-foreground text-background"
-                        : "border-white/80 bg-black/30 text-transparent"
-                    }`}
-                  >
-                    <Check className="size-3.5" />
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onToggleFavorite(asset.id)}
-                    aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
-                    aria-pressed={isFavorite}
-                    className={`absolute right-2 top-2 flex size-9 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/55 ${
-                      isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                    }`}
-                  >
-                    <Heart className={`size-[18px] ${isFavorite ? "fill-rose-500 text-rose-500" : ""}`} />
-                  </button>
-                )}
-
-                {!selectMode && commentCount > 0 ? (
-                  <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[11px] font-medium text-white backdrop-blur">
-                    <MessageCircle className="size-3.5" />
-                    {commentCount}
-                  </span>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+            {!selectMode && commentCount > 0 ? (
+              <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[11px] font-medium text-white backdrop-blur">
+                <MessageCircle className="size-3.5" />
+                {commentCount}
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
+      {/* Absorbs the leftover width so the last row keeps its natural height. */}
+      <div aria-hidden className="h-0" style={{ flexGrow: 1000, flexBasis: 0 }} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
@@ -94,14 +95,39 @@ export function getStorageProviderName() {
 }
 
 /**
- * Storage key of the pre-generated web preview for a photo. Thumbnails live
- * under a parallel `thumbs/` prefix (webp, ≤1600px wide) so the original key
- * namespace stays clean. The key is derived by convention — no DB column —
- * and consumers must fall back to `/api/media/thumb` when the object is
- * missing (e.g. formats the uploading browser could not decode).
+ * Base URL of the public media domain (no trailing slash), or null when media
+ * is served through signed URLs and the same-origin proxy routes instead.
  */
-export function mediaThumbKey(storagePath: string): string {
-  return `thumbs/${storagePath}.webp`;
+export function getPublicMediaBase(): string | null {
+  return useR2 && R2_PUBLIC_URL ? R2_PUBLIC_URL.replace(/\/$/, "") : null;
+}
+
+/**
+ * Media keys are content-addressed (a random uuid per upload, a fresh key per
+ * replaced poster), so every object can be cached for a year by browsers and
+ * by the CDN in front of the bucket.
+ */
+export const MEDIA_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+/** Pre-generated preview sizes: `lg` for lightbox and large grid rows, `sm` for cards and phones. */
+export type ThumbSize = "lg" | "sm";
+export const THUMB_WIDTHS: Record<ThumbSize, number> = { lg: 1600, sm: 480 };
+
+/**
+ * Storage key of a pre-generated web preview for a photo. Previews live under
+ * a parallel `thumbs/` prefix (webp) so the original key namespace stays
+ * clean: `thumbs/<key>.webp` at 1600px and `thumbs/sm/<key>.webp` at 480px.
+ * The key is derived by convention — no DB column — and consumers must fall
+ * back to `/api/media/thumb` when the object is missing (e.g. formats the
+ * uploading browser could not decode).
+ */
+export function mediaThumbKey(storagePath: string, size: ThumbSize = "lg"): string {
+  return size === "sm" ? `thumbs/sm/${storagePath}.webp` : `thumbs/${storagePath}.webp`;
+}
+
+/** Whether a storage key names a derived object (preview or archive) rather than an upload. */
+export function isDerivedMediaKey(storagePath: string): boolean {
+  return storagePath.startsWith("thumbs/") || storagePath.startsWith("zips/");
 }
 
 /** No-op for R2 — buckets are created in the Cloudflare dashboard. */
@@ -119,7 +145,7 @@ export async function uploadMediaToStorage(path: string, file: File) {
         Key: path,
         Body: Buffer.from(arrayBuffer),
         ContentType: file.type,
-        CacheControl: "max-age=3600",
+        CacheControl: MEDIA_CACHE_CONTROL,
       }),
     );
     return { path };
@@ -127,6 +153,41 @@ export async function uploadMediaToStorage(path: string, file: File) {
 
   await supabaseUpload(SUPABASE_BUCKET, path, file);
   return { path };
+}
+
+/**
+ * Stamps the long-lived Cache-Control header onto objects that were uploaded
+ * straight from the browser (presigned PUTs carry no cache metadata, and
+ * signing the header in would require a CORS change on the bucket). Each key
+ * is copied onto itself with replaced metadata; missing keys are skipped.
+ * R2 only — Supabase Storage sets its own cache headers at upload time.
+ */
+export async function setMediaObjectsCacheControl(storagePaths: string[]): Promise<void> {
+  if (!useR2) return;
+  const client = getR2Client();
+  await Promise.all(
+    storagePaths
+      .filter((path) => path && !path.includes("://"))
+      .map(async (Key) => {
+        try {
+          const head = await client.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key }));
+          if (head.CacheControl === MEDIA_CACHE_CONTROL) return;
+          await client.send(
+            new CopyObjectCommand({
+              Bucket: R2_BUCKET,
+              Key,
+              CopySource: `${R2_BUCKET}/${encodeURIComponent(Key).replace(/%2F/g, "/")}`,
+              MetadataDirective: "REPLACE",
+              ContentType: head.ContentType || "application/octet-stream",
+              CacheControl: MEDIA_CACHE_CONTROL,
+            }),
+          );
+        } catch {
+          // Missing object (e.g. a preview the browser could not encode) or a
+          // transient error: the object simply keeps its current headers.
+        }
+      }),
+  );
 }
 
 export type SignedUploadTarget =
@@ -237,33 +298,35 @@ export async function getMediaDownloadUrl(
   return data.signedUrl;
 }
 
-export type ThumbOptions = { width?: number; quality?: number };
+export type ThumbOptions = { width?: number; quality?: number; size?: ThumbSize };
 
 /**
  * Returns a resized preview URL for grid/thumbnail rendering so browsers don't
  * download full-resolution photos just to show a small tile.
  *
- * With the public R2 domain configured this points at the pre-generated
- * `thumbs/<path>.webp` object (uploaded by the browser at upload time, or by
- * the migration script for older assets) and costs no Vercel compute or
- * transfer. Otherwise it falls back to the on-demand `/api/media/thumb`
- * sharp route. External (demo) URLs pass through unchanged.
+ * With the public R2 domain configured this points at a pre-generated
+ * `thumbs/…webp` object (uploaded by the browser at upload time, or by the
+ * backfill script for older assets) and costs no Vercel compute or transfer:
+ * the 480px `sm` variant for widths up to 640, the 1600px `lg` one above
+ * that, unless `size` says otherwise. Otherwise it falls back to the
+ * on-demand `/api/media/thumb` sharp route. External (demo) URLs pass
+ * through unchanged.
  */
 export function getMediaThumbUrl(
   storagePath: string,
-  { width = 640, quality = 72 }: ThumbOptions = {},
+  { width = 640, quality = 72, size }: ThumbOptions = {},
 ): string {
   if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
     return storagePath;
   }
 
   if (isR2PublicEnabled()) {
-    return publicMediaUrl(mediaThumbKey(storagePath));
+    return publicMediaUrl(mediaThumbKey(storagePath, size ?? (width <= 640 ? "sm" : "lg")));
   }
 
   const params = new URLSearchParams({
     path: storagePath,
-    w: String(Math.round(width)),
+    w: String(Math.round(size ? THUMB_WIDTHS[size] : width)),
     q: String(Math.round(quality)),
   });
   return `/api/media/thumb?${params.toString()}`;
@@ -466,11 +529,11 @@ export async function deleteStoredObjects(storagePaths: string[]): Promise<void>
   const primary = storagePaths.filter((path) => path && !path.includes("://"));
   if (primary.length === 0) return;
 
+  const uploads = primary.filter((path) => !isDerivedMediaKey(path));
   const paths = [
     ...primary,
-    ...primary
-      .filter((path) => !path.startsWith("thumbs/") && !path.startsWith("zips/"))
-      .map(mediaThumbKey),
+    ...uploads.map((path) => mediaThumbKey(path, "lg")),
+    ...uploads.map((path) => mediaThumbKey(path, "sm")),
   ];
 
   if (useR2) {

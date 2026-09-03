@@ -11,7 +11,7 @@ import {
 import { hasSupabaseEnv } from "@/lib/env";
 import { buildDefaultGalleryNotificationTemplate } from "@/lib/gallery-notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSignedMediaUrl } from "@/lib/storage";
+import { getMediaThumbUrl, getSignedMediaUrl } from "@/lib/storage";
 import type {
   ClientPortalAccountSummary,
   Contact,
@@ -112,7 +112,11 @@ type DashboardMetrics = {
   totalRemaining: number;
 };
 
-function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string | null): Project {
+function normalizeProject(
+  row: Record<string, unknown>,
+  coverImageUrl?: string | null,
+  coverOriginalUrl?: string | null,
+): Project {
   const rawStatus = String(row.status || "draft").trim();
   const mappedStatus =
     rawStatus === "confirmed"
@@ -205,6 +209,7 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
       timeplan,
     notes: row.notes as string | null,
     coverImageUrl: coverImageUrl || null,
+    coverOriginalUrl: coverOriginalUrl || null,
     clients,
     crewAssignments,
     tasks,
@@ -301,24 +306,39 @@ async function resolveGalleryCoverPaths(
     .filter((gallery) => !coverPathByGalleryId.has(gallery.id))
     .map((gallery) => gallery.id);
   if (fallbackIds.length > 0) {
-    const firstPhotos = await Promise.all(
-      fallbackIds.map(async (galleryId) => {
-        const { data: firstPhoto } = await admin
-          .from("media_assets")
-          .select("storage_path")
-          .eq("gallery_id", galleryId)
-          .eq("media_type", "photo")
-          .order("sort_order", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        return { galleryId, storagePath: (firstPhoto?.storage_path as string | null) || null };
-      }),
-    );
-    firstPhotos.forEach(({ galleryId, storagePath }) => {
-      if (storagePath) {
-        coverPathByGalleryId.set(galleryId, storagePath);
-      }
-    });
+    // One query through the gallery_first_photo view (migration 0030); one
+    // round trip per gallery until that migration has been applied.
+    const { data: viewRows, error: viewError } = await admin
+      .from("gallery_first_photo")
+      .select("gallery_id, storage_path")
+      .in("gallery_id", fallbackIds);
+
+    if (!viewError && viewRows) {
+      viewRows.forEach((row) => {
+        if (row.storage_path) {
+          coverPathByGalleryId.set(String(row.gallery_id), String(row.storage_path));
+        }
+      });
+    } else {
+      const firstPhotos = await Promise.all(
+        fallbackIds.map(async (galleryId) => {
+          const { data: firstPhoto } = await admin
+            .from("media_assets")
+            .select("storage_path")
+            .eq("gallery_id", galleryId)
+            .eq("media_type", "photo")
+            .order("sort_order", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          return { galleryId, storagePath: (firstPhoto?.storage_path as string | null) || null };
+        }),
+      );
+      firstPhotos.forEach(({ galleryId, storagePath }) => {
+        if (storagePath) {
+          coverPathByGalleryId.set(galleryId, storagePath);
+        }
+      });
+    }
   }
 
   return coverPathByGalleryId;
@@ -380,14 +400,20 @@ async function loadProjects(withCovers: boolean): Promise<Project[]> {
     rows.map(async (row) => {
       const coverStoragePath = coverPathByProjectId.get(String(row.id)) || null;
       let coverImageUrl: string | null = null;
+      let coverOriginalUrl: string | null = null;
       if (coverStoragePath) {
         try {
-          coverImageUrl = await getSignedMediaUrl(coverStoragePath, 60 * 60 * 24 * 7);
+          // Cards are 160px tall: the 480px preview, not the original. Custom
+          // hero images have no preview objects and are already downscaled.
+          coverOriginalUrl = await getSignedMediaUrl(coverStoragePath, 60 * 60 * 24 * 7);
+          coverImageUrl = coverStoragePath.includes("/hero/")
+            ? coverOriginalUrl
+            : getMediaThumbUrl(coverStoragePath, { size: "sm" });
         } catch {
           coverImageUrl = coverStoragePath;
         }
       }
-      return normalizeProject(row, coverImageUrl);
+      return normalizeProject(row, coverImageUrl, coverOriginalUrl);
     }),
   );
 }
@@ -535,7 +561,6 @@ async function loadGalleryMedia(
   const rows: MediaAsset[] = [];
   const MEDIA_PAGE_SIZE = 1000;
   for (let from = 0; ; from += MEDIA_PAGE_SIZE) {
-    // eslint-disable-next-line no-await-in-loop
     const { data, error } = await admin
       .from("media_assets")
       .select(MEDIA_SELECT)
@@ -755,7 +780,6 @@ export async function getMediaAssetIdsInGallery(galleryId: string): Promise<stri
   const ids: string[] = [];
   const PAGE_SIZE = 1000;
   for (let from = 0; ; from += PAGE_SIZE) {
-    // eslint-disable-next-line no-await-in-loop
     const { data, error } = await admin
       .from("media_assets")
       .select("id")
@@ -1056,16 +1080,65 @@ export async function getGalleryEventStats(
     return empty;
   }
 
-  let query = admin.from("gallery_events").select("gallery_id, event_type, guest_session_id");
-  if (galleryIds && galleryIds.length > 0) {
-    query = query.in("gallery_id", galleryIds);
-  }
-  if (since) {
-    query = query.gte("created_at", since.toISOString());
+  // Preferred path: totals computed in SQL by the gallery_event_stats function
+  // (migration 0030). One small result set instead of every event row.
+  const { data: aggregated, error: rpcError } = await admin.rpc("gallery_event_stats", {
+    since_at: since ? since.toISOString() : null,
+    gallery_ids: galleryIds && galleryIds.length > 0 ? galleryIds : null,
+  });
+
+  if (!rpcError && Array.isArray(aggregated)) {
+    const byGalleryFromSql: Record<string, { views: number; downloads: number; viewers: number }> = {};
+    let views = 0;
+    let viewers = 0;
+    let downloads = 0;
+    const downloadGalleries = new Set<string>();
+    (aggregated as Array<Record<string, unknown>>).forEach((row) => {
+      const galleryId = String(row.gallery_id);
+      const entry = {
+        views: Number(row.views || 0),
+        downloads: Number(row.downloads || 0),
+        viewers: Number(row.viewers || 0),
+      };
+      byGalleryFromSql[galleryId] = entry;
+      views += entry.views;
+      // A visitor rarely opens more than one gallery, so the sum of per-gallery
+      // distinct sessions is a close upper bound of the global figure.
+      viewers += entry.viewers;
+      downloads += entry.downloads;
+      if (entry.downloads > 0) downloadGalleries.add(galleryId);
+    });
+    return {
+      totals: { views, viewers, downloads, galleriesWithDownloads: downloadGalleries.size },
+      byGallery: byGalleryFromSql,
+    };
   }
 
-  const { data } = await query;
-  const rows = data || [];
+  // Fallback until the migration is applied: page through the raw events
+  // (PostgREST returns at most 1000 rows per request) and count here.
+  const rows: Array<{ gallery_id: unknown; event_type: unknown; guest_session_id: unknown }> = [];
+  const PAGE_SIZE = 1000;
+  for (let from = 0; ; from += PAGE_SIZE) {
+    let query = admin
+      .from("gallery_events")
+      .select("gallery_id, event_type, guest_session_id")
+      .order("created_at", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (galleryIds && galleryIds.length > 0) {
+      query = query.in("gallery_id", galleryIds);
+    }
+    if (since) {
+      query = query.gte("created_at", since.toISOString());
+    }
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+      break;
+    }
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) {
+      break;
+    }
+  }
 
   const byGallery: Record<string, { views: number; downloads: number; viewers: Set<string> }> = {};
   const globalViewers = new Set<string>();

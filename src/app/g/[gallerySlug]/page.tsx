@@ -2,9 +2,20 @@ import { notFound, redirect } from "next/navigation";
 
 import { PublicGallery } from "@/components/gallery/public-gallery";
 import { getCurrentUser } from "@/lib/auth";
-import { getGalleryCommentCounts, getGuestAccessByToken, getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import {
+  getGalleryCommentCounts,
+  getGuestAccessByToken,
+  getPublicGalleryBySlug,
+  portalEmailCanAccessProject,
+} from "@/lib/data";
+import { assetUrls, type GalleryAsset } from "@/lib/gallery-assets";
 import { readPortalSession } from "@/lib/portal-auth";
-import { getMediaThumbFallbackUrl, getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
+import {
+  getMediaStreamUrl,
+  getMediaThumbUrl,
+  getPublicMediaBase,
+  getSignedMediaUrl,
+} from "@/lib/storage";
 
 type PublicGalleryPageProps = {
   params: Promise<{ gallerySlug: string }>;
@@ -55,36 +66,53 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
     ? detail.mediaAssets.filter((asset) => permittedIds.has(asset.id))
     : detail.mediaAssets;
 
+  // With the public media domain, the browser derives every URL from the
+  // storage key and one shared base, which keeps the payload for a
+  // thousand-photo gallery small. Without it (local dev, Supabase fallback)
+  // each photo carries explicit signed URLs.
+  const mediaBase = getPublicMediaBase();
   const sectionById = new Map(detail.sections.map((section) => [section.id, section.name]));
-  const media = await Promise.all(
-    visibleAssets.map(async (asset) => ({
-      ...asset,
-      url:
-        asset.mediaType === "video"
-          ? getMediaStreamUrl(asset.storagePath)
-          : await getSignedMediaUrl(asset.storagePath),
-      thumbUrl:
-        asset.mediaType === "photo"
-          ? getMediaThumbUrl(asset.storagePath, { width: 1000 })
-          : getMediaStreamUrl(asset.storagePath),
-      thumbFallbackUrl:
-        asset.mediaType === "photo"
-          ? getMediaThumbFallbackUrl(asset.storagePath, { width: 1000 })
-          : null,
-      posterUrl:
-        asset.mediaType === "video" && asset.thumbnailPath
-          ? await getSignedMediaUrl(asset.thumbnailPath).catch(() => null)
-          : null,
-      sectionName: sectionById.get(asset.sectionId || "") || "Photos",
-      fileName: asset.originalName || "",
-    })),
+  const assets: GalleryAsset[] = await Promise.all(
+    visibleAssets.map(async (asset) => {
+      const external =
+        asset.storagePath.startsWith("http://") || asset.storagePath.startsWith("https://");
+      const base: GalleryAsset = {
+        id: asset.id,
+        key: asset.storagePath,
+        type: asset.mediaType,
+        section: sectionById.get(asset.sectionId || "") || "Photos",
+        name: asset.originalName || "",
+        w: asset.width ?? null,
+        h: asset.height ?? null,
+        poster:
+          asset.mediaType === "video" && asset.thumbnailPath
+            ? await getSignedMediaUrl(asset.thumbnailPath).catch(() => null)
+            : null,
+      };
+
+      if (asset.mediaType === "video") {
+        return { ...base, url: getMediaStreamUrl(asset.storagePath) };
+      }
+      if (mediaBase && !external) {
+        return base;
+      }
+      return {
+        ...base,
+        url: await getSignedMediaUrl(asset.storagePath),
+        thumb: getMediaThumbUrl(asset.storagePath, { size: "lg" }),
+        small: getMediaThumbUrl(asset.storagePath, { size: "sm" }),
+      };
+    }),
   );
 
-  const cover = media.find((asset) => asset.id === detail.gallery.coverMediaId) || media[0];
+  // The hero shows the 1600px preview of the cover photo (or the custom hero
+  // image, which is already downscaled), never the multi-megabyte original.
+  const cover = assets.find((asset) => asset.id === detail.gallery.coverMediaId) || assets[0];
   const customHeroUrl = detail.gallery.heroImagePath
     ? await getSignedMediaUrl(detail.gallery.heroImagePath).catch(() => null)
     : null;
-  const heroUrl = customHeroUrl || (cover && cover.mediaType === "photo" ? cover.url : null);
+  const heroUrl =
+    customHeroUrl || (cover && cover.type === "photo" ? assetUrls(cover, mediaBase).large : null);
 
   const commentsEnabled = detail.gallery.allowComments;
   const canComment = commentsEnabled && Boolean(adminUser || hasPortalAccess);
@@ -97,7 +125,8 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
   return (
     <main className="min-h-screen bg-white">
       <PublicGallery
-        assets={media}
+        assets={assets}
+        mediaBase={mediaBase}
         galleryId={detail.gallery.id}
         gallerySlug={gallerySlug}
         allowDownloads={detail.gallery.allowDownloads}

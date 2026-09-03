@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Download, Eye } from "lucide-react";
 
+import { CoverImage } from "@/components/admin/cover-image";
 import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
 import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
 
@@ -48,8 +49,9 @@ export default async function GalleriesPage() {
             <Link href={`/admin/galleries/${gallery.id}`} className="block">
               <div className="relative h-40 w-full overflow-hidden bg-zinc-200">
                 {project?.coverImageUrl ? (
-                  <img
+                  <CoverImage
                     src={project.coverImageUrl}
+                    fallbackSrc={project.coverOriginalUrl}
                     alt={name}
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />

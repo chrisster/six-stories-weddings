@@ -66,48 +66,45 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
   }
 
-  // Downscaled webp preview generated in the browser at upload time and stored
-  // next to the original (thumbs/<path>.webp). Grids then load these directly
-  // from the storage CDN — no server-side sharp, no function transfer. Returns
-  // the photo's oriented pixel dimensions even when webp encoding fails; the
-  // thumb itself is optional (the on-demand sharp route remains the fallback
-  // for formats the browser cannot decode, e.g. HEIC outside Safari).
-  async function makeWebpThumb(
+  // Downscaled webp previews generated in the browser at upload time and stored
+  // next to the original: thumbs/<path>.webp at 1600px (lightbox, large grid
+  // rows) and thumbs/sm/<path>.webp at 480px (cards, phones). Grids then load
+  // these directly from the storage CDN — no server-side sharp, no function
+  // transfer. Returns the photo's oriented pixel dimensions even when webp
+  // encoding fails; the previews themselves are optional (the on-demand sharp
+  // route remains the fallback for formats the browser cannot decode, e.g.
+  // HEIC outside Safari).
+  async function makeWebpThumbs(
     file: File,
-  ): Promise<{ blob: Blob | null; width: number | null; height: number | null }> {
+  ): Promise<{ large: Blob | null; small: Blob | null; width: number | null; height: number | null }> {
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
       const width = bitmap.width;
       const height = bitmap.height;
 
-      const THUMB_WIDTH = 1600;
-      const ratio = Math.min(1, THUMB_WIDTH / bitmap.width);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
-      canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
+      const encode = async (maxWidth: number, quality: number): Promise<Blob | null> => {
+        const ratio = Math.min(1, maxWidth / bitmap.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
+        canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob((value) => resolve(value), "image/webp", quality);
+        });
+        // Some browsers silently fall back to PNG when webp encoding is
+        // unsupported; the stored key promises webp, so skip the upload then.
+        return blob && blob.type === "image/webp" ? blob : null;
+      };
 
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        bitmap.close();
-        return { blob: null, width, height };
-      }
-
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const large = await encode(1600, 0.75);
+      const small = await encode(480, 0.7);
       bitmap.close();
 
-      const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob((value) => resolve(value), "image/webp", 0.75);
-      });
-
-      // Some browsers silently fall back to PNG when webp encoding is
-      // unsupported; the stored key promises webp, so skip the upload then.
-      if (!blob || blob.type !== "image/webp") {
-        return { blob: null, width, height };
-      }
-
-      return { blob, width, height };
+      return { large, small, width, height };
     } catch {
-      return { blob: null, width: null, height: null };
+      return { large: null, small: null, width: null, height: null };
     }
   }
 
@@ -239,6 +236,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     let storagePath: string;
     let target: SignedTarget;
     let thumbTarget: SignedTarget | null;
+    let smallThumbTarget: SignedTarget | null;
 
     try {
       const urlResponse = await fetch("/api/admin/galleries/upload-url", {
@@ -254,17 +252,18 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
       if (!urlResponse.ok) {
         throw new Error(`Could not create upload URL (${urlResponse.status}).`);
       }
-      ({ storagePath, target, thumbTarget } = (await urlResponse.json()) as {
+      ({ storagePath, target, thumbTarget, smallThumbTarget = null } = (await urlResponse.json()) as {
         storagePath: string;
         target: SignedTarget;
         thumbTarget: SignedTarget | null;
+        smallThumbTarget?: SignedTarget | null;
       });
     } catch {
       // Signed flow unavailable — fall back to the proxied upload.
       return uploadSingleFile(item);
     }
 
-    const thumb = await makeWebpThumb(item.file);
+    const thumb = await makeWebpThumbs(item.file);
 
     try {
       if (target.provider === "r2") {
@@ -282,25 +281,27 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
         setEntry({ progress: 90 });
       }
 
-      // The preview is best-effort: a missing thumbs/ object just means grids
+      // The previews are best-effort: a missing thumbs/ object just means grids
       // fall back to the on-demand resize route for this photo.
-      if (thumb.blob && thumbTarget) {
+      const putPreview = async (previewTarget: SignedTarget | null, blob: Blob | null) => {
+        if (!blob || !previewTarget) return;
         try {
-          if (thumbTarget.provider === "r2") {
-            await putSignedR2(thumbTarget.url, thumb.blob, "image/webp");
+          if (previewTarget.provider === "r2") {
+            await putSignedR2(previewTarget.url, blob, "image/webp");
           } else {
             const { createClient } = await import("@/lib/supabase/client");
             const supabase = createClient();
             await supabase.storage
-              .from(thumbTarget.bucket)
-              .uploadToSignedUrl(thumbTarget.path, thumbTarget.token, thumb.blob, {
+              .from(previewTarget.bucket)
+              .uploadToSignedUrl(previewTarget.path, previewTarget.token, blob, {
                 contentType: "image/webp",
               });
           }
         } catch {
           // Ignore preview failures.
         }
-      }
+      };
+      await Promise.all([putPreview(thumbTarget, thumb.large), putPreview(smallThumbTarget, thumb.small)]);
 
       const registerResponse = await fetch("/api/admin/galleries/register-media", {
         method: "POST",

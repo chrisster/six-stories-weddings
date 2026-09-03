@@ -4,7 +4,12 @@ import { NextResponse } from "next/server";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getBucketName, getStorageProviderName } from "@/lib/storage";
+import {
+  getBucketName,
+  getStorageProviderName,
+  mediaThumbKey,
+  setMediaObjectsCacheControl,
+} from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -76,6 +81,16 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Browser uploads arrive without cache metadata; stamp the immutable
+    // Cache-Control onto the original and its previews so browsers and the
+    // CDN keep them.
+    const isVideo = contentType.startsWith("video/");
+    await setMediaObjectsCacheControl(
+      isVideo
+        ? [storagePath]
+        : [storagePath, mediaThumbKey(storagePath, "lg"), mediaThumbKey(storagePath, "sm")],
+    );
 
     revalidatePath(`/admin/galleries/${galleryId}`);
     revalidatePath(`/g`);
