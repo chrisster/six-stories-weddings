@@ -12,9 +12,13 @@ export default async function AdminLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const role = hasSupabaseEnv ? await getCurrentUserRole() : "admin";
+  // One auth round trip (getCurrentUser is memoized per request), then the
+  // role lookup and the notifications in parallel.
   const user = hasSupabaseEnv ? await getCurrentUser() : null;
-  const notifications = user?.email ? await getNotificationsForEmail(user.email) : [];
+  const [role, notifications] = await Promise.all([
+    hasSupabaseEnv ? getCurrentUserRole() : Promise.resolve<"admin">("admin"),
+    user?.email ? getNotificationsForEmail(user.email) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[oklch(0.99_0.004_96)] lg:flex-row">

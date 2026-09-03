@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getPublicGalleryBySlug } from "@/lib/data";
+import { getPublishedGalleryAccess } from "@/lib/data";
 
 type RouteParams = {
   params: Promise<{ gallerySlug: string }>;
@@ -12,12 +12,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const formData = await request.formData();
   const passcode = String(formData.get("passcode") || "");
 
-  const detail = await getPublicGalleryBySlug(gallerySlug);
-  if (!detail) {
+  const gallery = await getPublishedGalleryAccess(gallerySlug);
+  if (!gallery) {
     return NextResponse.redirect(new URL(`/g/${gallerySlug}`, request.url));
   }
 
-  const hashed = detail.gallery.passcodeHash;
+  const hashed = gallery.passcodeHash;
   if (!hashed) {
     return NextResponse.redirect(new URL(`/g/${gallerySlug}`, request.url));
   }

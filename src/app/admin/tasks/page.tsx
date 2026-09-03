@@ -10,8 +10,11 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function TasksPage() {
-  const [projects, crewMembers] = await Promise.all([getProjects(), getCrewMembers()]);
-  const role = await getCurrentUserRole();
+  const [projects, crewMembers, role] = await Promise.all([
+    getProjects({ covers: false }),
+    getCrewMembers(),
+    getCurrentUserRole(),
+  ]);
   const isCrew = role === "crew";
 
   let visibleProjects = projects.filter(

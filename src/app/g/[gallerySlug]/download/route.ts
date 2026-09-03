@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { getGuestAccessByToken, getPublicGalleryBySlug, logGalleryEvent, portalEmailCanAccessProject } from "@/lib/data";
+import {
+  getGuestAccessByToken,
+  getMediaAssetInGallery,
+  getPublishedGalleryAccess,
+  logGalleryEvent,
+  portalEmailCanAccessProject,
+} from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
 import { getMediaDownloadUrl, getSignedMediaUrl } from "@/lib/storage";
 
@@ -22,32 +28,32 @@ export async function GET(
     return new NextResponse("Missing asset", { status: 400 });
   }
 
-  const detail = await getPublicGalleryBySlug(gallerySlug);
-  if (!detail || !detail.gallery.allowDownloads) {
+  // The gallery row, the admin session, the portal cookie and the guest token
+  // resolve together; the gallery's media list is never loaded.
+  const [gallery, adminUser, portalSession, guestAccess] = await Promise.all([
+    getPublishedGalleryAccess(gallerySlug),
+    getCurrentUser(),
+    readPortalSession(),
+    token ? getGuestAccessByToken(token) : Promise.resolve(null),
+  ]);
+  if (!gallery || !gallery.allowDownloads) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const adminUser = await getCurrentUser();
-  const portalSession = await readPortalSession();
-  const hasPortalAccess = portalSession
-    ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
-    : false;
+  const [asset, hasPortalAccess] = await Promise.all([
+    getMediaAssetInGallery(gallery.id, assetId),
+    portalSession
+      ? portalEmailCanAccessProject(portalSession.email, gallery.projectId)
+      : Promise.resolve(false),
+  ]);
 
-  let guestAssetIds: string[] | null = null;
-  let hasGuestAccess = false;
-  if (token) {
-    const access = await getGuestAccessByToken(token);
-    if (access && access.galleryId === detail.gallery.id) {
-      hasGuestAccess = true;
-      guestAssetIds = access.mediaAssetIds;
-    }
-  }
+  const hasGuestAccess = Boolean(guestAccess && guestAccess.galleryId === gallery.id);
+  const guestAssetIds = hasGuestAccess ? guestAccess?.mediaAssetIds ?? null : null;
 
   if (!adminUser && !hasPortalAccess && !hasGuestAccess) {
     return new NextResponse("Unauthorized", { status: 403 });
   }
 
-  const asset = detail.mediaAssets.find((item) => item.id === assetId);
   if (!asset) {
     return new NextResponse("Not found", { status: 404 });
   }
@@ -58,7 +64,7 @@ export async function GET(
 
   // Count actual downloads (not inline streams) by non-admin viewers.
   if (forceDownload && !adminUser) {
-    await logGalleryEvent(detail.gallery.id, "download", { mediaAssetId: asset.id });
+    await logGalleryEvent(gallery.id, "download", { mediaAssetId: asset.id });
   }
 
   const ext = asset.storagePath.split(".").pop() || "jpg";

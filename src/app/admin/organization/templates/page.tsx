@@ -23,10 +23,11 @@ type PageProps = {
 const LANGUAGE_LABELS: Record<string, string> = { el: "Ελληνικά", en: "English" };
 
 export default async function ContractTemplatesPage({ searchParams }: PageProps) {
-  await requireAdminRole();
-  const { status, reason, template: requestedId } = await searchParams;
-
-  const templates = await listContractTemplates();
+  const [, { status, reason, template: requestedId }, templates] = await Promise.all([
+    requireAdminRole(),
+    searchParams,
+    listContractTemplates(),
+  ]);
   const selected =
     templates.find((candidate) => candidate.id === requestedId) ??
     templates.find((candidate) => candidate.isActive) ??

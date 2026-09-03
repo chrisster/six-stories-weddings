@@ -13,9 +13,11 @@ const fieldCls = "h-10 w-full rounded-xl border border-border px-3 text-sm";
 const labelCls = "text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground";
 
 export default async function OrganizationPage({ searchParams }: OrganizationPageProps) {
-  await requireAdminRole();
-  const { status, reason } = await searchParams;
-  const settings = await getOrganizationSettings();
+  const [, { status, reason }, settings] = await Promise.all([
+    requireAdminRole(),
+    searchParams,
+    getOrganizationSettings(),
+  ]);
 
   return (
     <div className="space-y-6">

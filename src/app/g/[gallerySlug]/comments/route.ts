@@ -1,15 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
-import { getPublicGalleryBySlug, portalEmailCanAccessProject } from "@/lib/data";
+import {
+  getMediaAssetInGallery,
+  getPublishedGalleryAccess,
+  portalEmailCanAccessProject,
+} from "@/lib/data";
 import { getGalleryEmailEnv } from "@/lib/env";
 import { sendGalleryNotificationEmail } from "@/lib/gallery-notifications";
 import { readPortalSession } from "@/lib/portal-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-async function resolveGallery(slug: string) {
-  const detail = await getPublicGalleryBySlug(slug);
-  return detail;
+// The gallery row alone is enough here; the media list is never needed.
+function resolveGallery(slug: string) {
+  return getPublishedGalleryAccess(slug);
 }
 
 export async function GET(
@@ -24,7 +28,7 @@ export async function GET(
     return NextResponse.json({ comments: [] });
   }
 
-  if (!detail.gallery.allowComments) {
+  if (!detail.allowComments) {
     return NextResponse.json({ comments: [] });
   }
 
@@ -36,7 +40,7 @@ export async function GET(
   let query = admin
     .from("gallery_comments")
     .select("id, media_asset_id, guest_name, comment_body, timestamp_seconds, created_at")
-    .eq("gallery_id", detail.gallery.id)
+    .eq("gallery_id", detail.id)
     .order("timestamp_seconds", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true });
 
@@ -91,23 +95,22 @@ export async function POST(
     return NextResponse.json({ error: "Gallery not found" }, { status: 404 });
   }
 
-  if (!detail.gallery.allowComments) {
+  if (!detail.allowComments) {
     return NextResponse.json({ error: "Comments are disabled for this gallery." }, { status: 403 });
   }
 
   // Comments are restricted to logged-in clients (portal) or studio admins.
-  const adminUser = await getCurrentUser();
-  const portalSession = await readPortalSession();
+  const [adminUser, portalSession] = await Promise.all([getCurrentUser(), readPortalSession()]);
   const hasPortalAccess = portalSession
-    ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
+    ? await portalEmailCanAccessProject(portalSession.email, detail.projectId)
     : false;
 
   if (!adminUser && !hasPortalAccess) {
     return NextResponse.json({ error: "Please sign in to comment." }, { status: 401 });
   }
 
-  // Ensure the asset belongs to this gallery.
-  const asset = detail.mediaAssets.find((item) => item.id === mediaAssetId);
+  // Ensure the asset belongs to this gallery (one scoped query).
+  const asset = await getMediaAssetInGallery(detail.id, mediaAssetId);
   if (!asset) {
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });
   }
@@ -126,7 +129,7 @@ export async function POST(
   const { data, error } = await admin
     .from("gallery_comments")
     .insert({
-      gallery_id: detail.gallery.id,
+      gallery_id: detail.id,
       media_asset_id: mediaAssetId,
       guest_name: identityName,
       comment_body: commentBody,
@@ -151,7 +154,7 @@ export async function POST(
         const secs = timestampSeconds % 60;
         whenLabel = ` at ${mins}:${secs.toString().padStart(2, "0")}`;
       }
-      const projectTitle = detail.project.title || detail.gallery.title;
+      const projectTitle = detail.projectTitle || detail.title;
       const mediaLabel = isVideo ? "a film" : "a photo";
       const subject = `New comment on ${projectTitle}`;
       const safeBody = commentBody.replace(/</g, "&lt;").replace(/>/g, "&gt;");

@@ -52,7 +52,7 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
     listContracts(activeFolderId),
     listContractFolders(),
     listContractTemplates(),
-    getProjects(),
+    getProjects({ covers: false }),
     getOrgContractSettings(),
   ]);
 

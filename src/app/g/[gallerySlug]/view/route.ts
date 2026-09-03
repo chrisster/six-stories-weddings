@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getPublicGalleryBySlug, logGalleryEvent } from "@/lib/data";
+import { getPublishedGalleryAccess, logGalleryEvent } from "@/lib/data";
 
 export async function POST(
   request: NextRequest,
@@ -10,11 +10,13 @@ export async function POST(
   const body = (await request.json().catch(() => null)) as { session?: string } | null;
   const session = String(body?.session || "").trim() || null;
 
-  const detail = await getPublicGalleryBySlug(gallerySlug);
-  if (!detail) {
+  // Logging a view only needs the gallery row; this used to load every media
+  // row and every project first.
+  const gallery = await getPublishedGalleryAccess(gallerySlug);
+  if (!gallery) {
     return NextResponse.json({ ok: false }, { status: 404 });
   }
 
-  await logGalleryEvent(detail.gallery.id, "view", { session });
+  await logGalleryEvent(gallery.id, "view", { session });
   return NextResponse.json({ ok: true });
 }

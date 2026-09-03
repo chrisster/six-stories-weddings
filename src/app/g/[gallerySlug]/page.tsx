@@ -15,28 +15,34 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
   const { gallerySlug } = await params;
   const { token } = await searchParams;
 
-  const detail = await getPublicGalleryBySlug(gallerySlug);
+  // Gallery, sessions and the guest token resolve in parallel: one round trip
+  // instead of four before the page can decide whether the visitor may enter.
+  const [detail, portalSession, adminUser, guestAccess] = await Promise.all([
+    getPublicGalleryBySlug(gallerySlug),
+    readPortalSession(),
+    getCurrentUser(),
+    token ? getGuestAccessByToken(token) : Promise.resolve(null),
+  ]);
 
   if (!detail) {
     notFound();
   }
 
-  const portalSession = await readPortalSession();
-  const adminUser = await getCurrentUser();
-
   let guestAssetIds: string[] | null = null;
   let hasGuestAccess = false;
-  if (token) {
-    const access = await getGuestAccessByToken(token);
-    if (access && access.galleryId === detail.gallery.id) {
-      hasGuestAccess = true;
-      guestAssetIds = access.mediaAssetIds;
-    }
+  if (guestAccess && guestAccess.galleryId === detail.gallery.id) {
+    hasGuestAccess = true;
+    guestAssetIds = guestAccess.mediaAssetIds;
   }
 
-  const hasPortalAccess = portalSession
-    ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
-    : false;
+  const [hasPortalAccess, commentCounts] = await Promise.all([
+    portalSession
+      ? portalEmailCanAccessProject(portalSession.email, detail.project.id)
+      : Promise.resolve(false),
+    detail.gallery.allowComments
+      ? getGalleryCommentCounts(detail.gallery.id)
+      : Promise.resolve<Record<string, number>>({}),
+  ]);
 
   const hasAccess = Boolean(adminUser || hasPortalAccess || hasGuestAccess);
   if (!hasAccess) {
@@ -87,8 +93,6 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
     : adminUser?.email
       ? "Six Stories Studio"
       : null;
-
-  const commentCounts = commentsEnabled ? await getGalleryCommentCounts(detail.gallery.id) : {};
 
   return (
     <main className="min-h-screen bg-white">

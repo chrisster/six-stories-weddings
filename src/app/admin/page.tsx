@@ -102,11 +102,14 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const sort = params.sort || "date_desc";
   const period = params.period || "all";
 
-  const projects = await getProjects();
-  const galleries = await getGalleries();
-  const role = await getCurrentUserRole();
+  // Independent reads, one round trip.
+  const [projects, galleries, role, eventStats] = await Promise.all([
+    getProjects(),
+    getGalleries(),
+    getCurrentUserRole(),
+    getGalleryEventStats(undefined, periodSince(period)),
+  ]);
   const isCrew = role === "crew";
-  const eventStats = await getGalleryEventStats(undefined, periodSince(period));
 
   let scopedProjects = projects;
   if (isCrew) {

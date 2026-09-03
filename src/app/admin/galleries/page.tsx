@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Download, Eye } from "lucide-react";
 
 import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
-import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjectById } from "@/lib/data";
+import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
 
 function displayName(projectTitle: string | undefined, galleryTitle: string): string {
   if (projectTitle && projectTitle.trim()) {
@@ -12,22 +12,27 @@ function displayName(projectTitle: string | undefined, galleryTitle: string): st
 }
 
 export default async function GalleriesPage() {
-  const allGalleries = await getGalleries();
+  // The gallery list, the project list (loaded once and shared by every card)
+  // and the role resolve in parallel; stats follow once the visible set is known.
+  const [allGalleries, projects, role] = await Promise.all([
+    getGalleries(),
+    getProjects(),
+    getCurrentUserRole(),
+  ]);
 
   let galleries = allGalleries;
-  if ((await getCurrentUserRole()) === "crew") {
+  if (role === "crew") {
     const user = await getCurrentUser();
     const assignedIds = new Set(await getAssignedProjectIdsForEmail(user?.email || ""));
     galleries = allGalleries.filter((gallery) => assignedIds.has(gallery.projectId));
   }
 
   const eventStats = await getGalleryEventStats(galleries.map((gallery) => gallery.id));
-  const galleryWithProject = await Promise.all(
-    galleries.map(async (gallery) => ({
-      gallery,
-      project: await getProjectById(gallery.projectId),
-    })),
-  );
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const galleryWithProject = galleries.map((gallery) => ({
+    gallery,
+    project: projectById.get(gallery.projectId) ?? null,
+  }));
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

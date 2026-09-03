@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { hasSupabaseEnv } from "@/lib/env";
@@ -6,7 +7,12 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type AppRole = "admin" | "crew";
 
-export async function getCurrentUser() {
+/**
+ * The signed-in Supabase user. `auth.getUser()` is a network round trip to
+ * Supabase Auth, and the layout, the page and the actions of one request all
+ * ask for it, so the result is memoized per request with React's cache().
+ */
+export const getCurrentUser = cache(async () => {
   if (!hasSupabaseEnv) {
     return null;
   }
@@ -21,14 +27,16 @@ export async function getCurrentUser() {
   } = await supabase.auth.getUser();
 
   return user;
-}
+});
 
 /**
  * Resolves the studio role for the signed-in user. Users without an explicit
  * `crew`/`viewer` role in the users table are treated as full admins to
- * preserve existing single-admin behaviour.
+ * preserve existing single-admin behaviour. Memoized per request like
+ * getCurrentUser, so the role lookup runs once even when several components
+ * ask for it.
  */
-export async function getCurrentUserRole(): Promise<AppRole | null> {
+export const getCurrentUserRole = cache(async (): Promise<AppRole | null> => {
   const user = await getCurrentUser();
   if (!user?.email) {
     return null;
@@ -50,7 +58,7 @@ export async function getCurrentUserRole(): Promise<AppRole | null> {
     return "crew";
   }
   return "admin";
-}
+});
 
 export async function requireAdminUser() {
   if (!hasSupabaseEnv) {

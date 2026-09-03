@@ -97,28 +97,34 @@ const statusBadge: Record<string, string> = {
 export default async function ProjectDetailPage({ params, searchParams }: ProjectPageProps) {
   const { id } = await params;
   const query = await searchParams;
-  const project = await getProjectById(id);
+  // Everything the page needs up front resolves in one round trip.
+  const [project, galleries, crewMembers, contacts, role] = await Promise.all([
+    getProjectById(id),
+    getGalleries(),
+    getCrewMembers(),
+    getContacts(),
+    getCurrentUserRole(),
+  ]);
 
   if (!project) {
     notFound();
   }
 
-  const [galleries, crewMembers, contacts] = await Promise.all([getGalleries(), getCrewMembers(), getContacts()]);
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
-  const role = await getCurrentUserRole();
   const isCrew = role === "crew";
 
-  if (isCrew) {
-    const user = await getCurrentUser();
-    const assignedIds = new Set(await getAssignedProjectIdsForEmail(user?.email || ""));
-    if (!assignedIds.has(project.id)) {
-      notFound();
-    }
-  }
+  const [portalAccounts, assignedIds] = await Promise.all([
+    getClientPortalAccountsByEmails(
+      project.clients.map((client) => client.email || "").filter(Boolean),
+    ),
+    isCrew
+      ? getCurrentUser().then((user) => getAssignedProjectIdsForEmail(user?.email || ""))
+      : Promise.resolve<string[]>([]),
+  ]);
 
-  const portalAccounts = await getClientPortalAccountsByEmails(
-    project.clients.map((client) => client.email || "").filter(Boolean),
-  );
+  if (isCrew && !assignedIds.includes(project.id)) {
+    notFound();
+  }
   const projectTypeParts = parseProjectType(project.projectType);
   const amountPaidFromPayments = project.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const displayedAmountPaid = project.payments.length > 0 ? amountPaidFromPayments : project.amountPaid;

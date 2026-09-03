@@ -98,25 +98,27 @@ async function* zipChunks(
 }
 
 async function buildZipResponse(gallerySlug: string, idsCsv: string | null, token: string | null) {
-  const detail = await getPublicGalleryBySlug(gallerySlug);
+  // The archive needs the media list, but the sessions and the guest token
+  // can resolve alongside it instead of one after the other.
+  const [detail, adminUser, portalSession, guestAccess] = await Promise.all([
+    getPublicGalleryBySlug(gallerySlug),
+    getCurrentUser(),
+    readPortalSession(),
+    token ? getGuestAccessByToken(token) : Promise.resolve(null),
+  ]);
   if (!detail || !detail.gallery.allowDownloads) {
     return new Response("Not found", { status: 404 });
   }
 
-  const adminUser = await getCurrentUser();
-  const portalSession = await readPortalSession();
   const hasPortalAccess = portalSession
     ? await portalEmailCanAccessProject(portalSession.email, detail.project.id)
     : false;
 
   let guestAssetIds: string[] | null = null;
   let hasGuestAccess = false;
-  if (token) {
-    const access = await getGuestAccessByToken(token);
-    if (access && access.galleryId === detail.gallery.id) {
-      hasGuestAccess = true;
-      guestAssetIds = access.mediaAssetIds;
-    }
+  if (guestAccess && guestAccess.galleryId === detail.gallery.id) {
+    hasGuestAccess = true;
+    guestAssetIds = guestAccess.mediaAssetIds;
   }
 
   if (!adminUser && !hasPortalAccess && !hasGuestAccess) {

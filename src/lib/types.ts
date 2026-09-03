@@ -140,6 +140,9 @@ export type MediaAsset = {
   sortOrder: number;
   isCover: boolean;
   originalName?: string | null;
+  /** Pixel dimensions of the photo as displayed (orientation applied); null when unknown. */
+  width?: number | null;
+  height?: number | null;
   /** Storage path of the poster frame chosen for a video (metadata_json.thumbnail_path). */
   thumbnailPath?: string | null;
 };

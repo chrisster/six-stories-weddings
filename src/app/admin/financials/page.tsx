@@ -44,11 +44,12 @@ const periodOptions = [
 const inactiveStatuses = new Set(["cancelled", "declined"]);
 
 export default async function FinancialsPage({ searchParams }: FinancialsPageProps) {
-  await requireAdminRole();
-  const params = await searchParams;
+  const [, params, projects] = await Promise.all([
+    requireAdminRole(),
+    searchParams,
+    getProjects({ covers: false }),
+  ]);
   const period = params.period || "all";
-
-  const projects = await getProjects();
   const scoped = projects
     .filter((project) => isWithinPeriod(project.eventDate, period))
     .filter((project) => !inactiveStatuses.has(project.status));

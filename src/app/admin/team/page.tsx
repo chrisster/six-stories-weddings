@@ -30,9 +30,12 @@ async function getLoginRoleByEmail(): Promise<Record<string, string>> {
 }
 
 export default async function TeamPage({ searchParams }: TeamPageProps) {
-  await requireAdminRole();
-  const { status, reason } = await searchParams;
-  const [crew, roleByEmail] = await Promise.all([getCrewMembers(), getLoginRoleByEmail()]);
+  const [, { status, reason }, crew, roleByEmail] = await Promise.all([
+    requireAdminRole(),
+    searchParams,
+    getCrewMembers(),
+    getLoginRoleByEmail(),
+  ]);
 
   return (
     <div className="space-y-6">

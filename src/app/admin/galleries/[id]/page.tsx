@@ -64,24 +64,29 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   const customHeroUrl = detail.gallery.heroImagePath
     ? await getSignedMediaUrl(detail.gallery.heroImagePath).catch(() => null)
     : null;
-  const heroDisplayUrl = customHeroUrl || (cover?.mediaType === "photo" ? cover.url : null);
-  const notificationTemplate = await getGalleryNotificationTemplate(detail.gallery.id, {
-    projectTitle: detail.project.title,
-    galleryTitle: detail.gallery.title,
-    heroImageUrl: heroDisplayUrl,
-  });
+  // The hero shows the web preview, not the multi-megabyte original.
+  const heroDisplayUrl =
+    customHeroUrl || (cover?.mediaType === "photo" ? cover.thumbUrl || cover.url : null);
 
-  const favorites = await getGalleryFavorites(detail.gallery.id);
+  // Template, favorites, guest links and stats are independent of each other.
+  const [notificationTemplate, favorites, guestLinks, eventStats] = await Promise.all([
+    getGalleryNotificationTemplate(detail.gallery.id, {
+      projectTitle: detail.project.title,
+      galleryTitle: detail.gallery.title,
+      heroImageUrl: heroDisplayUrl,
+    }),
+    getGalleryFavorites(detail.gallery.id),
+    getGuestLinksByGallery(detail.gallery.id),
+    getGalleryEventStats([detail.gallery.id]),
+  ]);
+
   const favoritedMedia = mediaWithUrl
     .filter((asset) => favorites.counts[asset.id])
     .sort((a, b) => (favorites.counts[b.id] || 0) - (favorites.counts[a.id] || 0));
 
-  const guestLinks = await getGuestLinksByGallery(detail.gallery.id);
-
   const photoMedia = mediaWithUrl.filter((asset) => asset.mediaType !== "video");
   const videoMedia = mediaWithUrl.filter((asset) => asset.mediaType === "video");
 
-  const eventStats = await getGalleryEventStats([detail.gallery.id]);
   const galleryStats = eventStats.byGallery[detail.gallery.id] || { views: 0, downloads: 0, viewers: 0 };
 
   return (
@@ -311,7 +316,7 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
             {favoritedMedia.map((asset) => (
               <div key={asset.id} className="group relative aspect-square overflow-hidden rounded-xl bg-zinc-200">
                 {asset.mediaType === "photo" ? (
-                  <Image src={asset.url} alt="Favorited media" fill className="object-cover" unoptimized />
+                  <Image src={asset.thumbUrl ?? asset.url} alt="Favorited media" fill className="object-cover" unoptimized />
                 ) : (
                   <video src={asset.url} poster={asset.posterUrl || undefined} className="h-full w-full object-cover" preload="metadata" />
                 )}

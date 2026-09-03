@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { cache } from "react";
 
 import {
   demoContacts,
@@ -19,6 +20,7 @@ import type {
   GalleryDetail,
   GuestGalleryLink,
   GalleryNotificationTemplate,
+  MediaAsset,
   PortalGallery,
   Project,
   ProjectTask,
@@ -210,7 +212,119 @@ function normalizeProject(row: Record<string, unknown>, coverImageUrl?: string |
   };
 }
 
-export async function getProjects() {
+const PROJECT_SELECT = `
+      *,
+      clients:project_clients(client:clients(*)),
+      crew_assignments(*, crew_member:crew_members(*)),
+      project_tasks(*),
+      deliverables(*)
+    `;
+
+/** Flattens the project_clients join into the plain clients array normalizeProject expects. */
+function flattenProjectRow(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...row,
+    clients: ((row.clients as { client: Record<string, unknown> }[] | null) || []).map((c) => c.client),
+  };
+}
+
+type GalleryCoverRow = {
+  id: string;
+  projectId: string;
+  coverMediaId: string | null;
+  heroImagePath: string | null;
+};
+
+/**
+ * Storage path of the image that represents each gallery. Priority:
+ *   1. the selected cover photo (cover_media_id, or the is_cover flag when the
+ *      two are out of sync),
+ *   2. a custom uploaded hero image,
+ *   3. the first uploaded photo.
+ * Covers are looked up by id rather than by scanning every media row: a
+ * gallery's media list runs into PostgREST's row cap once it holds hundreds of
+ * photos. Two round trips, plus a third only for galleries with neither a
+ * cover nor a hero.
+ */
+async function resolveGalleryCoverPaths(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  galleries: GalleryCoverRow[],
+): Promise<Map<string, string>> {
+  const coverPathByGalleryId = new Map<string, string>();
+  if (galleries.length === 0) {
+    return coverPathByGalleryId;
+  }
+
+  const galleryIds = galleries.map((gallery) => gallery.id);
+  const selectedCoverIds = Array.from(
+    new Set(galleries.map((gallery) => gallery.coverMediaId).filter((id): id is string => Boolean(id))),
+  );
+
+  const [selectedCoverRows, flaggedCoverRows] = await Promise.all([
+    selectedCoverIds.length > 0
+      ? admin
+          .from("media_assets")
+          .select("id, storage_path")
+          .in("id", selectedCoverIds)
+          .then(({ data }) => (data || []) as Array<{ id: unknown; storage_path: unknown }>)
+      : Promise.resolve([] as Array<{ id: unknown; storage_path: unknown }>),
+    admin
+      .from("media_assets")
+      .select("gallery_id, storage_path")
+      .in("gallery_id", galleryIds)
+      .eq("is_cover", true)
+      .then(({ data }) => (data || []) as Array<{ gallery_id: unknown; storage_path: unknown }>),
+  ]);
+
+  const selectedPathByMediaId = new Map(
+    selectedCoverRows.map((row) => [String(row.id), String(row.storage_path)]),
+  );
+  galleries.forEach((gallery) => {
+    const selectedPath = gallery.coverMediaId ? selectedPathByMediaId.get(gallery.coverMediaId) : null;
+    if (selectedPath) {
+      coverPathByGalleryId.set(gallery.id, selectedPath);
+    }
+  });
+  flaggedCoverRows.forEach((row) => {
+    const galleryId = String(row.gallery_id);
+    if (!coverPathByGalleryId.has(galleryId)) {
+      coverPathByGalleryId.set(galleryId, String(row.storage_path));
+    }
+  });
+  galleries.forEach((gallery) => {
+    if (!coverPathByGalleryId.has(gallery.id) && gallery.heroImagePath) {
+      coverPathByGalleryId.set(gallery.id, gallery.heroImagePath);
+    }
+  });
+
+  const fallbackIds = galleries
+    .filter((gallery) => !coverPathByGalleryId.has(gallery.id))
+    .map((gallery) => gallery.id);
+  if (fallbackIds.length > 0) {
+    const firstPhotos = await Promise.all(
+      fallbackIds.map(async (galleryId) => {
+        const { data: firstPhoto } = await admin
+          .from("media_assets")
+          .select("storage_path")
+          .eq("gallery_id", galleryId)
+          .eq("media_type", "photo")
+          .order("sort_order", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        return { galleryId, storagePath: (firstPhoto?.storage_path as string | null) || null };
+      }),
+    );
+    firstPhotos.forEach(({ galleryId, storagePath }) => {
+      if (storagePath) {
+        coverPathByGalleryId.set(galleryId, storagePath);
+      }
+    });
+  }
+
+  return coverPathByGalleryId;
+}
+
+async function loadProjects(withCovers: boolean): Promise<Project[]> {
   if (!hasSupabaseEnv) {
     return [demoProject];
   }
@@ -222,182 +336,49 @@ export async function getProjects() {
 
   const { data, error } = await admin
     .from("projects")
-    .select(
-      `
-      *,
-      clients:project_clients(client:clients(*)),
-      crew_assignments(*, crew_member:crew_members(*)),
-      project_tasks(*),
-      deliverables(*)
-    `,
-    )
+    .select(PROJECT_SELECT)
     .order("event_date", { ascending: true });
 
   if (error || !data) {
     return [demoProject];
   }
 
-  const projectIds = data.map((row) => String(row.id));
+  const rows = data.map((row) => flattenProjectRow(row as Record<string, unknown>));
+
+  // Pages that never show a thumbnail (tasks, financials, contracts) skip the
+  // gallery and cover lookups entirely.
+  if (!withCovers) {
+    return rows.map((row) => normalizeProject(row, null));
+  }
 
   const { data: galleries } = await admin
     .from("galleries")
     .select("id, project_id, cover_media_id, hero_image_path")
-    .in("project_id", projectIds);
+    .in(
+      "project_id",
+      rows.map((row) => String(row.id)),
+    );
 
-  const galleriesByProjectId = new Map<
-    string,
-    Array<{ id: string; heroImagePath?: string | null }>
-  >();
-  (galleries || []).forEach((row) => {
-    const key = String(row.project_id);
-    const list = galleriesByProjectId.get(key) || [];
-    list.push({
-      id: String(row.id),
-      heroImagePath: (row.hero_image_path as string | null) || null,
-    });
-    galleriesByProjectId.set(key, list);
+  const galleryRows: GalleryCoverRow[] = (galleries || []).map((row) => ({
+    id: String(row.id),
+    projectId: String(row.project_id),
+    coverMediaId: (row.cover_media_id as string | null) || null,
+    heroImagePath: (row.hero_image_path as string | null) || null,
+  }));
+  const coverPathByGalleryId = await resolveGalleryCoverPaths(admin, galleryRows);
+
+  // A project can have more than one gallery; the first gallery with an image wins.
+  const coverPathByProjectId = new Map<string, string>();
+  galleryRows.forEach((gallery) => {
+    const path = coverPathByGalleryId.get(gallery.id);
+    if (path && !coverPathByProjectId.has(gallery.projectId)) {
+      coverPathByProjectId.set(gallery.projectId, path);
+    }
   });
 
-  const galleryIds = (galleries || []).map((row) => String(row.id));
-
-  // Storage path of the photo chosen as each gallery's cover, looked up by id
-  // rather than by scanning every media row: fetching a project's whole media
-  // list runs into PostgREST's row cap once galleries hold hundreds of photos,
-  // and the cover row is then silently missing.
-  const coverPathByGalleryId = new Map<string, string>();
-
-  if (galleryIds.length > 0) {
-    const selectedCoverIds = Array.from(
-      new Set(
-        (galleries || [])
-          .map((row) => (row.cover_media_id as string | null) || null)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    );
-
-    const [selectedCoverRows, flaggedCoverRows] = await Promise.all([
-      (async () => {
-        if (selectedCoverIds.length === 0) {
-          return [];
-        }
-        const { data: rows } = await admin
-          .from("media_assets")
-          .select("id, storage_path")
-          .in("id", selectedCoverIds);
-        return rows || [];
-      })(),
-      (async () => {
-        const { data: rows } = await admin
-          .from("media_assets")
-          .select("gallery_id, storage_path")
-          .in("gallery_id", galleryIds)
-          .eq("is_cover", true);
-        return rows || [];
-      })(),
-    ]);
-
-    const selectedPathByMediaId = new Map(
-      selectedCoverRows.map((row) => [String(row.id), String(row.storage_path)]),
-    );
-
-    (galleries || []).forEach((row) => {
-      const selectedPath = row.cover_media_id
-        ? selectedPathByMediaId.get(String(row.cover_media_id))
-        : null;
-      if (selectedPath) {
-        coverPathByGalleryId.set(String(row.id), selectedPath);
-      }
-    });
-
-    // The is_cover flag covers galleries where it and cover_media_id are out of sync.
-    flaggedCoverRows.forEach((row) => {
-      const galleryId = String(row.gallery_id);
-      if (!coverPathByGalleryId.has(galleryId)) {
-        coverPathByGalleryId.set(galleryId, String(row.storage_path));
-      }
-    });
-  }
-
-  // Only projects without a cover photo and without a hero image fall back to
-  // their first uploaded photo, so that lookup stays at one row per gallery.
-  const firstPhotoPathByGalleryId = new Map<string, string>();
-  const fallbackGalleryIds = data.flatMap((row) => {
-    const projectGalleries = galleriesByProjectId.get(String(row.id)) || [];
-    const alreadyResolved = projectGalleries.some(
-      (gallery) => coverPathByGalleryId.has(gallery.id) || gallery.heroImagePath,
-    );
-    return alreadyResolved ? [] : projectGalleries.map((gallery) => gallery.id);
-  });
-
-  if (fallbackGalleryIds.length > 0) {
-    const firstPhotos = await Promise.all(
-      fallbackGalleryIds.map(async (galleryId) => {
-        const { data: firstPhoto } = await admin
-          .from("media_assets")
-          .select("storage_path")
-          .eq("gallery_id", galleryId)
-          .order("sort_order", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        return {
-          galleryId,
-          storagePath: (firstPhoto?.storage_path as string | null) || null,
-        };
-      }),
-    );
-
-    firstPhotos.forEach(({ galleryId, storagePath }) => {
-      if (storagePath) {
-        firstPhotoPathByGalleryId.set(galleryId, storagePath);
-      }
-    });
-  }
-
-  const projectsWithCovers = await Promise.all(
-    data.map(async (row) => {
-      const normalized = {
-        ...row,
-        clients: ((row.clients as { client: Record<string, unknown> }[]) || []).map((c) => c.client),
-      };
-
-      const projectGalleries = galleriesByProjectId.get(String(row.id)) || [];
-
-      // The photo chosen as a gallery's cover is what the project thumbnail
-      // shows. Resolved across ALL of the project's galleries (a project can
-      // have more than one). Priority:
-      //   1. The selected cover photo (cover_media_id, or the is_cover flag
-      //      when the two are out of sync) on any gallery.
-      //   2. A custom uploaded hero image on any gallery.
-      //   3. The first uploaded photo of the first gallery that has media.
-      let coverStoragePath: string | null = null;
-
-      for (const g of projectGalleries) {
-        const selectedCover = coverPathByGalleryId.get(g.id);
-        if (selectedCover) {
-          coverStoragePath = selectedCover;
-          break;
-        }
-      }
-
-      if (!coverStoragePath) {
-        for (const g of projectGalleries) {
-          if (g.heroImagePath) {
-            coverStoragePath = g.heroImagePath;
-            break;
-          }
-        }
-      }
-
-      if (!coverStoragePath) {
-        for (const g of projectGalleries) {
-          const firstPhoto = firstPhotoPathByGalleryId.get(g.id);
-          if (firstPhoto) {
-            coverStoragePath = firstPhoto;
-            break;
-          }
-        }
-      }
-
+  return Promise.all(
+    rows.map(async (row) => {
+      const coverStoragePath = coverPathByProjectId.get(String(row.id)) || null;
       let coverImageUrl: string | null = null;
       if (coverStoragePath) {
         try {
@@ -406,18 +387,54 @@ export async function getProjects() {
           coverImageUrl = coverStoragePath;
         }
       }
-
-      return normalizeProject(normalized as unknown as Record<string, unknown>, coverImageUrl);
+      return normalizeProject(row, coverImageUrl);
     }),
   );
-
-  return projectsWithCovers;
 }
 
-export async function getProjectById(projectId: string) {
-  const projects = await getProjects();
-  return projects.find((project) => project.id === projectId) || null;
+const loadProjectsMemo = cache(loadProjects);
+
+/**
+ * Every project with clients, crew, tasks and deliverables. Memoized per
+ * request, so a layout and page (or 33 gallery cards) that all need the list
+ * share one load. `covers: false` skips the cover-photo lookups for pages that
+ * never render a thumbnail.
+ */
+export function getProjects(options?: { covers?: boolean }): Promise<Project[]> {
+  return loadProjectsMemo(options?.covers ?? true);
 }
+
+/**
+ * One project by id in a single query. It used to load every project and pick
+ * one out of the array. Cover images are not resolved here: only the listing
+ * pages show them, and they render the full list.
+ */
+export const getProjectById = cache(async (projectId: string): Promise<Project | null> => {
+  if (!projectId) {
+    return null;
+  }
+
+  if (!hasSupabaseEnv) {
+    return demoProject.id === projectId ? demoProject : null;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return demoProject.id === projectId ? demoProject : null;
+  }
+
+  const { data, error } = await admin
+    .from("projects")
+    .select(PROJECT_SELECT)
+    .eq("id", projectId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return normalizeProject(flattenProjectRow(data as Record<string, unknown>), null);
+});
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const projects = await getProjects();
@@ -437,7 +454,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   };
 }
 
-export async function getGalleries() {
+async function loadGalleries(): Promise<Gallery[]> {
   if (!hasSupabaseEnv) {
     return [demoGallery];
   }
@@ -466,7 +483,113 @@ export async function getGalleries() {
   })) as Gallery[];
 }
 
-export async function getGalleryById(galleryId: string): Promise<GalleryDetail | null> {
+export const getGalleries = cache(loadGalleries);
+
+const MEDIA_SELECT =
+  "id, gallery_id, section_id, storage_path, media_type, sort_order, is_cover, original_name, width, height, metadata_json";
+
+function normalizeGalleryRow(row: Record<string, unknown>): Gallery {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    slug: String(row.slug),
+    title: String(row.title),
+    isPublished: Boolean(row.is_published),
+    allowDownloads: Boolean(row.allow_downloads),
+    allowComments: Boolean(row.allow_comments),
+    hasPasscode: Boolean(row.passcode_hash),
+    passcodeHash: row.passcode_hash as string | null,
+    coverMediaId: row.cover_media_id as string | null,
+    heroImagePath: (row.hero_image_path as string | null) || null,
+  };
+}
+
+function normalizeMediaRow(row: Record<string, unknown>): MediaAsset {
+  const metadata = (row.metadata_json as Record<string, unknown> | null) || null;
+  const width = Number(row.width);
+  const height = Number(row.height);
+  return {
+    id: String(row.id),
+    galleryId: String(row.gallery_id),
+    sectionId: (row.section_id as string | null) || null,
+    storagePath: String(row.storage_path),
+    mediaType: (row.media_type as "photo" | "video") || "photo",
+    sortOrder: Number(row.sort_order || 0),
+    isCover: Boolean(row.is_cover),
+    originalName: (row.original_name as string | null) || null,
+    width: Number.isFinite(width) && width > 0 ? width : null,
+    height: Number.isFinite(height) && height > 0 ? height : null,
+    thumbnailPath: metadata && typeof metadata.thumbnail_path === "string" ? metadata.thumbnail_path : null,
+  };
+}
+
+/**
+ * Every media row of a gallery in sort order. Supabase caps a single select at
+ * 1000 rows and galleries can hold more, so this pages through the table;
+ * only the columns the pages use are selected.
+ */
+async function loadGalleryMedia(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  galleryId: string,
+): Promise<MediaAsset[]> {
+  const rows: MediaAsset[] = [];
+  const MEDIA_PAGE_SIZE = 1000;
+  for (let from = 0; ; from += MEDIA_PAGE_SIZE) {
+    // eslint-disable-next-line no-await-in-loop
+    const { data, error } = await admin
+      .from("media_assets")
+      .select(MEDIA_SELECT)
+      .eq("gallery_id", galleryId)
+      .order("sort_order", { ascending: true })
+      .range(from, from + MEDIA_PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) {
+      break;
+    }
+    rows.push(...data.map((row) => normalizeMediaRow(row as Record<string, unknown>)));
+    if (data.length < MEDIA_PAGE_SIZE) {
+      break;
+    }
+  }
+  return rows;
+}
+
+async function buildGalleryDetail(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  galleryRow: Record<string, unknown>,
+): Promise<GalleryDetail | null> {
+  const galleryId = String(galleryRow.id);
+
+  // The project, the sections and the media rows are independent of each
+  // other: one round trip instead of three.
+  const [project, sections, mediaAssets] = await Promise.all([
+    getProjectById(String(galleryRow.project_id)),
+    admin
+      .from("gallery_sections")
+      .select("id, gallery_id, name, sort_order")
+      .eq("gallery_id", galleryId)
+      .order("sort_order", { ascending: true }),
+    loadGalleryMedia(admin, galleryId),
+  ]);
+
+  if (!project) {
+    return null;
+  }
+
+  return {
+    gallery: normalizeGalleryRow(galleryRow),
+    project,
+    sections: (sections.data || []).map((row) => ({
+      id: String(row.id),
+      galleryId: String(row.gallery_id),
+      name: String(row.name),
+      sortOrder: Number(row.sort_order),
+    })),
+    mediaAssets,
+  };
+}
+
+export const getGalleryById = cache(async (galleryId: string): Promise<GalleryDetail | null> => {
   if (!hasSupabaseEnv) {
     if (demoGalleryDetail.gallery.id !== galleryId) {
       return null;
@@ -480,87 +603,15 @@ export async function getGalleryById(galleryId: string): Promise<GalleryDetail |
     return demoGalleryDetail;
   }
 
-  const { data: galleryRow } = await admin.from("galleries").select("*").eq("id", galleryId).single();
+  const { data: galleryRow } = await admin.from("galleries").select("*").eq("id", galleryId).maybeSingle();
   if (!galleryRow) {
     return null;
   }
 
-  const [project, sections] = await Promise.all([
-    getProjectById(String(galleryRow.project_id)),
-    admin
-      .from("gallery_sections")
-      .select("*")
-      .eq("gallery_id", galleryId)
-      .order("sort_order", { ascending: true }),
-  ]);
+  return buildGalleryDetail(admin, galleryRow as Record<string, unknown>);
+});
 
-  // Supabase caps a single select at 1000 rows. Galleries can hold more than
-  // that, so page through every media asset — otherwise the tail (e.g. videos,
-  // which are added last and therefore have the highest sort_order) is silently
-  // dropped and never rendered.
-  const mediaRows: Record<string, unknown>[] = [];
-  const MEDIA_PAGE_SIZE = 1000;
-  for (let from = 0; ; from += MEDIA_PAGE_SIZE) {
-    // eslint-disable-next-line no-await-in-loop
-    const { data, error } = await admin
-      .from("media_assets")
-      .select("*")
-      .eq("gallery_id", galleryId)
-      .order("sort_order", { ascending: true })
-      .range(from, from + MEDIA_PAGE_SIZE - 1);
-
-    if (error || !data || data.length === 0) {
-      break;
-    }
-    mediaRows.push(...data);
-    if (data.length < MEDIA_PAGE_SIZE) {
-      break;
-    }
-  }
-
-  if (!project) {
-    return null;
-  }
-
-  return {
-    gallery: {
-      id: String(galleryRow.id),
-      projectId: String(galleryRow.project_id),
-      slug: String(galleryRow.slug),
-      title: String(galleryRow.title),
-      isPublished: Boolean(galleryRow.is_published),
-      allowDownloads: Boolean(galleryRow.allow_downloads),
-      allowComments: Boolean(galleryRow.allow_comments),
-      hasPasscode: Boolean(galleryRow.passcode_hash),
-      passcodeHash: galleryRow.passcode_hash as string | null,
-      coverMediaId: galleryRow.cover_media_id as string | null,
-      heroImagePath: (galleryRow.hero_image_path as string | null) || null,
-    },
-    project,
-    sections: (sections.data || []).map((row) => ({
-      id: String(row.id),
-      galleryId: String(row.gallery_id),
-      name: String(row.name),
-      sortOrder: Number(row.sort_order),
-    })),
-    mediaAssets: mediaRows.map((row) => {
-      const metadata = (row.metadata_json as Record<string, unknown> | null) || null;
-      return {
-        id: String(row.id),
-        galleryId: String(row.gallery_id),
-        sectionId: (row.section_id as string | null) || null,
-        storagePath: String(row.storage_path),
-        mediaType: (row.media_type as "photo" | "video") || "photo",
-        sortOrder: Number(row.sort_order || 0),
-        isCover: Boolean(row.is_cover),
-        originalName: (row.original_name as string | null) || null,
-        thumbnailPath: metadata && typeof metadata.thumbnail_path === "string" ? metadata.thumbnail_path : null,
-      };
-    }),
-  };
-}
-
-export async function getPublicGalleryBySlug(slug: string) {
+export const getPublicGalleryBySlug = cache(async (slug: string): Promise<GalleryDetail | null> => {
   if (!hasSupabaseEnv) {
     if (demoGallery.slug !== slug || !demoGallery.isPublished) {
       return null;
@@ -579,13 +630,148 @@ export async function getPublicGalleryBySlug(slug: string) {
     .select("*")
     .eq("slug", slug)
     .eq("is_published", true)
-    .single();
+    .maybeSingle();
 
   if (!galleryRow) {
     return null;
   }
 
-  return getGalleryById(String(galleryRow.id));
+  return buildGalleryDetail(admin, galleryRow as Record<string, unknown>);
+});
+
+export type PublishedGalleryAccess = {
+  id: string;
+  projectId: string;
+  slug: string;
+  title: string;
+  projectTitle: string;
+  allowDownloads: boolean;
+  allowComments: boolean;
+  passcodeHash: string | null;
+};
+
+/**
+ * The published gallery row only (plus the project title): everything the
+ * view, favorites, comments, share, download and unlock handlers need. They
+ * used to load every media row and every project to get here.
+ */
+export const getPublishedGalleryAccess = cache(
+  async (slug: string): Promise<PublishedGalleryAccess | null> => {
+    if (!hasSupabaseEnv) {
+      const detail = await getPublicGalleryBySlug(slug);
+      return detail
+        ? {
+            id: detail.gallery.id,
+            projectId: detail.project.id,
+            slug: detail.gallery.slug,
+            title: detail.gallery.title,
+            projectTitle: detail.project.title,
+            allowDownloads: detail.gallery.allowDownloads,
+            allowComments: detail.gallery.allowComments,
+            passcodeHash: detail.gallery.passcodeHash || null,
+          }
+        : null;
+    }
+
+    const admin = createAdminClient();
+    if (!admin) {
+      return null;
+    }
+
+    const { data } = await admin
+      .from("galleries")
+      .select(
+        "id, project_id, slug, title, allow_downloads, allow_comments, passcode_hash, project:projects(title)",
+      )
+      .eq("slug", slug)
+      .eq("is_published", true)
+      .maybeSingle();
+
+    if (!data) {
+      return null;
+    }
+
+    const project = data.project as { title?: string | null } | Array<{ title?: string | null }> | null;
+    const projectTitle = Array.isArray(project) ? project[0]?.title : project?.title;
+
+    return {
+      id: String(data.id),
+      projectId: String(data.project_id),
+      slug: String(data.slug),
+      title: String(data.title || ""),
+      projectTitle: String(projectTitle || data.title || ""),
+      allowDownloads: Boolean(data.allow_downloads),
+      allowComments: Boolean(data.allow_comments),
+      passcodeHash: (data.passcode_hash as string | null) || null,
+    };
+  },
+);
+
+/** One media row, scoped to its gallery so handlers validate ownership in a single query. */
+export async function getMediaAssetInGallery(
+  galleryId: string,
+  assetId: string,
+): Promise<MediaAsset | null> {
+  if (!galleryId || !assetId) {
+    return null;
+  }
+
+  if (!hasSupabaseEnv) {
+    const detail = await getGalleryById(galleryId);
+    return detail?.mediaAssets.find((asset) => asset.id === assetId) || null;
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return null;
+  }
+
+  const { data } = await admin
+    .from("media_assets")
+    .select(MEDIA_SELECT)
+    .eq("gallery_id", galleryId)
+    .eq("id", assetId)
+    .maybeSingle();
+
+  return data ? normalizeMediaRow(data as Record<string, unknown>) : null;
+}
+
+/** Ids of every media row in a gallery, in sort order (one narrow, paged query). */
+export async function getMediaAssetIdsInGallery(galleryId: string): Promise<string[]> {
+  if (!galleryId) {
+    return [];
+  }
+
+  if (!hasSupabaseEnv) {
+    const detail = await getGalleryById(galleryId);
+    return (detail?.mediaAssets || []).map((asset) => asset.id);
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  const PAGE_SIZE = 1000;
+  for (let from = 0; ; from += PAGE_SIZE) {
+    // eslint-disable-next-line no-await-in-loop
+    const { data, error } = await admin
+      .from("media_assets")
+      .select("id")
+      .eq("gallery_id", galleryId)
+      .order("sort_order", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) {
+      break;
+    }
+    ids.push(...data.map((row) => String(row.id)));
+    if (data.length < PAGE_SIZE) {
+      break;
+    }
+  }
+  return ids;
 }
 
 export async function getGalleryFavorites(
@@ -636,7 +822,7 @@ export type OrganizationSettings = {
   contractCcEmail: string;
 };
 
-export async function getOrganizationSettings(): Promise<OrganizationSettings> {
+async function loadOrganizationSettings(): Promise<OrganizationSettings> {
   const empty: OrganizationSettings = {
     studioName: "",
     contactEmail: "",
@@ -695,7 +881,9 @@ export async function getOrganizationSettings(): Promise<OrganizationSettings> {
   };
 }
 
-export async function getCrewMemberIdsForEmail(email: string): Promise<string[]> {
+export const getOrganizationSettings = cache(loadOrganizationSettings);
+
+export const getCrewMemberIdsForEmail = cache(async (email: string): Promise<string[]> => {
   const normalized = (email || "").trim().toLowerCase();
   if (!hasSupabaseEnv || !normalized) {
     return [];
@@ -712,9 +900,9 @@ export async function getCrewMemberIdsForEmail(email: string): Promise<string[]>
     .or(`email.eq.${normalized},contact_info.eq.${normalized}`);
 
   return (members || []).map((row) => String(row.id));
-}
+});
 
-export async function getAssignedProjectIdsForEmail(email: string): Promise<string[]> {
+export const getAssignedProjectIdsForEmail = cache(async (email: string): Promise<string[]> => {
   const normalized = (email || "").trim().toLowerCase();
   if (!hasSupabaseEnv || !normalized) {
     return [];
@@ -736,7 +924,7 @@ export async function getAssignedProjectIdsForEmail(email: string): Promise<stri
     .in("crew_member_id", memberIds);
 
   return Array.from(new Set((assignments || []).map((row) => String(row.project_id))));
-}
+});
 
 export type NotificationItem = {
   id: string;
@@ -1050,7 +1238,7 @@ async function getClientIdsForEmail(email: string) {
   }));
 }
 
-export async function portalEmailCanAccessProject(email: string, projectId: string) {
+export const portalEmailCanAccessProject = cache(async (email: string, projectId: string) => {
   const clients = await getClientIdsForEmail(email);
   if (clients.length === 0) {
     return false;
@@ -1070,7 +1258,7 @@ export async function portalEmailCanAccessProject(email: string, projectId: stri
     .maybeSingle();
 
   return Boolean(data);
-}
+});
 
 export async function getPortalGalleriesForEmail(email: string): Promise<PortalGallery[]> {
   if (!hasSupabaseEnv) {
@@ -1116,35 +1304,24 @@ export async function getPortalGalleriesForEmail(email: string): Promise<PortalG
     (projects || []).map((row) => [String(row.id), { title: String(row.title || ""), eventDate: (row.event_date as string | null) || null }]),
   );
 
-  const galleryIds = publishedGalleries.map((row) => String(row.id));
-  const { data: media } = await admin
-    .from("media_assets")
-    .select("id, gallery_id, storage_path, is_cover, sort_order")
-    .in("gallery_id", galleryIds)
-    .order("sort_order", { ascending: true });
-
-  const mediaByGalleryId = new Map<string, Array<{ id: string; storagePath: string; isCover: boolean }>>();
-  (media || []).forEach((row) => {
-    const galleryId = String(row.gallery_id);
-    const list = mediaByGalleryId.get(galleryId) || [];
-    list.push({
+  // Cover lookups by id instead of loading every media row of every gallery.
+  const coverPathByGalleryId = await resolveGalleryCoverPaths(
+    admin,
+    publishedGalleries.map((row) => ({
       id: String(row.id),
-      storagePath: String(row.storage_path),
-      isCover: Boolean(row.is_cover),
-    });
-    mediaByGalleryId.set(galleryId, list);
-  });
+      projectId: String(row.project_id),
+      coverMediaId: (row.cover_media_id as string | null) || null,
+      heroImagePath: (row.hero_image_path as string | null) || null,
+    })),
+  );
 
   return Promise.all(
     publishedGalleries.map(async (row) => {
       const galleryId = String(row.id);
       const projectId = String(row.project_id);
       const project = projectById.get(projectId);
-      const assets = mediaByGalleryId.get(galleryId) || [];
-      const cover = assets.find((asset) => asset.isCover) || assets[0] || null;
       let coverUrl: string | null = null;
-      // A custom uploaded hero image takes precedence over the cover photo.
-      const coverStoragePath = (row.hero_image_path as string | null) || cover?.storagePath || null;
+      const coverStoragePath = coverPathByGalleryId.get(galleryId) || null;
       if (coverStoragePath) {
         try {
           coverUrl = await getSignedMediaUrl(coverStoragePath, 60 * 60 * 24 * 7);
@@ -1166,7 +1343,7 @@ export async function getPortalGalleriesForEmail(email: string): Promise<PortalG
   );
 }
 
-export async function getCrewMembers(): Promise<CrewMember[]> {
+async function loadCrewMembers(): Promise<CrewMember[]> {
   if (!hasSupabaseEnv) {
     return demoCrewMembersList;
   }
@@ -1197,7 +1374,9 @@ export async function getCrewMembers(): Promise<CrewMember[]> {
   }));
 }
 
-export async function getContacts(): Promise<Contact[]> {
+export const getCrewMembers = cache(loadCrewMembers);
+
+async function loadContacts(): Promise<Contact[]> {
   if (!hasSupabaseEnv) {
     return demoContacts;
   }
@@ -1225,6 +1404,8 @@ export async function getContacts(): Promise<Contact[]> {
     createdAt: String(row.created_at || ""),
   }));
 }
+
+export const getContacts = cache(loadContacts);
 
 export async function createGuestLink(
   galleryId: string,

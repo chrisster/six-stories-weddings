@@ -5,8 +5,11 @@ import { getContacts, getCrewMembers } from "@/lib/data";
 export const dynamic = "force-dynamic";
 
 export default async function NewWeddingPage() {
-  await requireAdminRole();
-  const [contacts, crewMembers] = await Promise.all([getContacts(), getCrewMembers()]);
+  const [, contacts, crewMembers] = await Promise.all([
+    requireAdminRole(),
+    getContacts(),
+    getCrewMembers(),
+  ]);
 
   return (
     <div className="space-y-4">

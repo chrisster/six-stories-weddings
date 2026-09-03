@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getPublicGalleryBySlug } from "@/lib/data";
+import { getPublishedGalleryAccess } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+// Favorites only need the gallery id, so the handlers resolve the published
+// gallery row alone instead of loading every media row and every project.
 async function resolveGalleryId(slug: string): Promise<string | null> {
-  const detail = await getPublicGalleryBySlug(slug);
-  return detail ? detail.gallery.id : null;
+  const gallery = await getPublishedGalleryAccess(slug);
+  return gallery ? gallery.id : null;
 }
 
 export async function GET(
