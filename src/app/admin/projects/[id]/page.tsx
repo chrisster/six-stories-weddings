@@ -5,6 +5,7 @@ import {
   addCrewToProjectAction,
   removeClientFromProjectAction,
   removeCrewFromProjectAction,
+  sendClientPortalAccessLinkAction,
   setClientPortalPasswordAction,
   shareTimeplanAction,
   updateClientAction,
@@ -32,8 +33,40 @@ type ProjectPageProps = {
     share?: string;
     audience?: string;
     count?: string;
+    portal?: string;
+    portalEmail?: string;
+    portalReason?: string;
   }>;
 };
+
+const PORTAL_LINK_ERRORS: Record<string, string> = {
+  no_email: "This client has no email address.",
+  inactive: "This client's portal account is deactivated.",
+  invalid_email: "This client's email address is not valid.",
+  not_configured: "Email sending is not configured.",
+  send_failed: "The email could not be sent. Check email settings.",
+  unavailable: "The client portal is unavailable right now.",
+};
+
+// Portal activity in studio time, in the dd-mm-yy style used on this page.
+function formatPortalTimestamp(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Athens",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("day")}-${part("month")}-${part("year")} ${part("hour")}:${part("minute")}`;
+}
 
 type ServiceType = "photo" | "film";
 
@@ -186,6 +219,21 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
         </div>
       ) : null}
 
+      {query.portal === "sent" ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+          Set-password link emailed to {query.portalEmail || "the client"}. It is valid for 7 days
+          and works once.
+        </div>
+      ) : null}
+
+      {query.portal === "error" ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          Could not email a set-password link
+          {query.portalEmail ? ` to ${query.portalEmail}` : ""}.{" "}
+          {PORTAL_LINK_ERRORS[query.portalReason || ""] || "Please try again."}
+        </div>
+      ) : null}
+
       <section className="soft-panel p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -280,6 +328,19 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                                         : "Account exists but no password is set yet"
                                       : "No portal account yet"}
                                   </p>
+                                  {portal ? (
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      Last sign-in: {portal.lastLoginAt ? formatPortalTimestamp(portal.lastLoginAt) : "never"}
+                                      {portal.lastNotifiedAt ? ` · Last emailed: ${formatPortalTimestamp(portal.lastNotifiedAt)}` : ""}
+                                    </p>
+                                  ) : null}
+                                  <form action={sendClientPortalAccessLinkAction} className="mt-3">
+                                    <input type="hidden" name="projectId" value={project.id} />
+                                    <input type="hidden" name="clientId" value={client.id} />
+                                    <button type="submit" className="h-10 rounded-xl border border-border px-4 text-sm hover:border-foreground/30">
+                                      Email a set-password link
+                                    </button>
+                                  </form>
                                   <form action={setClientPortalPasswordAction} className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
                                     <input type="hidden" name="projectId" value={project.id} />
                                     <input type="hidden" name="fullName" value={client.fullName} />

@@ -20,6 +20,12 @@ type PortalClaimPayload = {
   type: "claim";
   email: string;
   exp: number;
+  /**
+   * Fingerprint of the account's password hash when the link was issued, so the
+   * link stops working as soon as the password changes, including through the
+   * link itself. Links issued before this existed carry none.
+   */
+  pwv?: string;
 };
 
 export type PortalSession = {
@@ -140,18 +146,52 @@ export async function requirePortalSession() {
   return session;
 }
 
-export function createPortalClaimToken(email: string) {
+function passwordFingerprint(passwordHash: string | null) {
+  const secret = getSecretBuffer();
+  if (!secret) {
+    throw new Error("Missing client portal secret");
+  }
+
+  return createHmac("sha256", secret)
+    .update(`portal-password:${passwordHash ?? ""}`)
+    .digest("base64url")
+    .slice(0, 22);
+}
+
+/**
+ * A claim link doubles as a password reset link: it sets the password of the
+ * account it names. It is bound to the account's current password hash, so it
+ * works once and dies as soon as the password changes.
+ */
+export function createPortalClaimToken(email: string, passwordHash: string | null) {
   return signPayload({
     type: "claim",
     email: email.toLowerCase(),
     exp: Math.floor(Date.now() / 1000) + CLAIM_MAX_AGE,
+    pwv: passwordFingerprint(passwordHash),
   });
 }
 
+/** Checks the signature and expiry only; see claimTokenMatchesPassword. */
 export function verifyPortalClaimToken(token: string) {
   const payload = verifyPayload<PortalClaimPayload>(token);
   if (!payload || payload.type !== "claim") {
     return null;
   }
-  return { email: payload.email };
+  return { email: payload.email, pwv: payload.pwv ?? null };
+}
+
+export function claimTokenMatchesPassword(
+  claim: { pwv: string | null },
+  passwordHash: string | null,
+) {
+  // Links from before fingerprints existed only ever claimed accounts that had
+  // no password yet; they keep doing exactly that and nothing more.
+  if (!claim.pwv) {
+    return !passwordHash;
+  }
+
+  const expected = Buffer.from(passwordFingerprint(passwordHash));
+  const candidate = Buffer.from(claim.pwv);
+  return expected.length === candidate.length && timingSafeEqual(expected, candidate);
 }

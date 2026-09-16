@@ -55,6 +55,13 @@ export default async function Home({ searchParams }: HomeProps) {
               </div>
             )}
           </div>
+
+          <p className="mt-6 text-sm text-muted-foreground">
+            Looking for your gallery?{" "}
+            <Link href="/portal/login" className="underline underline-offset-4 hover:text-foreground">
+              Sign in to the client portal
+            </Link>
+          </p>
         </div>
       </section>
     </main>

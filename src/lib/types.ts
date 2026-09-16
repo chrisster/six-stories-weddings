@@ -20,6 +20,7 @@ export type ClientPortalAccountSummary = {
   email: string;
   hasPassword: boolean;
   isActive: boolean;
+  lastLoginAt?: string | null;
   lastNotifiedAt?: string | null;
 };
 

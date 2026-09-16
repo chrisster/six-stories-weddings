@@ -2,8 +2,10 @@
 
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
-import { clearPortalSession, createPortalSession, verifyPortalClaimToken } from "@/lib/portal-auth";
+import { resolvePortalClaim, sendPortalAccessLink } from "@/lib/portal-access";
+import { clearPortalSession, createPortalSession } from "@/lib/portal-auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -64,9 +66,9 @@ export async function completePortalClaimAction(formData: FormData) {
   const password = String(formData.get("password") || "");
   const confirmPassword = String(formData.get("confirmPassword") || "");
 
-  const claim = verifyPortalClaimToken(token);
+  const claim = await resolvePortalClaim(token);
   if (!claim) {
-    redirect("/portal/login?error=This access link has expired. Ask us to send a fresh one.");
+    redirect("/portal/forgot?error=expired");
   }
 
   if (password.length < 8) {
@@ -82,25 +84,53 @@ export async function completePortalClaimAction(formData: FormData) {
     redirect("/portal/login?error=Portal is unavailable right now.");
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  const { data: account, error } = await admin
-    .from("client_portal_accounts")
-    .upsert(
-      {
-        email: claim.email,
-        password_hash: passwordHash,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "email" },
-    )
-    .select("id, email")
-    .single();
+  const now = new Date().toISOString();
+  const fields = {
+    password_hash: await bcrypt.hash(password, 10),
+    is_active: true,
+    last_login_at: now,
+    updated_at: now,
+  };
 
-  if (error || !account) {
-    redirect("/portal/login?error=Could not activate your portal access.");
+  // The write only matches the password hash the link was issued for, so a
+  // link sets a password once, even when the form is submitted twice at once.
+  let account: { id: string; email: string } | null = null;
+  if (claim.accountId) {
+    const update = admin.from("client_portal_accounts").update(fields).eq("id", claim.accountId);
+    const { data } = await (claim.passwordHash
+      ? update.eq("password_hash", claim.passwordHash)
+      : update.is("password_hash", null)
+    ).select("id, email");
+    account = data?.[0] ?? null;
+  } else {
+    const { data } = await admin
+      .from("client_portal_accounts")
+      .insert({ email: claim.email, ...fields })
+      .select("id, email")
+      .maybeSingle();
+    account = data ?? null;
+  }
+
+  if (!account) {
+    redirect("/portal/forgot?error=expired");
   }
 
   await createPortalSession(String(account.id), String(account.email));
   redirect("/portal");
+}
+
+export async function requestPortalAccessLinkAction(formData: FormData) {
+  if (!hasSupabaseEnv) {
+    redirect("/portal/forgot?error=unavailable");
+  }
+
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  if (!email) {
+    redirect("/portal/forgot?error=email");
+  }
+
+  // Sent after the response, and the answer is the same either way, so neither
+  // the message nor the timing tells anyone which addresses are clients.
+  after(() => sendPortalAccessLink({ email, requestedByClient: true }));
+  redirect("/portal/forgot?sent=1");
 }

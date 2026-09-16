@@ -65,6 +65,14 @@ export default async function PortalLoginPage({ searchParams }: PortalLoginPageP
                 className="h-11 w-full rounded-xl border border-border px-3 text-sm"
                 placeholder="Your portal password"
               />
+              <div className="flex justify-end">
+                <Link
+                  href="/portal/forgot"
+                  className="text-xs text-muted-foreground underline underline-offset-4 transition hover:text-foreground"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
             </div>
 
             <button

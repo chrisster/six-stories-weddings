@@ -1235,7 +1235,7 @@ export async function getClientPortalAccountsByEmails(
 
   const { data } = await admin
     .from("client_portal_accounts")
-    .select("id, email, password_hash, is_active, last_notified_at")
+    .select("id, email, password_hash, is_active, last_login_at, last_notified_at")
     .in("email", normalized);
 
   const map: Record<string, ClientPortalAccountSummary> = {};
@@ -1247,6 +1247,7 @@ export async function getClientPortalAccountsByEmails(
       email,
       hasPassword: Boolean(row.password_hash),
       isActive: Boolean(row.is_active),
+      lastLoginAt: (row.last_login_at as string | null) || null,
       lastNotifiedAt: (row.last_notified_at as string | null) || null,
     };
   });
@@ -1289,7 +1290,13 @@ export async function getGalleryNotificationTemplate(
   };
 }
 
-async function getClientIdsForEmail(email: string) {
+/**
+ * The client records behind a portal email. Matching is case-insensitive but
+ * exact: ilike treats `_`, `%` and `*` as wildcards, so its rows are compared
+ * again here, or a portal account like `a_b@x.com` would inherit the galleries
+ * of `axb@x.com`.
+ */
+export async function getClientIdsForEmail(email: string) {
   const normalized = email.trim().toLowerCase();
   if (!normalized || !hasSupabaseEnv) {
     return [] as Array<{ id: string; fullName: string }>;
@@ -1302,13 +1309,15 @@ async function getClientIdsForEmail(email: string) {
 
   const { data } = await admin
     .from("clients")
-    .select("id, full_name")
+    .select("id, full_name, email")
     .ilike("email", normalized);
 
-  return (data || []).map((row) => ({
-    id: String(row.id),
-    fullName: String(row.full_name || ""),
-  }));
+  return (data || [])
+    .filter((row) => String(row.email || "").trim().toLowerCase() === normalized)
+    .map((row) => ({
+      id: String(row.id),
+      fullName: String(row.full_name || ""),
+    }));
 }
 
 export const portalEmailCanAccessProject = cache(async (email: string, projectId: string) => {

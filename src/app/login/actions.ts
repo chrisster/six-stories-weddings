@@ -1,8 +1,11 @@
 "use server";
 
+import { after } from "next/server";
+
 import { getAppUrl, hasSupabaseEnv } from "@/lib/env";
 import { sendGalleryNotificationEmail } from "@/lib/gallery-notifications";
 import { createPasswordSetupToken } from "@/lib/password-setup";
+import { sendPortalAccessLink } from "@/lib/portal-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -66,6 +69,10 @@ export async function requestPasswordResetAction(
         const text = `Reset your Six Stories Studio password:\n\n${actionLink}`;
         await sendGalleryNotificationEmail({ to: normalized, subject, html, text });
       }
+    } else {
+      // Clients looking for their gallery land on this page too. An address
+      // with portal access gets a link for the client portal instead of nothing.
+      after(() => sendPortalAccessLink({ email: normalized, requestedByClient: true }));
     }
   } catch {
     // Swallow errors so we never leak account existence or provider details.

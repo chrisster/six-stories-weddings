@@ -1,7 +1,7 @@
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 
 import { completePortalClaimAction } from "@/app/portal/actions";
-import { verifyPortalClaimToken } from "@/lib/portal-auth";
+import { resolvePortalClaim } from "@/lib/portal-access";
 
 type PortalClaimPageProps = {
   searchParams: Promise<{ token?: string; error?: string }>;
@@ -9,9 +9,11 @@ type PortalClaimPageProps = {
 
 export default async function PortalClaimPage({ searchParams }: PortalClaimPageProps) {
   const { token = "", error } = await searchParams;
-  const claim = verifyPortalClaimToken(token);
+  // An expired or already used link used to end on a bare 404; send the client
+  // where they can ask for a new one instead.
+  const claim = await resolvePortalClaim(token);
   if (!claim) {
-    notFound();
+    redirect("/portal/forgot?error=expired");
   }
 
   return (

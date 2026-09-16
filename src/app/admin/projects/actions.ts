@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import { hasSupabaseEnv } from "@/lib/env";
 import { getCurrentUser, requireStudioAdmin, requireStudioUser, type AppRole } from "@/lib/auth";
 import { notifyCrewMemberById } from "@/lib/data";
+import { sendPortalAccessLink } from "@/lib/portal-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function toNumber(value: FormDataEntryValue | null) {
@@ -994,4 +995,50 @@ export async function setClientPortalPasswordAction(formData: FormData) {
 
   revalidatePath(`/admin/projects/${projectId}`);
   revalidatePath("/portal");
+}
+
+export async function sendClientPortalAccessLinkAction(formData: FormData) {
+  const projectId = String(formData.get("projectId") || "").trim();
+  const clientId = String(formData.get("clientId") || "").trim();
+  const back = `/admin/projects/${projectId}`;
+
+  if (!hasSupabaseEnv) {
+    redirect(`${back}?portal=error&portalReason=unavailable`);
+  }
+
+  await requireStudioAdmin();
+
+  const admin = createAdminClient();
+  if (!projectId || !clientId || !admin) {
+    redirect(`${back}?portal=error&portalReason=unavailable`);
+  }
+
+  // The address comes from the client record on this project, never from the
+  // form, so the button cannot be pointed at an arbitrary inbox.
+  const [{ data: link }, { data: client }] = await Promise.all([
+    admin
+      .from("project_clients")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("client_id", clientId)
+      .maybeSingle(),
+    admin.from("clients").select("full_name, email").eq("id", clientId).maybeSingle(),
+  ]);
+
+  const email = String(client?.email || "").trim().toLowerCase();
+  if (!link || !email) {
+    redirect(`${back}?portal=error&portalReason=no_email`);
+  }
+
+  const result = await sendPortalAccessLink({
+    email,
+    fullName: String(client?.full_name || "").trim() || null,
+    requestedByClient: false,
+  });
+
+  revalidatePath(back);
+  if (result.status === "sent") {
+    redirect(`${back}?portal=sent&portalEmail=${encodeURIComponent(email)}`);
+  }
+  redirect(`${back}?portal=error&portalReason=${result.reason}&portalEmail=${encodeURIComponent(email)}`);
 }

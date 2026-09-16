@@ -207,7 +207,7 @@ export async function updateGallerySettingsAction(formData: FormData) {
 
         const claimUrl = account?.password_hash
           ? null
-          : `${loginUrl.replace(/\/login$/, "/claim")}?token=${encodeURIComponent(createPortalClaimToken(email))}`;
+          : `${loginUrl.replace(/\/login$/, "/claim")}?token=${encodeURIComponent(createPortalClaimToken(email, null))}`;
         const template = {
           emailSubject: emailSubject || defaultTemplate.emailSubject,
           emailHeadline: emailHeadline || defaultTemplate.emailHeadline,
