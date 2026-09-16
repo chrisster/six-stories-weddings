@@ -21,8 +21,17 @@ import { ProjectSaveButton } from "@/components/admin/project-save-button";
 import { ProjectTimeplanFields } from "@/components/admin/project-timeplan-fields";
 import { getClientPortalAccountsByEmails, getAssignedProjectIdsForEmail, getContacts, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
 import { getCurrentUser, requireStudioRole } from "@/lib/auth";
+import {
+  getOrgContractSettings,
+  listContractsForProject,
+  listContractTemplates,
+  type ContractRecord,
+} from "@/lib/contract-data";
+import { canSendContractEmails, resolveContractCcEmail } from "@/lib/contract-notifications";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
+
+import { ProjectContracts, type ProjectContractSummary } from "./project-contracts";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -36,8 +45,43 @@ type ProjectPageProps = {
     portal?: string;
     portalEmail?: string;
     portalReason?: string;
+    contract?: string;
+    created?: string;
   }>;
 };
+
+const CONTRACT_MESSAGES: Record<string, { tone: "ok" | "warn" | "error"; text: string }> = {
+  sent: { tone: "ok", text: "Contract sent for signature." },
+  resent: { tone: "ok", text: "Signing link reissued and emailed." },
+  sent_no_email: {
+    tone: "warn",
+    text: "Contract created, but email is not configured — copy the signing link from the contracts page.",
+  },
+  voided: { tone: "ok", text: "Contract voided and its signing link disabled." },
+  error: { tone: "error", text: "Something went wrong with the contract." },
+};
+
+const BANNER_CLASS: Record<"ok" | "warn" | "error", string> = {
+  ok: "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700",
+  warn: "rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-2 text-sm text-amber-900",
+  error: "rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700",
+};
+
+function summarizeContract(contract: ContractRecord): ProjectContractSummary {
+  return {
+    id: contract.id,
+    status: contract.status,
+    title: contract.templateSnapshot.title,
+    recipientName: contract.recipientName,
+    recipientEmail: contract.recipientEmail,
+    ccEmails: contract.ccEmails,
+    updatedAt:
+      contract.signedAt || contract.viewedAt || contract.sentAt || contract.createdAt,
+    hasPdf: Boolean(contract.pdfPath),
+    pdfSha256: contract.pdfSha256,
+    voidReason: contract.voidReason,
+  };
+}
 
 const PORTAL_LINK_ERRORS: Record<string, string> = {
   no_email: "This client has no email address.",
@@ -146,13 +190,18 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
   const linkedGallery = galleries.find((gallery) => gallery.projectId === project.id);
   const isCrew = role === "crew";
 
-  const [portalAccounts, assignedIds] = await Promise.all([
+  // Contracts are admin-only, like the Contracts page itself; crew never
+  // loads them.
+  const [portalAccounts, assignedIds, contracts, templates, org] = await Promise.all([
     getClientPortalAccountsByEmails(
       project.clients.map((client) => client.email || "").filter(Boolean),
     ),
     isCrew
       ? getCurrentUser().then((user) => getAssignedProjectIdsForEmail(user?.email || ""))
       : Promise.resolve<string[]>([]),
+    isCrew ? Promise.resolve<ContractRecord[]>([]) : listContractsForProject(project.id),
+    isCrew ? Promise.resolve([]) : listContractTemplates(),
+    isCrew ? Promise.resolve(null) : getOrgContractSettings(),
   ]);
 
   if (isCrew && !assignedIds.includes(project.id)) {
@@ -180,8 +229,32 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
       !(contact.email && projectClientEmails.has(contact.email.toLowerCase())),
   );
 
+  const contractBanner = query.contract ? CONTRACT_MESSAGES[query.contract] : null;
+
   return (
     <div className="space-y-6">
+      {query.created === "1" ? (
+        <div className={BANNER_CLASS.ok}>
+          Project created.{" "}
+          {!isCrew ? (
+            <>
+              Send the contract from the{" "}
+              <a href="#contracts" className="underline underline-offset-2">
+                Contracts
+              </a>{" "}
+              section below.
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {contractBanner ? (
+        <div className={BANNER_CLASS[contractBanner.tone]}>
+          {contractBanner.text}
+          {query.contract === "error" && query.reason ? ` ${query.reason}` : null}
+        </div>
+      ) : null}
+
       {query.save === "ok" ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
           Project saved.
@@ -378,6 +451,40 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
           <p className="px-5 py-6 text-sm text-muted-foreground">No clients yet.</p>
         )}
       </section>
+
+      {!isCrew && org ? (
+        <ProjectContracts
+          project={{
+            id: project.id,
+            title: project.title,
+            eventDate: project.eventDate || null,
+            clients: project.clients.map((client) => ({
+              id: client.id,
+              fullName: client.fullName,
+              email: client.email ?? null,
+            })),
+          }}
+          contracts={contracts.map(summarizeContract)}
+          templates={templates.map((template) => ({
+            id: template.id,
+            isActive: template.isActive,
+            snapshot: template.snapshot,
+          }))}
+          studio={{
+            place: org.place,
+            studioName: org.studioName,
+            studioLegalName: org.studioLegalName,
+            studioCity: org.studioCity,
+            studioAddress: org.studioAddress,
+            studioVatId: org.studioVatId,
+            studioTaxOffice: org.studioTaxOffice,
+            studioRepresentatives: org.studioRepresentatives,
+          }}
+          studioCcEmail={resolveContractCcEmail(org.contractCcEmail)}
+          emailReady={canSendContractEmails()}
+          openComposer={query.created === "1"}
+        />
+      ) : null}
 
       <section className="soft-panel p-5">
         <div className="mb-3 flex items-center justify-between gap-3">

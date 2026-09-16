@@ -11,7 +11,8 @@ import {
 import { getProjects } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
-import { SendContractForm } from "./send-form";
+import { ContractComposer } from "@/components/contracts/contract-composer";
+
 import { ContractsManager } from "./contracts-manager";
 
 export const dynamic = "force-dynamic";
@@ -111,19 +112,34 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
             + Send a contract
           </summary>
           <div className="mt-4">
-            <SendContractForm
+            <ContractComposer
               templates={templates.map((template) => ({
                 id: template.id,
-                name: template.snapshot.name,
-                language: template.snapshot.language,
                 isActive: template.isActive,
+                snapshot: template.snapshot,
               }))}
               projects={projects.map((project) => ({
                 id: project.id,
                 title: project.title,
-                clientEmail: project.clients?.[0]?.email ?? null,
-                clientName: project.clients?.[0]?.fullName ?? null,
+                eventDate: project.eventDate || null,
+                clients: (project.clients ?? []).map((client) => ({
+                  id: client.id,
+                  fullName: client.fullName,
+                  email: client.email ?? null,
+                })),
               }))}
+              studio={{
+                place: org.place,
+                studioName: org.studioName,
+                studioLegalName: org.studioLegalName,
+                studioCity: org.studioCity,
+                studioAddress: org.studioAddress,
+                studioVatId: org.studioVatId,
+                studioTaxOffice: org.studioTaxOffice,
+                studioRepresentatives: org.studioRepresentatives,
+              }}
+              studioCcEmail={ccEmail}
+              emailReady={emailReady}
             />
           </div>
         </details>

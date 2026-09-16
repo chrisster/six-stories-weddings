@@ -404,7 +404,9 @@ export async function createProjectAction(formData: FormData) {
   revalidatePath("/admin/projects");
   revalidatePath("/admin/galleries");
 
-  redirect(`/admin/projects/${project.id}`);
+  // The project page opens its Contracts section, so the contract can go out
+  // to the clients just entered without another detour.
+  redirect(`/admin/projects/${project.id}?created=1`);
 }
 
 export async function deleteProjectAction(formData: FormData) {

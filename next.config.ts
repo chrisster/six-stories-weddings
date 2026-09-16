@@ -32,6 +32,8 @@ const nextConfig: NextConfig = {
     "/api/contracts/**": ["./node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf"],
     "/sign/**": ["./node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf"],
     "/admin/contracts/**": ["./node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf"],
+    // The project page hosts the same send/resend/void actions as /admin/contracts.
+    "/admin/projects/**": ["./node_modules/dejavu-fonts-ttf/ttf/DejaVuSerif*.ttf"],
     "/api/media/thumb": sharpTraceIncludes,
     // The organization pages' server actions rasterize signatures with sharp
     // (src/lib/signature-image.ts).

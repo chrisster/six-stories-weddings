@@ -14,6 +14,7 @@ import {
   voidContract,
 } from "@/lib/contract-data";
 import { requireStudioAdmin } from "@/lib/auth";
+import type { ContractWordingOverride } from "@/lib/contracts";
 import { hasSupabaseEnv } from "@/lib/env";
 
 async function requireAdmin() {
@@ -22,37 +23,110 @@ async function requireAdmin() {
   return member?.email ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Where to land afterwards
+// ---------------------------------------------------------------------------
+
+type ReturnTarget = { base: string; param: string };
+
+/**
+ * Send, resend and void run from two places: the contracts page and a
+ * project's own Contracts section. The form says which with `returnTo`. Only a
+ * project page path is accepted, so the field can never become an open
+ * redirect; anything else lands on the contracts page as before.
+ */
+function resolveReturn(formData: FormData): ReturnTarget {
+  const raw = String(formData.get("returnTo") || "").trim();
+  if (/^\/admin\/projects\/[A-Za-z0-9-]+$/.test(raw)) {
+    return { base: raw, param: "contract" };
+  }
+  return { base: "/admin/contracts", param: "status" };
+}
+
+function statusUrl(target: ReturnTarget, status: string, reason?: string | null): string {
+  const params = new URLSearchParams({ [target.param]: status });
+  if (reason) params.set("reason", reason);
+  return `${target.base}?${params.toString()}`;
+}
+
+function revalidateAfterContractChange(target: ReturnTarget, projectId: string | null) {
+  revalidatePath("/admin/contracts");
+  revalidatePath("/admin");
+  if (projectId) revalidatePath(`/admin/projects/${projectId}`);
+  if (target.base !== "/admin/contracts") revalidatePath(target.base);
+}
+
+/**
+ * Per-contract wording arrives as JSON from the composer, the same way the
+ * template editor posts its clause list. Absent or empty means "as the
+ * template says".
+ */
+function parseWording(formData: FormData): ContractWordingOverride | null {
+  const raw = String(formData.get("wording") || "").trim();
+  if (!raw) return null;
+  const parsed = JSON.parse(raw) as Partial<ContractWordingOverride>;
+  return {
+    title: String(parsed.title ?? ""),
+    intro: String(parsed.intro ?? ""),
+    clauses: Array.isArray(parsed.clauses)
+      ? parsed.clauses.map((clause) => ({
+          heading: String(clause?.heading ?? ""),
+          body: String(clause?.body ?? ""),
+        }))
+      : [],
+    closing: String(parsed.closing ?? ""),
+  };
+}
+
 export async function sendContractAction(formData: FormData) {
   const actorEmail = await requireAdmin();
+  const target = resolveReturn(formData);
+  const projectId = String(formData.get("projectId") || "").trim() || null;
+
+  let wording: ContractWordingOverride | null = null;
+  try {
+    wording = parseWording(formData);
+  } catch {
+    redirect(statusUrl(target, "error", "Could not read the edited wording. Please try again."));
+  }
+
+  // Ticked project clients come one per field; anything typed by hand comes
+  // as free text. Both are validated together in createAndSendContract.
+  const ccEmails = [
+    ...formData.getAll("ccEmails").map((value) => String(value)),
+    ...String(formData.get("ccExtra") || "").split(/[,;\n]+/),
+  ];
 
   const result = await createAndSendContract({
-    projectId: String(formData.get("projectId") || "").trim() || null,
+    projectId,
     recipientEmail: String(formData.get("recipientEmail") || ""),
     recipientName: String(formData.get("recipientName") || "") || null,
     templateId: String(formData.get("templateId") || "").trim() || null,
+    ccEmails,
+    wording,
     actorEmail,
   });
 
   if (!result.ok) {
-    redirect(`/admin/contracts?status=error&reason=${encodeURIComponent(result.error)}`);
+    redirect(statusUrl(target, "error", result.error));
   }
 
-  revalidatePath("/admin/contracts");
-  revalidatePath("/admin");
-  redirect(`/admin/contracts?status=${result.emailed ? "sent" : "sent_no_email"}`);
+  revalidateAfterContractChange(target, projectId);
+  redirect(statusUrl(target, result.emailed ? "sent" : "sent_no_email"));
 }
 
 export async function resendContractAction(formData: FormData) {
   const actorEmail = await requireAdmin();
+  const target = resolveReturn(formData);
   const id = String(formData.get("contractId") || "").trim();
 
   const result = await resendContract(id, actorEmail);
   if (!result.ok) {
-    redirect(`/admin/contracts?status=error&reason=${encodeURIComponent(result.error)}`);
+    redirect(statusUrl(target, "error", result.error));
   }
 
-  revalidatePath("/admin/contracts");
-  redirect(`/admin/contracts?status=${result.emailed ? "resent" : "sent_no_email"}`);
+  revalidateAfterContractChange(target, null);
+  redirect(statusUrl(target, result.emailed ? "resent" : "sent_no_email"));
 }
 
 /** Preserves the folder the admin was viewing across a redirect. */
@@ -153,14 +227,15 @@ export async function deleteContractsAction(formData: FormData) {
 
 export async function voidContractAction(formData: FormData) {
   const actorEmail = await requireAdmin();
+  const target = resolveReturn(formData);
   const id = String(formData.get("contractId") || "").trim();
   const reason = String(formData.get("reason") || "");
 
   const result = await voidContract(id, reason, actorEmail);
   if (!result.ok) {
-    redirect(`/admin/contracts?status=error&reason=${encodeURIComponent(result.error ?? "")}`);
+    redirect(statusUrl(target, "error", result.error ?? ""));
   }
 
-  revalidatePath("/admin/contracts");
-  redirect("/admin/contracts?status=voided");
+  revalidateAfterContractChange(target, null);
+  redirect(statusUrl(target, "voided"));
 }

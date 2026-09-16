@@ -67,6 +67,9 @@ export function ContractRow({
       <td className="px-4 py-3">
         <p className="font-medium text-foreground">{contract.recipientName || "—"}</p>
         <p className="text-xs text-muted-foreground">{contract.recipientEmail}</p>
+        {contract.ccEmails.length > 0 ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">cc {contract.ccEmails.join(", ")}</p>
+        ) : null}
         {contract.signer?.vatId ? (
           <p className="mt-0.5 text-xs text-muted-foreground">ΑΦΜ {contract.signer.vatId}</p>
         ) : null}

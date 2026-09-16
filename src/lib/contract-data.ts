@@ -1,4 +1,5 @@
 import { DEFAULT_CONTRACT_TEMPLATE } from "@/lib/contract-template-default";
+import { DEFAULT_CONTRACT_TEMPLATE_EN } from "@/lib/contract-template-default-en";
 import {
   canSendContractEmails,
   renderContractInviteEmail,
@@ -19,16 +20,19 @@ import {
   strings,
   type ContractLanguage,
 } from "@/lib/contract-i18n";
+import { sha256Hex } from "@/lib/contract-hash";
 import {
+  applyWordingOverride,
   buildMergeValues,
   buildPreviewValues,
+  normalizeEmailList,
   renderContract,
-  sha256Hex,
   validateSigner,
   type ContractMergeData,
   type ContractSigner,
   type ContractStatus,
   type ContractTemplateSnapshot,
+  type ContractWordingOverride,
 } from "@/lib/contracts";
 import { createNotification } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
@@ -60,6 +64,8 @@ export type ContractRecord = {
   status: ContractStatus;
   recipientEmail: string;
   recipientName: string | null;
+  /** Copied on the invitation and the signed copy; never the signer. */
+  ccEmails: string[];
   templateSnapshot: ContractTemplateSnapshot;
   mergeData: ContractMergeData;
   signer: ContractSigner | null;
@@ -244,7 +250,13 @@ function mapTemplate(row: Record<string, unknown>): ContractTemplateRecord {
 
 export async function listContractTemplates(): Promise<ContractTemplateRecord[]> {
   const admin = createAdminClient();
-  if (!admin) return [];
+  // Demo mode: the built-in wording, so the send form can still be previewed.
+  if (!admin) {
+    return [
+      { id: "default-el", snapshot: DEFAULT_CONTRACT_TEMPLATE, isActive: true, updatedAt: "" },
+      { id: "default-en", snapshot: DEFAULT_CONTRACT_TEMPLATE_EN, isActive: false, updatedAt: "" },
+    ];
+  }
   const { data } = await admin
     .from("contract_templates")
     .select(TEMPLATE_COLUMNS)
@@ -342,6 +354,7 @@ function mapContract(row: ContractRow): ContractRecord {
     status: row.status as ContractStatus,
     recipientEmail: String(row.recipient_email),
     recipientName: (row.recipient_name as string) ?? null,
+    ccEmails: normalizeEmailList(row.cc_emails ?? []).emails,
     templateSnapshot: row.template_snapshot as ContractTemplateSnapshot,
     mergeData: row.merge_data as ContractMergeData,
     signer: hasSigner
@@ -371,12 +384,10 @@ function mapContract(row: ContractRow): ContractRecord {
   };
 }
 
-const CONTRACT_COLUMNS =
-  "id, project_id, template_id, template_snapshot, merge_data, recipient_email, recipient_name, " +
-  "status, expires_at, sent_at, viewed_at, signed_at, signer_first_name, signer_last_name, " +
-  "signer_city, signer_street, signer_is_company, signer_company_name, signer_vat_id, " +
-  "signer_tax_office, signer_email, signature_kind, signature_data, consent_text, pdf_path, " +
-  "pdf_sha256, void_reason, folder_id, created_at";
+// Every column: the service role is the only reader, and `mapContract` decides
+// what leaves this module. Naming columns would also make a read fail while a
+// migration that adds one (such as cc_emails) is still pending.
+const CONTRACT_COLUMNS = "*";
 
 // ---------------------------------------------------------------------------
 // Admin reads
@@ -408,6 +419,18 @@ export async function getContractById(id: string): Promise<ContractRecord | null
   return data ? mapContract(data as ContractRow) : null;
 }
 
+/** Every contract issued for a project, whatever folder it was filed in. */
+export async function listContractsForProject(projectId: string): Promise<ContractRecord[]> {
+  const admin = createAdminClient();
+  if (!admin || !projectId) return [];
+  const { data } = await admin
+    .from("contracts")
+    .select(`${CONTRACT_COLUMNS}, projects(title)`)
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  return (data ?? []).map((row) => mapContract(row as ContractRow));
+}
+
 // ---------------------------------------------------------------------------
 // Create + send
 // ---------------------------------------------------------------------------
@@ -422,6 +445,13 @@ export async function createAndSendContract(args: {
   recipientName: string | null;
   /** Omit to use whichever template is marked active. */
   templateId?: string | null;
+  /** Extra addresses copied on the invitation and on the signed copy. */
+  ccEmails?: string[];
+  /**
+   * Edits to the template wording for this one contract. The template itself
+   * is untouched; the edited text is what gets frozen into the snapshot.
+   */
+  wording?: ContractWordingOverride | null;
   actorEmail?: string | null;
 }): Promise<SendContractResult> {
   if (!hasSupabaseEnv) return { ok: false, error: "Το Supabase δεν έχει ρυθμιστεί." };
@@ -433,6 +463,12 @@ export async function createAndSendContract(args: {
     return { ok: false, error: "Μη έγκυρη διεύθυνση email." };
   }
 
+  const cc = normalizeEmailList(args.ccEmails ?? [], { exclude: [recipientEmail] });
+  if (cc.invalid.length > 0) {
+    return { ok: false, error: `Μη έγκυρη διεύθυνση CC: ${cc.invalid.join(", ")}` };
+  }
+  const ccEmails = cc.emails;
+
   const [org, template] = await Promise.all([
     getOrgContractSettings(),
     args.templateId ? getContractTemplateById(args.templateId) : getActiveContractTemplate(),
@@ -442,7 +478,12 @@ export async function createAndSendContract(args: {
     return { ok: false, error: "Το πρότυπο συμβολαίου δεν βρέθηκε." };
   }
 
-  const language = normalizeLanguage(template.snapshot.language);
+  const wording = applyWordingOverride(template.snapshot, args.wording);
+  if (!wording.ok) return { ok: false, error: wording.error };
+  const snapshot = wording.snapshot;
+  const wordingEdited = Boolean(args.wording);
+
+  const language = normalizeLanguage(snapshot.language);
 
   // Freeze project details into merge_data so a later project rename cannot
   // change the wording of an already-issued contract.
@@ -476,22 +517,30 @@ export async function createAndSendContract(args: {
 
   const { rawToken, tokenHash, expiresAt } = createContractToken();
 
-  const { data: inserted, error } = await admin
-    .from("contracts")
-    .insert({
-      project_id: args.projectId,
-      template_id: template.id,
-      template_snapshot: template.snapshot,
-      merge_data: mergeData,
-      recipient_email: recipientEmail,
-      recipient_name: args.recipientName?.trim() || null,
-      status: "sent",
-      token_hash: tokenHash,
-      expires_at: expiresAt,
-      sent_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  const row: Record<string, unknown> = {
+    project_id: args.projectId,
+    template_id: template.id,
+    template_snapshot: snapshot,
+    merge_data: mergeData,
+    recipient_email: recipientEmail,
+    recipient_name: args.recipientName?.trim() || null,
+    cc_emails: ccEmails,
+    status: "sent",
+    token_hash: tokenHash,
+    expires_at: expiresAt,
+    sent_at: new Date().toISOString(),
+  };
+
+  let { data: inserted, error } = await admin.from("contracts").insert(row).select("id").single();
+
+  // Code can deploy ahead of migration 0032. Until it runs, keep sending: the
+  // CC list still goes on the invite from memory and is kept in the audit row.
+  let ccColumnMissing = false;
+  if (error && /cc_emails/i.test(error.message)) {
+    ccColumnMissing = true;
+    delete row.cc_emails;
+    ({ data: inserted, error } = await admin.from("contracts").insert(row).select("id").single());
+  }
 
   if (error || !inserted) {
     return { ok: false, error: error?.message || "Δεν ήταν δυνατή η δημιουργία του συμβολαίου." };
@@ -501,14 +550,21 @@ export async function createAndSendContract(args: {
   const signingUrl = buildSigningUrl(rawToken);
 
   await logContractEvent(contractId, "created", {
-    meta: { actor: args.actorEmail || null, templateVersion: template.snapshot.version },
+    meta: {
+      actor: args.actorEmail || null,
+      templateVersion: snapshot.version,
+      wordingEdited,
+      cc: ccEmails,
+      ...(ccColumnMissing ? { ccColumnMissing: true } : {}),
+    },
   });
 
   const emailed = await sendContractInvite({
     contractId,
     recipientEmail,
     recipientName: args.recipientName,
-    contractTitle: template.snapshot.title,
+    ccEmails,
+    contractTitle: snapshot.title,
     projectTitle,
     signingUrl,
     studioName: org.studioName,
@@ -525,6 +581,7 @@ async function sendContractInvite(args: {
   contractId: string;
   recipientEmail: string;
   recipientName: string | null | undefined;
+  ccEmails: string[];
   contractTitle: string;
   projectTitle: string | null;
   signingUrl: string;
@@ -554,13 +611,19 @@ async function sendContractInvite(args: {
 
   await sendGalleryNotificationEmail({
     to: args.recipientEmail,
+    cc: args.ccEmails,
     subject: email.subject,
     html: email.html,
     text: email.text,
   });
 
   await logContractEvent(args.contractId, args.isReminder ? "reminder_sent" : "sent", {
-    meta: { emailed: true, to: args.recipientEmail, actor: args.actorEmail ?? null },
+    meta: {
+      emailed: true,
+      to: args.recipientEmail,
+      cc: args.ccEmails,
+      actor: args.actorEmail ?? null,
+    },
   });
 
   return true;
@@ -607,6 +670,7 @@ export async function resendContract(
     contractId,
     recipientEmail: contract.recipientEmail,
     recipientName: contract.recipientName,
+    ccEmails: contract.ccEmails,
     contractTitle: contract.templateSnapshot.title,
     projectTitle: contract.projectTitle,
     signingUrl,
@@ -952,10 +1016,15 @@ async function emailSignedCopy(args: {
     args.contract.id.slice(0, 8)
   }.pdf`;
 
+  // The studio copy first, then whoever the studio chose to keep in the loop.
+  const cc = normalizeEmailList([args.ccEmail, ...args.contract.ccEmails], {
+    exclude: [args.contract.recipientEmail],
+  }).emails;
+
   try {
     await sendGalleryNotificationEmail({
       to: args.contract.recipientEmail,
-      cc: args.ccEmail,
+      cc,
       subject: email.subject,
       html: email.html,
       text: email.text,
@@ -974,7 +1043,7 @@ async function emailSignedCopy(args: {
   }
 
   await logContractEvent(args.contract.id, "copy_emailed", {
-    meta: { emailed: true, to: args.contract.recipientEmail, cc: args.ccEmail },
+    meta: { emailed: true, to: args.contract.recipientEmail, cc },
   });
   return true;
 }

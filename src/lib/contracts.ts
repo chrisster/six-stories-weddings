@@ -1,5 +1,3 @@
-import { createHash } from "crypto";
-
 import { strings, type ContractLanguage } from "@/lib/contract-i18n";
 
 export type ContractClause = {
@@ -244,14 +242,6 @@ export function renderContract(
 }
 
 // ---------------------------------------------------------------------------
-// Integrity
-// ---------------------------------------------------------------------------
-
-export function sha256Hex(bytes: Uint8Array | Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-// ---------------------------------------------------------------------------
 // Signer validation
 // ---------------------------------------------------------------------------
 
@@ -314,4 +304,104 @@ export function validateSigner(
       taxOffice: input.isCompany ? taxOffice : "",
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Recipients
+// ---------------------------------------------------------------------------
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+export function isValidEmail(value: string): boolean {
+  return EMAIL_RE.test((value || "").trim());
+}
+
+/**
+ * Splits free text ("a@x.gr, b@y.gr; c@z.gr") and arrays into a deduplicated,
+ * lower-cased list. Anything that is not an address is reported back rather
+ * than dropped, so a mistyped CC never disappears silently.
+ */
+export function normalizeEmailList(
+  raw: unknown,
+  options: { exclude?: string[] } = {},
+): { emails: string[]; invalid: string[] } {
+  const entries = Array.isArray(raw)
+    ? raw.map((entry) => String(entry ?? ""))
+    : String(raw ?? "").split(/[,;\n]+/);
+
+  const excluded = new Set((options.exclude ?? []).map((email) => email.trim().toLowerCase()));
+  const emails: string[] = [];
+  const invalid: string[] = [];
+
+  for (const entry of entries) {
+    const email = entry.trim().toLowerCase();
+    if (!email) continue;
+    if (!EMAIL_RE.test(email)) {
+      invalid.push(entry.trim());
+      continue;
+    }
+    if (excluded.has(email) || emails.includes(email)) continue;
+    emails.push(email);
+  }
+
+  return { emails, invalid };
+}
+
+// ---------------------------------------------------------------------------
+// Per-contract wording
+// ---------------------------------------------------------------------------
+
+/**
+ * The parts of a template the studio may adjust for one contract before it
+ * goes out. Language and consent wording stay with the template: the language
+ * drives the signing page and the emails, and the consent sentence is the
+ * evidence of intent recorded in the signed PDF.
+ */
+export type ContractWordingOverride = Pick<
+  ContractTemplateSnapshot,
+  "title" | "intro" | "clauses" | "closing"
+>;
+
+export function applyWordingOverride(
+  snapshot: ContractTemplateSnapshot,
+  override: ContractWordingOverride | null | undefined,
+): { ok: true; snapshot: ContractTemplateSnapshot } | { ok: false; error: string } {
+  if (!override) return { ok: true, snapshot };
+
+  const title = String(override.title ?? "").trim();
+  if (!title) return { ok: false, error: "The contract needs a title." };
+
+  const clauses = (Array.isArray(override.clauses) ? override.clauses : [])
+    .map((clause) => ({
+      heading: String(clause?.heading ?? "").trim(),
+      body: String(clause?.body ?? "").trim(),
+    }))
+    .filter((clause) => clause.heading || clause.body);
+
+  return {
+    ok: true,
+    snapshot: {
+      ...snapshot,
+      title,
+      intro: String(override.intro ?? "").trim(),
+      clauses,
+      closing: String(override.closing ?? "").trim(),
+    },
+  };
+}
+
+/** True when the override changes anything compared to the template. */
+export function wordingDiffers(
+  snapshot: ContractTemplateSnapshot,
+  override: ContractWordingOverride | null | undefined,
+): boolean {
+  const applied = applyWordingOverride(snapshot, override);
+  if (!applied.ok) return true;
+  const a = applied.snapshot;
+  return (
+    a.title !== snapshot.title ||
+    a.intro !== snapshot.intro ||
+    a.closing !== snapshot.closing ||
+    JSON.stringify(a.clauses) !== JSON.stringify(snapshot.clauses)
+  );
 }

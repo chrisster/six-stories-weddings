@@ -9,13 +9,13 @@
 import { writeFileSync } from "fs";
 
 import { formatContractDate, normalizeLanguage, strings } from "@/lib/contract-i18n";
+import { sha256Hex } from "@/lib/contract-hash";
 import { renderContractPdf } from "@/lib/contract-pdf";
 import { DEFAULT_CONTRACT_TEMPLATE } from "@/lib/contract-template-default";
 import { DEFAULT_CONTRACT_TEMPLATE_EN } from "@/lib/contract-template-default-en";
 import {
   buildMergeValues,
   renderContract,
-  sha256Hex,
   type ContractMergeData,
   type ContractSigner,
 } from "@/lib/contracts";
