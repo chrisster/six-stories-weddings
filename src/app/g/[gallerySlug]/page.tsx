@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { PublicGallery } from "@/components/gallery/public-gallery";
-import { getCurrentUser } from "@/lib/auth";
+import { getStudioUser } from "@/lib/auth";
 import {
   getGalleryCommentCounts,
   getGuestAccessByToken,
@@ -31,7 +31,7 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
   const [detail, portalSession, adminUser, guestAccess] = await Promise.all([
     getPublicGalleryBySlug(gallerySlug),
     readPortalSession(),
-    getCurrentUser(),
+    getStudioUser(),
     token ? getGuestAccessByToken(token) : Promise.resolve(null),
   ]);
 

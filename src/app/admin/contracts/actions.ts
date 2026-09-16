@@ -13,15 +13,13 @@ import {
   resendContract,
   voidContract,
 } from "@/lib/contract-data";
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { requireStudioAdmin } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 
 async function requireAdmin() {
   if (!hasSupabaseEnv) redirect("/admin/contracts?status=error&reason=not_configured");
-  const role = await getCurrentUserRole();
-  if (role !== "admin") redirect("/admin");
-  const user = await getCurrentUser();
-  return user?.email ?? null;
+  const member = await requireStudioAdmin();
+  return member?.email ?? null;
 }
 
 export async function sendContractAction(formData: FormData) {

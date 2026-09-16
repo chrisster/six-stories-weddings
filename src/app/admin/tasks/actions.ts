@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, requireStudioUser } from "@/lib/auth";
 import { getAssignedProjectIdsForEmail, notifyCrewMemberById } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -62,6 +62,7 @@ async function crewCanTouchProject(projectId: string): Promise<boolean> {
 
 export async function createTaskAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioUser();
   const projectId = String(formData.get("projectId") || "").trim();
   const title = String(formData.get("title") || "").trim();
   const assigneeId = String(formData.get("assigneeId") || "").trim() || null;
@@ -98,6 +99,7 @@ export async function createTaskAction(formData: FormData) {
 
 export async function updateTaskStatusAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioUser();
   const taskId = String(formData.get("taskId") || "").trim();
   const projectId = String(formData.get("projectId") || "").trim();
   const status = String(formData.get("status") || "todo").trim();
@@ -113,6 +115,7 @@ const VALID_STATUSES = ["backlog", "stand_by", "todo", "in_progress", "review", 
 
 export async function updateTaskAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  const member = await requireStudioUser();
   const taskId = String(formData.get("taskId") || "").trim();
   if (!taskId) return;
 
@@ -120,7 +123,7 @@ export async function updateTaskAction(formData: FormData) {
   if (!admin) return;
 
   // Crew may only update tasks that belong to a project they are assigned to.
-  if ((await getCurrentUserRole()) === "crew") {
+  if (member?.role === "crew") {
     const { data: task } = await admin
       .from("project_tasks")
       .select("project_id")
@@ -215,7 +218,7 @@ export async function updateTaskAction(formData: FormData) {
 
 export async function createProjectTaskAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
-  if ((await getCurrentUserRole()) === "crew") return;
+  if ((await requireStudioUser())?.role === "crew") return;
 
   const projectId = String(formData.get("projectId") || "").trim();
   const title = String(formData.get("title") || "").trim();
@@ -258,7 +261,7 @@ export async function createProjectTaskAction(formData: FormData) {
 
 export async function deleteTaskAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
-  if ((await getCurrentUserRole()) === "crew") return;
+  if ((await requireStudioUser())?.role === "crew") return;
   const taskId = String(formData.get("taskId") || "").trim();
   const projectId = String(formData.get("projectId") || "").trim();
   if (!taskId) return;

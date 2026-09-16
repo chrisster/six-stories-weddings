@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getGoogleMapsApiKey } from "@/lib/env";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getStudioUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -48,12 +48,9 @@ async function fetchFromNominatim(query: string): Promise<Suggestion[]> {
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
-
-    if (!user) {
+    // A Supabase session alone is not enough: only studio members may use the
+    // admin API.
+    if (!(await getStudioUser())) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

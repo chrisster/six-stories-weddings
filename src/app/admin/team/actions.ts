@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { getCurrentUserRole } from "@/lib/auth";
+import { requireStudioAdmin } from "@/lib/auth";
 import { getAppUrl, hasSupabaseEnv } from "@/lib/env";
 import { sendGalleryNotificationEmail } from "@/lib/gallery-notifications";
 import { createPasswordSetupToken } from "@/lib/password-setup";
@@ -19,18 +19,11 @@ function normalizeSpecialty(value: string): (typeof SPECIALTIES)[number] {
     : "assistant";
 }
 
-async function requireAdmin() {
-  const role = await getCurrentUserRole();
-  if (role !== "admin") {
-    redirect("/admin");
-  }
-}
-
 export async function createCrewAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     redirect("/admin/team?status=error&reason=unavailable");
   }
-  await requireAdmin();
+  await requireStudioAdmin();
 
   const fullName = String(formData.get("fullName") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase() || null;
@@ -67,7 +60,7 @@ export async function updateCrewAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     redirect("/admin/team?status=error&reason=unavailable");
   }
-  await requireAdmin();
+  await requireStudioAdmin();
 
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim();
@@ -97,7 +90,7 @@ export async function inviteCrewAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     redirect("/admin/team?status=error&reason=unavailable");
   }
-  await requireAdmin();
+  await requireStudioAdmin();
 
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   if (!crewMemberId) {
@@ -208,7 +201,7 @@ export async function removeCrewAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     redirect("/admin/team?status=error&reason=unavailable");
   }
-  await requireAdmin();
+  await requireStudioAdmin();
 
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const authUserId = String(formData.get("authUserId") || "").trim();
@@ -238,7 +231,7 @@ export async function setCrewPasswordAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     redirect("/admin/team?status=error&reason=unavailable");
   }
-  await requireAdmin();
+  await requireStudioAdmin();
 
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const password = String(formData.get("password") || "");
@@ -305,7 +298,7 @@ export async function setCrewAdminAccessAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     redirect("/admin/team?status=error&reason=unavailable");
   }
-  await requireAdmin();
+  await requireStudioAdmin();
 
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const grant = String(formData.get("grant") || "") === "true";

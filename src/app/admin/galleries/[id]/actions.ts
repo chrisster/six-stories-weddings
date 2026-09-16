@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
+import { requireStudioUser } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import {
   buildDefaultGalleryNotificationTemplate,
@@ -20,6 +21,8 @@ export async function createGallerySectionAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
   }
+
+  await requireStudioUser();
 
   const galleryId = String(formData.get("galleryId") || "");
   const name = String(formData.get("name") || "").trim();
@@ -53,6 +56,7 @@ export async function createGallerySectionAction(formData: FormData) {
 }
 export async function renameSectionAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioUser();
   const sectionId = String(formData.get("sectionId") || "").trim();
   const galleryId = String(formData.get("galleryId") || "").trim();
   const name = String(formData.get("name") || "").trim();
@@ -65,6 +69,7 @@ export async function renameSectionAction(formData: FormData) {
 
 export async function deleteSectionAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioUser();
   const sectionId = String(formData.get("sectionId") || "").trim();
   const galleryId = String(formData.get("galleryId") || "").trim();
   if (!sectionId || !galleryId) return;
@@ -80,6 +85,8 @@ export async function updateGallerySettingsAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
   }
+
+  await requireStudioUser();
 
   const galleryId = String(formData.get("galleryId") || "");
   const isPublished = formData.get("isPublished") === "on";
@@ -255,6 +262,8 @@ export async function uploadMediaAction(formData: FormData) {
     return;
   }
 
+  await requireStudioUser();
+
   const galleryId = String(formData.get("galleryId") || "");
   const sectionId = String(formData.get("sectionId") || "");
   const files = formData
@@ -314,6 +323,8 @@ export async function setCoverMediaAction(formData: FormData) {
     return;
   }
 
+  await requireStudioUser();
+
   const galleryId = String(formData.get("galleryId") || "");
   const mediaId = String(formData.get("mediaId") || "");
   if (!galleryId || !mediaId) {
@@ -339,6 +350,8 @@ export async function setGalleryHeroImageAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
   }
+
+  await requireStudioUser();
 
   const galleryId = String(formData.get("galleryId") || "");
   const file = formData.get("file");
@@ -378,6 +391,8 @@ export async function clearGalleryHeroImageAction(formData: FormData) {
     return;
   }
 
+  await requireStudioUser();
+
   const galleryId = String(formData.get("galleryId") || "");
   if (!galleryId) {
     return;
@@ -408,6 +423,8 @@ export async function addDemoMediaAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
   }
+
+  await requireStudioUser();
 
   const galleryId = String(formData.get("galleryId") || "");
   if (!galleryId) {
@@ -461,6 +478,8 @@ export async function deleteMediaAction(formData: FormData) {
     return;
   }
 
+  await requireStudioUser();
+
   const mediaId = String(formData.get("mediaId") || "").trim();
   const galleryId = String(formData.get("galleryId") || "").trim();
   if (!mediaId || !galleryId) {
@@ -490,6 +509,8 @@ export async function bulkDeleteMediaAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
   }
+
+  await requireStudioUser();
 
   const galleryId = String(formData.get("galleryId") || "").trim();
   const mediaIds = String(formData.get("mediaIds") || "")
@@ -551,6 +572,8 @@ export async function moveMediaToSectionAction(formData: FormData) {
     return;
   }
 
+  await requireStudioUser();
+
   const galleryId = String(formData.get("galleryId") || "").trim();
   const mediaIds = String(formData.get("mediaIds") || "")
     .split(",")
@@ -589,6 +612,8 @@ export async function reorderMediaAction(formData: FormData) {
     return;
   }
 
+  await requireStudioUser();
+
   const galleryId = String(formData.get("galleryId") || "").trim();
   const orderedIds = String(formData.get("orderedIds") || "")
     .split(",")
@@ -619,6 +644,8 @@ export async function createGuestLinkAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return { error: "No Supabase environment" };
   }
+
+  await requireStudioUser();
 
   const galleryId = String(formData.get("galleryId") || "").trim();
   const createdBy = String(formData.get("createdBy") || "admin").trim();
@@ -675,6 +702,8 @@ export async function revokeGuestLinkAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return { error: "No Supabase environment" };
   }
+
+  await requireStudioUser();
 
   const linkId = String(formData.get("linkId") || "").trim();
   const galleryId = String(formData.get("galleryId") || "").trim();

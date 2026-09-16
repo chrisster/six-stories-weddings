@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { NotificationBell } from "@/components/admin/notification-bell";
 import { ProfileMenu } from "@/components/admin/profile-menu";
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, requireStudioRole } from "@/lib/auth";
 import { getNotificationsForEmail } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
@@ -13,10 +13,12 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }>) {
   // One auth round trip (getCurrentUser is memoized per request), then the
-  // role lookup and the notifications in parallel.
+  // role lookup and the notifications in parallel. Layouts do not re-render on
+  // navigation, so every page and action checks access itself as well; this
+  // keeps the workspace from rendering for anyone without a studio role.
   const user = hasSupabaseEnv ? await getCurrentUser() : null;
   const [role, notifications] = await Promise.all([
-    hasSupabaseEnv ? getCurrentUserRole() : Promise.resolve<"admin">("admin"),
+    requireStudioRole(),
     user?.email ? getNotificationsForEmail(user.email) : Promise.resolve([]),
   ]);
 

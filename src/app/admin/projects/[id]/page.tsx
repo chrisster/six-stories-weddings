@@ -19,7 +19,7 @@ import { ProjectPaymentsFields } from "@/components/admin/project-payments-field
 import { ProjectSaveButton } from "@/components/admin/project-save-button";
 import { ProjectTimeplanFields } from "@/components/admin/project-timeplan-fields";
 import { getClientPortalAccountsByEmails, getAssignedProjectIdsForEmail, getContacts, getCrewMembers, getGalleries, getProjectById } from "@/lib/data";
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, requireStudioRole } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import { formatDateDDMMYY } from "@/lib/utils";
 
@@ -103,7 +103,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
     getGalleries(),
     getCrewMembers(),
     getContacts(),
-    getCurrentUserRole(),
+    requireStudioRole(),
   ]);
 
   if (!project) {

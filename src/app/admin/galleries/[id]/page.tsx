@@ -11,6 +11,7 @@ import { MediaManager } from "@/components/gallery/media-manager";
 import { HeroImageUploader } from "@/components/gallery/hero-image-uploader";
 import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
+import { requireStudioRole } from "@/lib/auth";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
 import { getMediaThumbFallbackUrl, getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
@@ -21,7 +22,7 @@ type GalleryManagerPageProps = {
 
 export default async function GalleryManagerPage({ params }: GalleryManagerPageProps) {
   const { id } = await params;
-  const detail = await getGalleryById(id);
+  const [detail] = await Promise.all([getGalleryById(id), requireStudioRole()]);
   if (!detail) {
     notFound();
   }

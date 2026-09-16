@@ -3,7 +3,7 @@ import { Images, Plus } from "lucide-react";
 
 import { CoverImage } from "@/components/admin/cover-image";
 import { ProjectsControls } from "@/components/admin/projects-controls";
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, requireStudioRole } from "@/lib/auth";
 import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
 
@@ -107,7 +107,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const [projects, galleries, role, eventStats] = await Promise.all([
     getProjects(),
     getGalleries(),
-    getCurrentUserRole(),
+    requireStudioRole(),
     getGalleryEventStats(undefined, periodSince(period)),
   ]);
   const isCrew = role === "crew";

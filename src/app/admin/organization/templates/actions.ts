@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireAdminRole } from "@/lib/auth";
+import { requireStudioAdmin } from "@/lib/auth";
 import { setActiveContractTemplate, updateContractTemplate } from "@/lib/contract-data";
 import type { ContractClause, ContractTemplateSnapshot } from "@/lib/contracts";
 
@@ -15,7 +15,7 @@ function fail(message: string, templateId?: string): never {
 }
 
 export async function saveTemplateAction(formData: FormData) {
-  await requireAdminRole();
+  await requireStudioAdmin();
 
   const templateId = String(formData.get("templateId") || "").trim();
   if (!templateId) fail("Missing template id.");
@@ -54,7 +54,7 @@ export async function saveTemplateAction(formData: FormData) {
 }
 
 export async function setActiveTemplateAction(formData: FormData) {
-  await requireAdminRole();
+  await requireStudioAdmin();
 
   const templateId = String(formData.get("templateId") || "").trim();
   if (!templateId) fail("Missing template id.");

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth";
+import { getStudioUser } from "@/lib/auth";
 import {
   createGuestLink,
   getGuestAccessByToken,
@@ -24,7 +24,7 @@ export async function POST(
   const { gallerySlug } = await params;
   const [gallery, adminUser, portalSession] = await Promise.all([
     getPublishedGalleryAccess(gallerySlug),
-    getCurrentUser(),
+    getStudioUser(),
     readPortalSession(),
   ]);
   if (!gallery) {

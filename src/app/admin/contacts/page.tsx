@@ -1,3 +1,4 @@
+import { requireAdminRole } from "@/lib/auth";
 import { getContacts } from "@/lib/data";
 import { hasSupabaseEnv } from "@/lib/env";
 
@@ -7,7 +8,7 @@ import { ClientContactRow } from "./contact-row";
 export const dynamic = "force-dynamic";
 
 export default async function ContactsPage() {
-  const contacts = await getContacts();
+  const [contacts] = await Promise.all([getContacts(), requireAdminRole()]);
 
   return (
     <div className="space-y-6">

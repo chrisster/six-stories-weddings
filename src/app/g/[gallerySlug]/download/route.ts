@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getStudioUser } from "@/lib/auth";
 import {
   getGuestAccessByToken,
   getMediaAssetInGallery,
@@ -32,7 +32,7 @@ export async function GET(
   // resolve together; the gallery's media list is never loaded.
   const [gallery, adminUser, portalSession, guestAccess] = await Promise.all([
     getPublishedGalleryAccess(gallerySlug),
-    getCurrentUser(),
+    getStudioUser(),
     readPortalSession(),
     token ? getGuestAccessByToken(token) : Promise.resolve(null),
   ]);

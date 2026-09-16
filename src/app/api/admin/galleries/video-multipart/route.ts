@@ -10,7 +10,7 @@ import {
   isR2Enabled,
   signMultipartPart,
 } from "@/lib/storage";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getStudioUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -31,12 +31,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Supabase env vars are missing." }, { status: 503 });
     }
 
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
-
-    if (!user) {
+    // A Supabase session alone is not enough: only studio members may use the
+    // admin API.
+    if (!(await getStudioUser())) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

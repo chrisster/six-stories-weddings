@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth";
+import { getStudioUser } from "@/lib/auth";
 import {
   getMediaAssetInGallery,
   getPublishedGalleryAccess,
@@ -100,7 +100,7 @@ export async function POST(
   }
 
   // Comments are restricted to logged-in clients (portal) or studio admins.
-  const [adminUser, portalSession] = await Promise.all([getCurrentUser(), readPortalSession()]);
+  const [adminUser, portalSession] = await Promise.all([getStudioUser(), readPortalSession()]);
   const hasPortalAccess = portalSession
     ? await portalEmailCanAccessProject(portalSession.email, detail.projectId)
     : false;

@@ -99,6 +99,35 @@ async function main() {
     process.exit(1);
   }
 
+  // Workspace access comes from an active admin or crew row in public.users,
+  // not from the auth account alone, so a missing row would still lock the
+  // admin out after a successful reset.
+  const { data: row, error: rowError } = await supabase
+    .from("users")
+    .select("role, active")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (rowError) {
+    console.error(`Password updated, but the studio role could not be checked: ${rowError.message}`);
+    process.exit(1);
+  }
+
+  if (!row) {
+    const { error: insertError } = await supabase
+      .from("users")
+      .insert({ auth_user_id: user.id, email, role: "admin", active: true });
+    if (insertError) {
+      console.error(`Password updated, but the admin role could not be added: ${insertError.message}`);
+      process.exit(1);
+    }
+    console.log(`Added ${email} to the studio users as admin.`);
+  } else if (!row.active || (row.role !== "admin" && row.role !== "crew")) {
+    console.warn(
+      `Warning: ${email} has role "${row.role}"${row.active ? "" : " (inactive)"} and cannot open the workspace.`,
+    );
+  }
+
   console.log(`Password updated for ${email}. You can sign in now.`);
   process.exit(0);
 }

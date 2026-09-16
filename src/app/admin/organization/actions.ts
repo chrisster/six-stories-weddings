@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { getCurrentUserRole } from "@/lib/auth";
+import { requireStudioAdmin } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import { prepareSignatureDataUri } from "@/lib/signature-image";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,10 +46,7 @@ export async function saveOrganizationSettingsAction(formData: FormData) {
     redirect("/admin/organization?status=error");
   }
 
-  const role = await getCurrentUserRole();
-  if (role !== "admin") {
-    redirect("/admin");
-  }
+  await requireStudioAdmin();
 
   const admin = createAdminClient();
   if (!admin) {

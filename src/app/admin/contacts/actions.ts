@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { requireStudioAdmin } from "@/lib/auth";
 import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContactStatus } from "@/lib/types";
@@ -15,6 +16,8 @@ export async function createContactAction(formData: FormData): Promise<{ error: 
   if (!hasSupabaseEnv) {
     return null;
   }
+
+  await requireStudioAdmin();
 
   const fullName = String(formData.get("fullName") || "").trim();
   const email = String(formData.get("email") || "").trim() || null;
@@ -67,6 +70,8 @@ export async function updateContactStatusAction(formData: FormData) {
     return;
   }
 
+  await requireStudioAdmin();
+
   const contactId = String(formData.get("contactId") || "").trim();
   const status = String(formData.get("status") || "lead") as ContactStatus;
   if (!contactId) {
@@ -90,6 +95,8 @@ export async function convertContactToClientAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
   }
+
+  await requireStudioAdmin();
 
   const contactId = String(formData.get("contactId") || "").trim();
   if (!contactId) {
@@ -146,6 +153,7 @@ export async function convertContactToClientAction(formData: FormData) {
 
 export async function createCrewMemberAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioAdmin();
   const fullName = String(formData.get("fullName") || "").trim();
   const roleType = String(formData.get("roleType") || "assistant").trim();
   const email = String(formData.get("email") || "").trim() || null;
@@ -165,6 +173,7 @@ export async function createCrewMemberAction(formData: FormData) {
 
 export async function deleteCrewMemberAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioAdmin();
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   if (!crewMemberId) return;
   const admin = createAdminClient();
@@ -175,6 +184,7 @@ export async function deleteCrewMemberAction(formData: FormData) {
 
 export async function updateContactAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioAdmin();
   const contactId = String(formData.get("contactId") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim();
   const email = String(formData.get("email") || "").trim() || null;
@@ -189,6 +199,7 @@ export async function updateContactAction(formData: FormData) {
 
 export async function updateCrewMemberAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioAdmin();
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim();
   const roleType = String(formData.get("roleType") || "").trim();
@@ -203,6 +214,7 @@ export async function updateCrewMemberAction(formData: FormData) {
 
 export async function deleteContactAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
+  await requireStudioAdmin();
   const contactId = String(formData.get("contactId") || "").trim();
   if (!contactId) return;
   const admin = createAdminClient();

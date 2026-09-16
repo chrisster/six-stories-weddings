@@ -1,5 +1,5 @@
 import { PostProductionBoard, type BoardTask } from "@/components/admin/post-production-board";
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, requireStudioRole } from "@/lib/auth";
 import {
   getAssignedProjectIdsForEmail,
   getCrewMemberIdsForEmail,
@@ -13,7 +13,7 @@ export default async function TasksPage() {
   const [projects, crewMembers, role] = await Promise.all([
     getProjects({ covers: false }),
     getCrewMembers(),
-    getCurrentUserRole(),
+    requireStudioRole(),
   ]);
   const isCrew = role === "crew";
 

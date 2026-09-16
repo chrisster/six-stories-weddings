@@ -5,7 +5,13 @@ import { buttonVariants } from "@/components/ui/button";
 import { hasSupabaseEnv } from "@/lib/env";
 import { cn } from "@/lib/utils";
 
-export default function Home() {
+type HomeProps = {
+  searchParams: Promise<{ access?: string }>;
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  const { access } = await searchParams;
+
   return (
     <main className="flex min-h-screen flex-1 flex-col lg:grid lg:grid-cols-2">
       <section
@@ -27,6 +33,12 @@ export default function Home() {
             A private workspace for managing wedding productions and delivering elegant galleries
             to each couple.
           </p>
+
+          {access === "denied" ? (
+            <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              This account does not have access to the studio workspace.
+            </div>
+          ) : null}
 
           <div className="mt-7">
             {hasSupabaseEnv ? (

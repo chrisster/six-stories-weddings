@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { Zip, ZipPassThrough } from "fflate";
 import { NextResponse } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth";
+import { getStudioUser } from "@/lib/auth";
 import { getGuestAccessByToken, getPublicGalleryBySlug, logGalleryEvent, portalEmailCanAccessProject } from "@/lib/data";
 import { readPortalSession } from "@/lib/portal-auth";
 import {
@@ -102,7 +102,7 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null, toke
   // can resolve alongside it instead of one after the other.
   const [detail, adminUser, portalSession, guestAccess] = await Promise.all([
     getPublicGalleryBySlug(gallerySlug),
-    getCurrentUser(),
+    getStudioUser(),
     readPortalSession(),
     token ? getGuestAccessByToken(token) : Promise.resolve(null),
   ]);

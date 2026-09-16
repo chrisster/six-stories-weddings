@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
-import { getCurrentUser, getCurrentUserRole, type AppRole } from "@/lib/auth";
+import { getCurrentUser, requireStudioAdmin, requireStudioUser, type AppRole } from "@/lib/auth";
 import { notifyCrewMemberById } from "@/lib/data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -176,7 +176,7 @@ export async function createProjectAction(formData: FormData) {
     return;
   }
 
-  if ((await getCurrentUserRole()) === "crew") {
+  if ((await requireStudioUser())?.role === "crew") {
     redirect("/admin");
   }
 
@@ -408,7 +408,7 @@ export async function createProjectAction(formData: FormData) {
 
 export async function deleteProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
-  if ((await getCurrentUserRole()) === "crew") return;
+  if ((await requireStudioUser())?.role === "crew") return;
 
   const projectId = String(formData.get("projectId") || "").trim();
   if (!projectId) return;
@@ -433,7 +433,7 @@ export async function updateProjectAction(formData: FormData) {
     return;
   }
 
-  const role = await getCurrentUserRole();
+  const role = (await requireStudioUser())?.role ?? null;
   if (role === "crew") {
     redirect(`/admin/projects/${projectId}`);
   }
@@ -470,7 +470,7 @@ export async function autosaveProjectAction(
     return { ok: false, reason: "missing_project" };
   }
 
-  const role = await getCurrentUserRole();
+  const role = (await requireStudioUser())?.role ?? null;
   if (role === "crew") {
     return { ok: false, reason: "forbidden" };
   }
@@ -594,6 +594,8 @@ async function persistProjectFromForm(
 }
 
 export async function shareTimeplanAction(formData: FormData) {
+  await requireStudioUser();
+
   const projectId = String(formData.get("projectId") || "").trim();
   const audience = String(formData.get("audience") || "").trim() === "crew" ? "crew" : "client";
 
@@ -691,7 +693,7 @@ export async function updateClientAction(formData: FormData) {
     return;
   }
 
-  if ((await getCurrentUserRole()) === "crew") {
+  if ((await requireStudioUser())?.role === "crew") {
     return;
   }
 
@@ -729,7 +731,7 @@ export async function updateClientAction(formData: FormData) {
 
 export async function removeClientFromProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
-  if ((await getCurrentUserRole()) === "crew") return;
+  if ((await requireStudioUser())?.role === "crew") return;
   const projectId = String(formData.get("projectId") || "").trim();
   const clientId = String(formData.get("clientId") || "").trim();
   if (!projectId || !clientId) return;
@@ -741,7 +743,7 @@ export async function removeClientFromProjectAction(formData: FormData) {
 
 export async function addCrewToProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
-  if ((await getCurrentUserRole()) === "crew") return;
+  if ((await requireStudioUser())?.role === "crew") return;
   const projectId = String(formData.get("projectId") || "").trim();
   const crewMemberId = String(formData.get("crewMemberId") || "").trim();
   const assignmentRole = String(formData.get("assignmentRole") || "crew").trim();
@@ -791,7 +793,7 @@ export async function addCrewToProjectAction(formData: FormData) {
 
 export async function removeCrewFromProjectAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
-  if ((await getCurrentUserRole()) === "crew") return;
+  if ((await requireStudioUser())?.role === "crew") return;
   const projectId = String(formData.get("projectId") || "").trim();
   const assignmentId = String(formData.get("assignmentId") || "").trim();
   if (!projectId || !assignmentId) return;
@@ -803,7 +805,7 @@ export async function removeCrewFromProjectAction(formData: FormData) {
 
 export async function updateCrewAssignmentAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
-  if ((await getCurrentUserRole()) === "crew") return;
+  if ((await requireStudioUser())?.role === "crew") return;
   const projectId = String(formData.get("projectId") || "").trim();
   const assignmentId = String(formData.get("assignmentId") || "").trim();
   const assignmentRole = String(formData.get("assignmentRole") || "").trim();
@@ -838,7 +840,7 @@ export async function addClientToProjectAction(formData: FormData) {
     return;
   }
 
-  if ((await getCurrentUserRole()) === "crew") {
+  if ((await requireStudioUser())?.role === "crew") {
     return;
   }
 
@@ -957,6 +959,8 @@ export async function setClientPortalPasswordAction(formData: FormData) {
   if (!hasSupabaseEnv) {
     return;
   }
+
+  await requireStudioAdmin();
 
   const projectId = String(formData.get("projectId") || "").trim();
   const fullName = String(formData.get("fullName") || "").trim() || null;

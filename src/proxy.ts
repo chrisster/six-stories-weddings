@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { hasSupabaseEnv } from "@/lib/env";
+import { lookupStudioRole } from "@/lib/studio-role";
 
 // Only the studio routes need a verified (and refreshed) Supabase session
 // before rendering; the client portal, the signing pages and the route
@@ -71,7 +72,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (request.nextUrl.pathname === "/" && user) {
+  // Only studio members skip the sign-in page. Any other Supabase account stays
+  // on it: the workspace pages would send it straight back here.
+  if (request.nextUrl.pathname === "/" && user?.email && (await lookupStudioRole(user.email))) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
     return NextResponse.redirect(url);

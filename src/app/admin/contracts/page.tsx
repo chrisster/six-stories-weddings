@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { requireAdminRole } from "@/lib/auth";
 import { canSendContractEmails, resolveContractCcEmail } from "@/lib/contract-notifications";
 import {
   getOrgContractSettings,
@@ -54,6 +55,7 @@ export default async function ContractsPage({ searchParams }: ContractsPageProps
     listContractTemplates(),
     getProjects({ covers: false }),
     getOrgContractSettings(),
+    requireAdminRole(),
   ]);
 
   const emailReady = canSendContractEmails();

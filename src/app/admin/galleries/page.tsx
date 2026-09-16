@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Download, Eye } from "lucide-react";
 
 import { CoverImage } from "@/components/admin/cover-image";
-import { getCurrentUser, getCurrentUserRole } from "@/lib/auth";
+import { getCurrentUser, requireStudioRole } from "@/lib/auth";
 import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
 
 function displayName(projectTitle: string | undefined, galleryTitle: string): string {
@@ -18,7 +18,7 @@ export default async function GalleriesPage() {
   const [allGalleries, projects, role] = await Promise.all([
     getGalleries(),
     getProjects(),
-    getCurrentUserRole(),
+    requireStudioRole(),
   ]);
 
   let galleries = allGalleries;

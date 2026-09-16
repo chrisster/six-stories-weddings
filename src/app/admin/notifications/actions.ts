@@ -2,23 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentUser } from "@/lib/auth";
+import { requireStudioUser } from "@/lib/auth";
 import { markNotificationsRead } from "@/lib/data";
 
 // The bell lives in the admin layout, so the layout (and whichever admin page
 // is open) is what needs re-rendering, not just /admin.
 export async function markAllNotificationsReadAction() {
-  const user = await getCurrentUser();
-  if (!user?.email) return;
-  await markNotificationsRead(user.email);
+  const member = await requireStudioUser();
+  if (!member) return;
+  await markNotificationsRead(member.email);
   revalidatePath("/admin", "layout");
 }
 
 export async function markNotificationReadAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user?.email) return;
+  const member = await requireStudioUser();
+  if (!member) return;
   const id = String(formData.get("id") || "").trim();
   if (!id) return;
-  await markNotificationsRead(user.email, [id]);
+  await markNotificationsRead(member.email, [id]);
   revalidatePath("/admin", "layout");
 }

@@ -1,6 +1,9 @@
 import { AccountPasswordForm } from "@/components/admin/account-password-form";
+import { requireStudioRole } from "@/lib/auth";
 
-export default function AccountPage() {
+export default async function AccountPage() {
+  await requireStudioRole();
+
   return (
     <div className="space-y-6">
       <section className="soft-panel p-5">
