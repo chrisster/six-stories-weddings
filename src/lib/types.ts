@@ -165,7 +165,10 @@ export type GalleryNotificationTemplate = {
   emailBody: string;
   buttonLabel: string;
   shareNote: string;
+  /** The image the email shows: the override below, else the gallery's hero or cover. */
   heroImageUrl?: string | null;
+  /** An external image URL the studio typed in; null means follow the gallery. */
+  heroImageOverride?: string | null;
 };
 
 export type PortalGallery = {

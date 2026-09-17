@@ -9,6 +9,7 @@ import {
   demoProject,
 } from "@/lib/demo-data";
 import { hasSupabaseEnv } from "@/lib/env";
+import { resolveEmailHeroUrl, normalizeHeroOverride } from "@/lib/gallery-hero";
 import { buildDefaultGalleryNotificationTemplate } from "@/lib/gallery-notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMediaThumbUrl, getSignedMediaUrl } from "@/lib/storage";
@@ -1255,6 +1256,11 @@ export async function getClientPortalAccountsByEmails(
   return map;
 }
 
+/**
+ * @param fallback.heroImageUrl  The gallery's current hero (uploaded image or
+ *                               cover preview). Used unless the studio typed
+ *                               an external override into the template.
+ */
 export async function getGalleryNotificationTemplate(
   galleryId: string,
   fallback: { projectTitle: string; galleryTitle: string; heroImageUrl?: string | null },
@@ -1286,7 +1292,8 @@ export async function getGalleryNotificationTemplate(
     emailBody: (data.email_body as string | null) || defaults.emailBody,
     buttonLabel: (data.button_label as string | null) || defaults.buttonLabel,
     shareNote: (data.share_note as string | null) || defaults.shareNote,
-    heroImageUrl: (data.hero_image_url as string | null) || defaults.heroImageUrl || null,
+    heroImageUrl: resolveEmailHeroUrl(data.hero_image_url as string | null, defaults.heroImageUrl ?? null),
+    heroImageOverride: normalizeHeroOverride(data.hero_image_url as string | null),
   };
 }
 

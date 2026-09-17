@@ -13,6 +13,7 @@ import {
   sendGalleryNotificationEmail,
 } from "@/lib/gallery-notifications";
 import { createGuestLink, revokeGuestLink } from "@/lib/data";
+import { getGalleryHeroSource, normalizeHeroOverride, resolveGalleryHeroUrl } from "@/lib/gallery-hero";
 import { createPortalClaimToken } from "@/lib/portal-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureMediaBucket, getBucketName, getStorageProviderName, uploadMediaToStorage } from "@/lib/storage";
@@ -100,7 +101,10 @@ export async function updateGallerySettingsAction(formData: FormData) {
   const emailBody = String(formData.get("emailBody") || "").trim();
   const buttonLabel = String(formData.get("buttonLabel") || "").trim();
   const shareNote = String(formData.get("shareNote") || "").trim();
-  const heroImageUrl = String(formData.get("heroImageUrl") || "").trim() || null;
+  // Only an external URL is kept. Empty (or one of our own media URLs) means
+  // the email follows the gallery's hero image or cover photo, resolved fresh
+  // each time it is sent.
+  const heroImageOverride = normalizeHeroOverride(String(formData.get("heroImageUrl") || ""));
 
   if (!galleryId) {
     return;
@@ -110,6 +114,9 @@ export async function updateGallerySettingsAction(formData: FormData) {
   if (!admin) {
     return;
   }
+
+  const heroImageUrl =
+    heroImageOverride ?? (await resolveGalleryHeroUrl(await getGalleryHeroSource(galleryId)));
 
   const { data: galleryRow } = await admin
     .from("galleries")
@@ -158,7 +165,7 @@ export async function updateGallerySettingsAction(formData: FormData) {
       email_body: emailBody || defaultTemplate.emailBody,
       button_label: buttonLabel || defaultTemplate.buttonLabel,
       share_note: shareNote || defaultTemplate.shareNote,
-      hero_image_url: heroImageUrl,
+      hero_image_url: heroImageOverride,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "gallery_id" },

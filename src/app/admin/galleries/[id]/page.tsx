@@ -13,6 +13,7 @@ import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
 import { requireStudioRole } from "@/lib/auth";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
+import { resolveGalleryHeroUrl } from "@/lib/gallery-hero";
 import { getMediaThumbFallbackUrl, getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
 import { SectionRow } from "./section-row";
 
@@ -62,13 +63,13 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
   );
 
   const cover = mediaWithUrl.find((asset) => asset.isCover) || mediaWithUrl[0] || null;
-  const customHeroUrl = detail.gallery.heroImagePath
-    ? await getSignedMediaUrl(detail.gallery.heroImagePath).catch(() => null)
-    : null;
-  // The hero shows the 1600px preview, not the multi-megabyte original.
-  const heroDisplayUrl =
-    customHeroUrl ||
-    (cover?.mediaType === "photo" ? getMediaThumbUrl(cover.storagePath, { size: "lg" }) : null);
+  const hasCustomHero = Boolean(detail.gallery.heroImagePath);
+  // The same resolution the notification email uses, so what is shown here is
+  // what the client receives.
+  const heroDisplayUrl = await resolveGalleryHeroUrl({
+    heroImagePath: detail.gallery.heroImagePath ?? null,
+    coverStoragePath: cover?.mediaType === "photo" ? cover.storagePath : null,
+  });
 
   // Template, favorites, guest links and stats are independent of each other.
   const [notificationTemplate, favorites, guestLinks, eventStats] = await Promise.all([
@@ -103,13 +104,13 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
             <div className="absolute inset-x-0 top-0 flex justify-end p-4">
               <HeroImageUploader
                 galleryId={detail.gallery.id}
-                hasCustomHero={Boolean(customHeroUrl)}
+                hasCustomHero={hasCustomHero}
               />
             </div>
             <div className="absolute inset-x-0 bottom-0 p-5 text-white">
               <p className="text-[10px] tracking-[0.28em] uppercase text-white/85">Gallery Manager</p>
               <h2 className="title-cinematic mt-2 text-3xl font-semibold">{detail.project.title}</h2>
-              {customHeroUrl ? (
+              {hasCustomHero ? (
                 <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-white/70">
                   Custom hero image
                 </p>
@@ -246,8 +247,15 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
-                  <label htmlFor="heroImageUrl" className="text-sm">Hero image URL</label>
-                  <input id="heroImageUrl" name="heroImageUrl" defaultValue={notificationTemplate.heroImageUrl || ""} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" placeholder="Optional image URL for the email hero" />
+                  <label htmlFor="heroImageUrl" className="text-sm">Email hero image</label>
+                  <input id="heroImageUrl" name="heroImageUrl" defaultValue={notificationTemplate.heroImageOverride || ""} className="h-10 w-full rounded-xl border border-border bg-white px-3 text-sm" placeholder="Leave empty to use the gallery hero image" />
+                  <p className="text-xs text-muted-foreground">
+                    {notificationTemplate.heroImageOverride
+                      ? "This external image replaces the gallery hero in the email. Clear it to follow the gallery again."
+                      : heroDisplayUrl
+                        ? `The email uses the ${hasCustomHero ? "uploaded hero image" : "cover photo"} above, always the current one. Paste an external image URL here to use a different picture.`
+                        : "No hero image or cover photo yet, so the email has no picture. Upload a hero or pick a cover, or paste an external image URL."}
+                  </p>
                 </div>
               </div>
             </div>

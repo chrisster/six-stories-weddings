@@ -30,6 +30,7 @@ export function buildDefaultGalleryNotificationTemplate({
     shareNote:
       "If you already have portal access, use your existing login. If not, use the button above to claim your access and set your password.",
     heroImageUrl: heroImageUrl || null,
+    heroImageOverride: null,
   };
 }
 
