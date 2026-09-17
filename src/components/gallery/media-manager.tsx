@@ -149,11 +149,23 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
         const current = grouped.get(key) || [];
         grouped.set(key, [...current, item]);
       });
-      return grouped;
+
+      // Groups follow the order of the scenes (the one clients see), not the
+      // order the first photo of each scene happens to have; whatever has no
+      // scene comes last.
+      const inSceneOrder = new Map<string, typeof media>();
+      sections.forEach((section) => {
+        const items = grouped.get(section.name);
+        if (items && !inSceneOrder.has(section.name)) inSceneOrder.set(section.name, items);
+      });
+      grouped.forEach((items, key) => {
+        if (!inSceneOrder.has(key)) inSceneOrder.set(key, items);
+      });
+      return inSceneOrder;
     }
 
     return new Map([[selectedSectionFilter, sorted]]);
-  }, [mediaState, sortBy, selectedSectionFilter, sectionMap]);
+  }, [mediaState, sortBy, selectedSectionFilter, sectionMap, sections]);
 
   async function persistOrder(next: typeof mediaState) {
     const orderedIds = [...next]

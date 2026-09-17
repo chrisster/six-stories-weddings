@@ -68,6 +68,48 @@ export async function renameSectionAction(formData: FormData) {
   revalidatePath(`/admin/galleries/${galleryId}`);
 }
 
+/**
+ * Saves the order of a gallery's scenes. `orderedIds` is the full list in its
+ * new order; every update is scoped to the gallery, so an id from another
+ * gallery is simply ignored.
+ */
+export async function reorderSectionsAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  await requireStudioUser();
+
+  const galleryId = String(formData.get("galleryId") || "").trim();
+  const orderedIds = String(formData.get("orderedIds") || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!galleryId || orderedIds.length === 0) return;
+
+  const admin = createAdminClient();
+  if (!admin) return;
+
+  await Promise.all(
+    orderedIds.map((sectionId, index) =>
+      admin
+        .from("gallery_sections")
+        .update({ sort_order: index + 1 })
+        .eq("gallery_id", galleryId)
+        .eq("id", sectionId),
+    ),
+  );
+
+  const { data: galleryRow } = await admin
+    .from("galleries")
+    .select("slug")
+    .eq("id", galleryId)
+    .maybeSingle();
+
+  revalidatePath(`/admin/galleries/${galleryId}`);
+  // The client gallery lists its scenes in this order.
+  if (galleryRow?.slug) {
+    revalidatePath(`/g/${galleryRow.slug}`);
+  }
+}
+
 export async function deleteSectionAction(formData: FormData) {
   if (!hasSupabaseEnv) return;
   await requireStudioUser();

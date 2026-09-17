@@ -15,7 +15,7 @@ import { requireStudioRole } from "@/lib/auth";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
 import { resolveGalleryHeroUrl } from "@/lib/gallery-hero";
 import { getMediaThumbFallbackUrl, getMediaThumbUrl, getMediaStreamUrl, getSignedMediaUrl } from "@/lib/storage";
-import { SectionRow } from "./section-row";
+import { SectionList } from "./section-list";
 
 type GalleryManagerPageProps = {
   params: Promise<{ id: string }>;
@@ -268,11 +268,10 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
 
         <article className="admin-surface p-5">
           <h3 className="quiet-label mb-3">Scenes / Sections</h3>
-          <ul className="mb-4 space-y-2">
-            {detail.sections.map((section) => (
-              <SectionRow key={section.id} section={section} galleryId={detail.gallery.id} />
-            ))}
-          </ul>
+          <SectionList
+            sections={detail.sections.map((section) => ({ id: section.id, name: section.name }))}
+            galleryId={detail.gallery.id}
+          />
 
           <form action={createGallerySectionAction} className="flex gap-2">
             <input type="hidden" name="galleryId" value={detail.gallery.id} />
