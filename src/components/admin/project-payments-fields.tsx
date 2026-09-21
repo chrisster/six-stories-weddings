@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { ProjectPayment } from "@/lib/types";
 
 type PaymentRow = {
+  id: number;
   date: string;
   amount: string;
   note: string;
@@ -15,45 +16,41 @@ type ProjectPaymentsFieldsProps = {
   initialPayments: ProjectPayment[];
 };
 
-function toDisplayDate(iso: string): string {
-  if (!iso) return "";
-  const parts = iso.split("-");
-  if (parts.length === 3 && parts[0].length === 4) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
-  }
-  return iso;
-}
+// Rows are uncontrolled inputs, so each needs a stable key: keyed by index,
+// removing a middle payment would leave its values on screen.
+let nextRowId = 0;
 
 function toRows(initialPayments: ProjectPayment[]): PaymentRow[] {
   return initialPayments.map((payment) => ({
-    date: toDisplayDate(payment.date),
+    id: nextRowId++,
+    date: payment.date,
     amount: String(payment.amount),
     note: payment.note || "",
   }));
 }
 
 export function ProjectPaymentsFields({ formId, initialPayments }: ProjectPaymentsFieldsProps) {
-  const [rows, setRows] = useState<PaymentRow[]>(toRows(initialPayments));
+  const [rows, setRows] = useState<PaymentRow[]>(() => toRows(initialPayments));
 
   const addPayment = () => {
-    setRows((current) => [...current, { date: "", amount: "", note: "" }]);
+    setRows((current) => [...current, { id: nextRowId++, date: "", amount: "", note: "" }]);
   };
 
-  const removePayment = (index: number) => {
-    setRows((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  const removePayment = (id: number) => {
+    setRows((current) => current.filter((row) => row.id !== id));
   };
 
   return (
     <div className="mt-2 space-y-2">
       {rows.length > 0 ? (
-        rows.map((row, index) => (
-          <div key={index} className="grid gap-2 rounded-xl border border-border/80 bg-zinc-50 p-3 sm:grid-cols-[160px_140px_minmax(0,1fr)_auto]">
+        rows.map((row) => (
+          <div key={row.id} className="grid gap-2 rounded-xl border border-border/80 bg-zinc-50 p-3 sm:grid-cols-[160px_140px_minmax(0,1fr)_auto]">
             <input
               form={formId}
               name="paymentDate"
-              type="text"
+              type="date"
               defaultValue={row.date}
-              placeholder="DD-MM-YYYY"
+              aria-label="Payment date"
               className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
             />
             <input
@@ -76,7 +73,7 @@ export function ProjectPaymentsFields({ formId, initialPayments }: ProjectPaymen
             />
             <button
               type="button"
-              onClick={() => removePayment(index)}
+              onClick={() => removePayment(row.id)}
               className="h-10 rounded-xl border border-red-200 px-3 text-sm text-red-600 hover:border-red-400"
             >
               Remove

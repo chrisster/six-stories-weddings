@@ -111,6 +111,7 @@ export function ProjectsControls({
           <option value="this_week">This week</option>
           <option value="this_month">This month</option>
           <option value="this_year">This year</option>
+          <option value="next_year">Next year</option>
         </select>
       </div>
 

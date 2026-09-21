@@ -71,6 +71,10 @@ function isWithinPeriod(eventDate: string, period: string) {
     return date.getUTCFullYear() === now.getUTCFullYear();
   }
 
+  if (period === "next_year") {
+    return date.getUTCFullYear() === now.getUTCFullYear() + 1;
+  }
+
   return true;
 }
 
@@ -86,6 +90,9 @@ function periodSince(period: string): Date | null {
   }
   if (period === "this_year") {
     return new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+  }
+  if (period === "next_year") {
+    return new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1));
   }
   return null;
 }
