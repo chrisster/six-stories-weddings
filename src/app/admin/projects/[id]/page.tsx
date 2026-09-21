@@ -118,15 +118,6 @@ function currency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 }
 
-function toDisplayDate(iso: string): string {
-  if (!iso) return "";
-  const parts = iso.split("-");
-  if (parts.length === 3 && parts[0].length === 4) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
-  }
-  return iso;
-}
-
 function parseProjectType(projectType: string): {
   eventType: "wedding" | "baptism";
   eventLabel: string;
@@ -265,7 +256,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           <p>
             {query.reason === "date"
-              ? "Could not save project: invalid date format. Use DD-MM-YYYY."
+              ? "Could not save project: the event date is missing or invalid."
               : "Could not save project. Please check fields and try again."}
           </p>
           {query.detail ? (
@@ -506,7 +497,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Event date</label>
-            <input name="eventDate" type="text" required defaultValue={toDisplayDate(project.eventDate)} placeholder="DD-MM-YYYY" className="h-10 w-full rounded-xl border border-border px-3 text-sm" />
+            <input name="eventDate" type="date" required defaultValue={project.eventDate} className="h-10 w-full rounded-xl border border-border px-3 text-sm" />
           </div>
 
           <div className="space-y-1.5">

@@ -32,6 +32,10 @@ function isWithinPeriod(eventDate: string, period: string) {
     return date.getUTCFullYear() === now.getUTCFullYear();
   }
 
+  if (period === "next_year") {
+    return date.getUTCFullYear() === now.getUTCFullYear() + 1;
+  }
+
   return true;
 }
 
@@ -39,6 +43,7 @@ const periodOptions = [
   { key: "all", label: "All time" },
   { key: "this_month", label: "This month" },
   { key: "this_year", label: "This year" },
+  { key: "next_year", label: "Next year" },
 ] as const;
 
 const inactiveStatuses = new Set(["cancelled", "declined"]);
