@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { AdminNav } from "@/components/admin/admin-nav";
+import { EmailHealthBanner } from "@/components/admin/email-health-banner";
 import { NotificationBell } from "@/components/admin/notification-bell";
 import { ProfileMenu } from "@/components/admin/profile-menu";
 import { getCurrentUser, requireStudioRole } from "@/lib/auth";
@@ -58,6 +60,11 @@ export default async function AdminLayout({
             <div className="rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               Running in demo mode. Configure Supabase env vars to enable cloud data and authentication.
             </div>
+          ) : null}
+          {hasSupabaseEnv && role !== "crew" ? (
+            <Suspense fallback={null}>
+              <EmailHealthBanner />
+            </Suspense>
           ) : null}
           {children}
         </div>

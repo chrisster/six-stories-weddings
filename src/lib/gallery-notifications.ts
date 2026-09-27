@@ -149,21 +149,7 @@ export async function sendGalleryNotificationEmail(args: {
 
   const hasSmtp = Boolean(smtpHost && smtpPort && smtpUser && smtpPass && fromEmail);
   if (hasSmtp) {
-    const nodemailer = await import("nodemailer");
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpSecure,
-      // Fail within seconds when the host is unreachable (nodemailer waits
-      // 2 minutes by default), so the admin sees the error instead of a hang.
-      connectionTimeout: 15_000,
-      greetingTimeout: 15_000,
-      socketTimeout: 30_000,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    });
+    const transporter = await createSmtpTransport({ smtpHost, smtpPort, smtpSecure, smtpUser, smtpPass });
 
     await transporter.sendMail({
       from,
@@ -216,6 +202,114 @@ export async function sendGalleryNotificationEmail(args: {
   }
 
   return { sent: true as const };
+}
+
+async function createSmtpTransport(env: {
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpPass: string;
+}) {
+  const nodemailer = await import("nodemailer");
+  return nodemailer.createTransport({
+    host: env.smtpHost,
+    port: env.smtpPort,
+    secure: env.smtpSecure,
+    // Fail within seconds when the host is unreachable (nodemailer waits
+    // 2 minutes by default), so the admin sees the error instead of a hang.
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 30_000,
+    auth: {
+      user: env.smtpUser,
+      pass: env.smtpPass,
+    },
+  });
+}
+
+export type EmailDeliveryStatus = {
+  ok: boolean;
+  provider: "smtp" | "resend" | "none";
+  /** Where mail is handed off, e.g. "mail.example.com:465". */
+  target: string;
+  fromEmail: string;
+  error: string | null;
+  checkedAt: string;
+};
+
+// Last check result per server instance. A healthy result is reused for 10
+// minutes and a failure for 1, so the admin warning clears soon after a fix
+// without every page load opening an SMTP connection.
+let cachedStatus: { status: EmailDeliveryStatus; expiresAt: number } | null = null;
+
+/**
+ * Checks that emails can go out without sending one: for SMTP it connects and
+ * logs in (the step that failed when SMTP_HOST pointed at a Cloudflare-proxied
+ * host or had a typo); for Resend it checks the API key is accepted.
+ */
+export async function checkEmailDelivery(options: { fresh?: boolean } = {}): Promise<EmailDeliveryStatus> {
+  if (!options.fresh && cachedStatus && cachedStatus.expiresAt > Date.now()) {
+    return cachedStatus.status;
+  }
+
+  const env = getGalleryEmailEnv();
+  const hasSmtp = Boolean(env.smtpHost && env.smtpPort && env.smtpUser && env.smtpPass && env.fromEmail);
+  const base = { fromEmail: env.fromEmail, checkedAt: new Date().toISOString() };
+  let status: EmailDeliveryStatus;
+
+  if (hasSmtp) {
+    const target = `${env.smtpHost}:${env.smtpPort}`;
+    try {
+      const transporter = await createSmtpTransport(env);
+      await transporter.verify();
+      transporter.close();
+      status = { ...base, ok: true, provider: "smtp", target, error: null };
+    } catch (error) {
+      status = {
+        ...base,
+        ok: false,
+        provider: "smtp",
+        target,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  } else if (env.apiKey && env.fromEmail) {
+    try {
+      const response = await fetch("https://api.resend.com/domains", {
+        headers: { Authorization: `Bearer ${env.apiKey}` },
+      });
+      const body = response.ok ? "" : await response.text();
+      // A send-only key cannot list domains but is still valid for sending.
+      const ok = response.ok || body.includes("restricted_api_key");
+      status = {
+        ...base,
+        ok,
+        provider: "resend",
+        target: "api.resend.com",
+        error: ok ? null : `Resend rejected the API key (${response.status})`,
+      };
+    } catch (error) {
+      status = {
+        ...base,
+        ok: false,
+        provider: "resend",
+        target: "api.resend.com",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  } else {
+    status = {
+      ...base,
+      ok: false,
+      provider: "none",
+      target: "",
+      error: "No email provider is configured (SMTP_* or RESEND_API_KEY, plus GALLERY_NOTIFICATIONS_FROM_EMAIL)",
+    };
+  }
+
+  cachedStatus = { status, expiresAt: Date.now() + (status.ok ? 10 : 1) * 60_000 };
+  return status;
 }
 
 function formatFromAddress(fromEmail: string, fromName?: string) {

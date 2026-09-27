@@ -33,18 +33,20 @@ export function getClientPortalSecret() {
 }
 
 export function getGalleryEmailEnv() {
-  const smtpPortRaw = process.env.SMTP_PORT || "587";
-  const smtpPort = Number(smtpPortRaw);
+  // Values are trimmed: a space or newline pasted into the Vercel dashboard
+  // otherwise becomes part of the host name or password.
+  const read = (name: string) => (process.env[name] || "").trim();
+  const smtpPort = Number(read("SMTP_PORT") || "587");
 
   return {
-    apiKey: process.env.RESEND_API_KEY || "",
-    fromEmail: process.env.GALLERY_NOTIFICATIONS_FROM_EMAIL || "",
-    fromName: process.env.GALLERY_NOTIFICATIONS_FROM_NAME || "Six Stories Studio",
-    replyTo: process.env.GALLERY_NOTIFICATIONS_REPLY_TO || "",
-    smtpHost: process.env.SMTP_HOST || "",
+    apiKey: read("RESEND_API_KEY"),
+    fromEmail: read("GALLERY_NOTIFICATIONS_FROM_EMAIL"),
+    fromName: read("GALLERY_NOTIFICATIONS_FROM_NAME") || "Six Stories Studio",
+    replyTo: read("GALLERY_NOTIFICATIONS_REPLY_TO"),
+    smtpHost: read("SMTP_HOST"),
     smtpPort: Number.isFinite(smtpPort) ? smtpPort : 587,
-    smtpSecure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
-    smtpUser: process.env.SMTP_USER || "",
-    smtpPass: process.env.SMTP_PASS || "",
+    smtpSecure: (read("SMTP_SECURE") || "false").toLowerCase() === "true",
+    smtpUser: read("SMTP_USER"),
+    smtpPass: read("SMTP_PASS"),
   };
 }

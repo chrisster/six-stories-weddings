@@ -2,21 +2,24 @@ import Link from "next/link";
 
 import { requireAdminRole } from "@/lib/auth";
 import { getOrganizationSettings } from "@/lib/data";
+import { hasSupabaseEnv } from "@/lib/env";
+import { checkEmailDelivery } from "@/lib/gallery-notifications";
 
-import { saveOrganizationSettingsAction } from "./actions";
+import { saveOrganizationSettingsAction, sendTestEmailAction } from "./actions";
 
 type OrganizationPageProps = {
-  searchParams: Promise<{ status?: string; reason?: string }>;
+  searchParams: Promise<{ status?: string; reason?: string; emailTest?: string; emailReason?: string }>;
 };
 
 const fieldCls = "h-10 w-full rounded-xl border border-border px-3 text-sm";
 const labelCls = "text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground";
 
 export default async function OrganizationPage({ searchParams }: OrganizationPageProps) {
-  const [, { status, reason }, settings] = await Promise.all([
+  const [, { status, reason, emailTest, emailReason }, settings, emailStatus] = await Promise.all([
     requireAdminRole(),
     searchParams,
     getOrganizationSettings(),
+    hasSupabaseEnv ? checkEmailDelivery({ fresh: true }) : Promise.resolve(null),
   ]);
 
   return (
@@ -183,6 +186,56 @@ export default async function OrganizationPage({ searchParams }: OrganizationPag
           </div>
         </form>
       </section>
+
+      {emailStatus ? (
+        <section
+          id="email-delivery"
+          className="rounded-3xl border border-border/70 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] sm:p-6"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <h2 className={labelCls}>Email delivery</h2>
+              <p className="text-sm">
+                <span
+                  className={`mr-2 inline-block h-2 w-2 rounded-full ${emailStatus.ok ? "bg-emerald-500" : "bg-red-500"}`}
+                />
+                {emailStatus.ok ? "Working" : "Not working"}
+                {emailStatus.target ? (
+                  <span className="text-muted-foreground"> · {emailStatus.target}</span>
+                ) : null}
+                {emailStatus.fromEmail ? (
+                  <span className="text-muted-foreground"> · from {emailStatus.fromEmail}</span>
+                ) : null}
+              </p>
+              {emailStatus.error ? (
+                <p className="break-words text-sm text-red-700">{emailStatus.error}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Checked just now by connecting to the mail server. Gallery, contract and portal
+                emails all go out this way.
+              </p>
+            </div>
+            <form action={sendTestEmailAction}>
+              <button
+                type="submit"
+                className="inline-flex rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
+              >
+                Send test email to me
+              </button>
+            </form>
+          </div>
+          {emailTest === "sent" ? (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+              Test email sent. Check that it arrived in your inbox and not in spam.
+            </div>
+          ) : null}
+          {emailTest === "failed" ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              Test email failed{emailReason ? `: ${emailReason}` : "."}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

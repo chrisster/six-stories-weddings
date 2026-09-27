@@ -83,3 +83,39 @@ export async function saveOrganizationSettingsAction(formData: FormData) {
   revalidatePath("/admin/organization");
   redirect("/admin/organization?status=saved");
 }
+
+/**
+ * Sends a real test email to the signed-in admin, so the whole path (server,
+ * login, sender address, spam filtering) can be checked after a mail change.
+ */
+export async function sendTestEmailAction() {
+  const member = await requireStudioAdmin();
+  if (!member) {
+    redirect("/admin/organization?emailTest=failed&emailReason=" + encodeURIComponent("demo mode"));
+  }
+
+  const { sendGalleryNotificationEmail } = await import("@/lib/gallery-notifications");
+  const sentAt = new Date().toLocaleString("en-GB", { timeZone: "Europe/Athens" });
+
+  let reason = "";
+  try {
+    const result = await sendGalleryNotificationEmail({
+      to: member.email,
+      subject: "Six Stories: test email",
+      text: `This is a test email from the Six Stories workspace, sent ${sentAt}. If it reached your inbox (not spam), client emails are working.`,
+      html: `<p style="font-family:Georgia,serif;font-size:14px;color:#333;">This is a test email from the Six Stories workspace, sent ${sentAt}.</p><p style="font-family:Georgia,serif;font-size:14px;color:#333;">If it reached your inbox (not spam), client emails are working.</p>`,
+    });
+    if (!result.sent) {
+      reason = "no email provider configured";
+    }
+  } catch (error) {
+    reason = error instanceof Error ? error.message : String(error);
+  }
+
+  if (reason) {
+    // Provider errors can echo addresses; keep them out of the URL.
+    const safe = reason.replace(/[^\s<>"']+@[^\s<>"']+/g, "[email]").slice(0, 300);
+    redirect(`/admin/organization?emailTest=failed&emailReason=${encodeURIComponent(safe)}#email-delivery`);
+  }
+  redirect("/admin/organization?emailTest=sent#email-delivery");
+}
