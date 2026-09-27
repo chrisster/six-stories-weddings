@@ -154,6 +154,11 @@ export async function sendGalleryNotificationEmail(args: {
       host: smtpHost,
       port: smtpPort,
       secure: smtpSecure,
+      // Fail within seconds when the host is unreachable (nodemailer waits
+      // 2 minutes by default), so the admin sees the error instead of a hang.
+      connectionTimeout: 15_000,
+      greetingTimeout: 15_000,
+      socketTimeout: 30_000,
       auth: {
         user: smtpUser,
         pass: smtpPass,
