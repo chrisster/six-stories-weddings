@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -213,7 +214,17 @@ export async function updateGallerySettingsAction(formData: FormData) {
     { onConflict: "gallery_id" },
   );
 
+  // Outcome of the "notify clients" run, reported back on the gallery page so
+  // a failed send is visible instead of only reaching the server log.
+  let notify: { sent: number; failed: number; noEmail: number; error: string } | null = null;
+
+  if (notifyClients && !isPublished) {
+    notify = { sent: 0, failed: 0, noEmail: 0, error: "the gallery is not published" };
+  }
+
   if (isPublished && notifyClients) {
+    const outcome = { sent: 0, failed: 0, noEmail: 0, error: "" };
+    notify = outcome;
     const { data: projectClients } = await admin
       .from("project_clients")
       .select("client_id")
@@ -232,7 +243,11 @@ export async function updateGallerySettingsAction(formData: FormData) {
       const byEmail = new Map<string, { fullName: string }>();
       (clients || []).forEach((client) => {
         const email = String(client.email || "").trim().toLowerCase();
-        if (!email || byEmail.has(email)) {
+        if (!email) {
+          outcome.noEmail += 1;
+          return;
+        }
+        if (byEmail.has(email)) {
           return;
         }
         byEmail.set(email, { fullName: String(client.full_name || "") });
@@ -288,6 +303,7 @@ export async function updateGallerySettingsAction(formData: FormData) {
             throw new Error(`Notification provider not configured (${result.reason})`);
           }
 
+          outcome.sent += 1;
           if (account?.id) {
             await admin
               .from("client_portal_accounts")
@@ -296,6 +312,8 @@ export async function updateGallerySettingsAction(formData: FormData) {
           }
         } catch (error) {
           console.error("Could not send gallery notification", { galleryId, email, error });
+          outcome.failed += 1;
+          outcome.error ||= error instanceof Error ? error.message : String(error);
         }
       }
     }
@@ -304,6 +322,22 @@ export async function updateGallerySettingsAction(formData: FormData) {
   revalidatePath(`/admin/galleries/${galleryId}`);
   revalidatePath(`/g/${galleryRow.slug}`);
   revalidatePath("/portal");
+
+  if (notify) {
+    const params = new URLSearchParams({
+      notify: "1",
+      sent: String(notify.sent),
+      failed: String(notify.failed),
+      noEmail: String(notify.noEmail),
+    });
+    if (notify.error) {
+      // Provider errors can echo the recipient; keep addresses out of the URL.
+      params.set("reason", notify.error.replace(/[^\s<>"']+@[^\s<>"']+/g, "[email]").slice(0, 300));
+    }
+    redirect(`/admin/galleries/${galleryId}?${params.toString()}`);
+  }
+  // Drops a previous result banner from the URL.
+  redirect(`/admin/galleries/${galleryId}`);
 }
 
 export async function uploadMediaAction(formData: FormData) {

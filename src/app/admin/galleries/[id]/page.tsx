@@ -19,11 +19,19 @@ import { SectionList } from "./section-list";
 
 type GalleryManagerPageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{
+    notify?: string;
+    sent?: string;
+    failed?: string;
+    noEmail?: string;
+    reason?: string;
+  }>;
 };
 
-export default async function GalleryManagerPage({ params }: GalleryManagerPageProps) {
-  const { id } = await params;
+export default async function GalleryManagerPage({ params, searchParams }: GalleryManagerPageProps) {
+  const [{ id }, notifyParams] = await Promise.all([params, searchParams]);
   const [detail] = await Promise.all([getGalleryById(id), requireStudioRole()]);
+  const notifyResult = notifyParams.notify ? describeNotifyResult(notifyParams) : null;
   if (!detail) {
     notFound();
   }
@@ -170,6 +178,17 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
       <section className="grid gap-4 xl:grid-cols-2">
         <article className="admin-surface p-5">
           <h3 className="quiet-label mb-3">Gallery Settings</h3>
+          {notifyResult ? (
+            <div
+              className={`mb-4 rounded-xl border px-4 py-2 text-sm ${
+                notifyResult.ok
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
+              {notifyResult.message}
+            </div>
+          ) : null}
           <form action={updateGallerySettingsAction} className="space-y-4">
             <input type="hidden" name="galleryId" value={detail.gallery.id} />
 
@@ -378,4 +397,27 @@ export default async function GalleryManagerPage({ params }: GalleryManagerPageP
       </section>
     </div>
   );
+}
+
+function describeNotifyResult(params: { sent?: string; failed?: string; noEmail?: string; reason?: string }) {
+  const sent = Number(params.sent) || 0;
+  const failed = Number(params.failed) || 0;
+  const noEmail = Number(params.noEmail) || 0;
+  const parts: string[] = [];
+
+  if (sent > 0) parts.push(`Gallery email sent to ${sent} client${sent === 1 ? "" : "s"}.`);
+  if (failed > 0) {
+    parts.push(
+      `Could not send to ${failed} client${failed === 1 ? "" : "s"}${params.reason ? `: ${params.reason.replace(/[.\s]+$/, "")}.` : "."}`,
+    );
+  } else if (sent === 0 && params.reason) {
+    parts.push(`No email sent: ${params.reason.replace(/[.\s]+$/, "")}.`);
+  } else if (sent === 0) {
+    parts.push("No email sent: none of the project's clients has an email address.");
+  }
+  if (noEmail > 0) {
+    parts.push(`${noEmail} client${noEmail === 1 ? " has" : "s have"} no email address on the project.`);
+  }
+
+  return { ok: sent > 0 && failed === 0, message: parts.join(" ") };
 }
