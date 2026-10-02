@@ -159,11 +159,17 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null, toke
   // With the public R2 domain available, assemble the archive once inside R2
   // and redirect to it: the storage→function→storage copy never touches
   // Vercel's CDN (no Fast Origin Transfer), and repeat downloads redirect to
-  // the cached object instantly. Keys are content-addressed by the asset-id
-  // set, so any change to the gallery selects a fresh key.
+  // the cached object instantly. Keys are content-addressed by the asset ids
+  // and their storage paths, so any change to the gallery — including a photo
+  // replaced in place by the uploader — selects a fresh key.
   if (isR2PublicEnabled()) {
     const hash = createHash("sha1")
-      .update(assets.map((asset) => asset.id).sort().join("\n"))
+      .update(
+        assets
+          .map((asset) => `${asset.id}:${asset.storagePath}`)
+          .sort()
+          .join("\n"),
+      )
       .digest("hex")
       .slice(0, 16);
     const scope = isSubset ? "sel" : "full";

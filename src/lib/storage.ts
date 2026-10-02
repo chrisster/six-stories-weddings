@@ -421,6 +421,17 @@ export async function getMediaBytes(
 }
 
 /** Whether a media object exists. R2 only — always false on Supabase. */
+/** Byte size of a stored media object, or null when unknown (R2 only). */
+export async function getMediaObjectSize(storagePath: string): Promise<number | null> {
+  if (!useR2 || !storagePath || storagePath.includes("://")) return null;
+  try {
+    const head = await getR2Client().send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: storagePath }));
+    return typeof head.ContentLength === "number" ? head.ContentLength : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function headMediaObject(storagePath: string): Promise<boolean> {
   if (!useR2) return false;
   try {

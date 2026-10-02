@@ -12,13 +12,34 @@ type MediaUploaderProps = {
   accept?: string;
 };
 
-type JobState = { file: File; loaded: number; status: "pending" | "saved" | "failed"; error?: string };
+type JobState = {
+  file: File;
+  loaded: number;
+  status: "pending" | "saved" | "failed";
+  error?: string;
+  name?: string;
+  replaceId?: string;
+};
+
+type DuplicateChoice = "skip" | "replace" | "keep";
+
+type Duplicate = {
+  /** Position in the selection. */
+  index: number;
+  file: File;
+  mediaId: string;
+  suggestedName: string;
+  choice: DuplicateChoice;
+};
 
 type Snapshot = {
   kind: "photo" | "video" | "file";
   total: number;
   saved: number;
   failed: Array<{ id: number; name: string; error: string }>;
+  replaced: number;
+  /** Duplicates the user chose to skip. */
+  skipped: number;
   totalBytes: number;
   sentBytes: number;
   /** Bytes sent since the current run started (excludes earlier runs). */
@@ -26,11 +47,15 @@ type Snapshot = {
   bytesPerSecond: number | null;
 };
 
-type Phase = "idle" | "uploading" | "done" | "cancelled";
+type Phase = "idle" | "checking" | "resolve" | "uploading" | "done" | "cancelled";
 
 const TICK_MS = 300;
 const SPEED_WINDOW_MS = 8000;
 const REFRESH_EVERY_MS = 20_000;
+
+// Only ever called from event handlers and timers; a named helper keeps the
+// React Compiler lint from mistaking the upload handlers for render code.
+const clock = () => performance.now();
 
 function formatBytes(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -54,6 +79,7 @@ function formatEta(seconds: number) {
 }
 
 function kindOf(files: File[]): Snapshot["kind"] {
+  if (files.length === 0) return "photo";
   const videos = files.filter(isVideoFile).length;
   return videos === files.length ? "video" : videos === 0 ? "photo" : "file";
 }
@@ -70,6 +96,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
   const [phase, setPhase] = useState<Phase>("idle");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [duplicates, setDuplicates] = useState<Duplicate[]>([]);
 
   // Progress events fire many times a second per file; they land in this ref
   // and the panel re-renders from a snapshot a few times a second instead.
@@ -78,6 +105,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
   const controllerRef = useRef<AbortController | null>(null);
   const startedAtRef = useRef(0);
   const startBytesRef = useRef(0);
+  const skippedRef = useRef(0);
   const lastRefreshRef = useRef(0);
 
   const selectedBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -87,6 +115,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     let totalBytes = 0;
     let sentBytes = 0;
     let saved = 0;
+    let replaced = 0;
     const failed: Snapshot["failed"] = [];
     const files: File[] = [];
     for (const [id, job] of jobsRef.current) {
@@ -98,11 +127,12 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
       totalBytes += job.file.size;
       sentBytes += job.status === "saved" ? job.file.size : Math.min(job.loaded, job.file.size);
       if (job.status === "saved") saved++;
+      if (job.status === "saved" && job.replaceId) replaced++;
     }
 
     // Speed over a sliding window, so it reacts to network changes without
     // jumping around between ticks.
-    const now = performance.now();
+    const now = clock();
     const samples = samplesRef.current;
     samples.push({ t: now, bytes: sentBytes });
     while (samples.length > 2 && now - samples[0].t > SPEED_WINDOW_MS) samples.shift();
@@ -115,6 +145,8 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
       total: jobsRef.current.size,
       saved,
       failed,
+      replaced,
+      skipped: skippedRef.current,
       totalBytes,
       sentBytes,
       runBytes: sentBytes - startBytesRef.current,
@@ -128,7 +160,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
 
     const tick = () => {
       setSnapshot(takeSnapshot());
-      setElapsed((performance.now() - startedAtRef.current) / 1000);
+      setElapsed((clock() - startedAtRef.current) / 1000);
     };
     const interval = setInterval(tick, TICK_MS);
 
@@ -159,8 +191,8 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     const controller = new AbortController();
     controllerRef.current = controller;
     samplesRef.current = [];
-    startedAtRef.current = performance.now();
-    lastRefreshRef.current = Date.now();
+    startedAtRef.current = clock();
+    lastRefreshRef.current = clock();
     setElapsed(0);
     // Files saved by an earlier run (before a resume) do not count toward
     // this run's average speed.
@@ -189,8 +221,8 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
               if (job) job.status = "saved";
             }
             // Let new photos show up in the library as the upload goes on.
-            if (Date.now() - lastRefreshRef.current > REFRESH_EVERY_MS) {
-              lastRefreshRef.current = Date.now();
+            if (clock() - lastRefreshRef.current > REFRESH_EVERY_MS) {
+              lastRefreshRef.current = clock();
               router.refresh();
             }
           },
@@ -220,7 +252,7 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
 
     const final = takeSnapshot();
     setSnapshot(final);
-    setElapsed((performance.now() - startedAtRef.current) / 1000);
+    setElapsed((clock() - startedAtRef.current) / 1000);
     setPhase(cancelled ? "cancelled" : "done");
     router.refresh();
 
@@ -231,12 +263,88 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     }
   }
 
-  const handleUpload = () => {
-    if (selectedFiles.length === 0 || isUploading) return;
-    jobsRef.current = new Map(
-      selectedFiles.map((file, id) => [id, { file, loaded: 0, status: "pending" } satisfies JobState]),
-    );
-    void run(selectedFiles.map((file, id) => ({ id, file })));
+  // Starts the upload with the user's answer for each duplicate (by
+  // selection index); files without an entry upload as new.
+  const startUpload = (decisions: Map<number, Duplicate>) => {
+    const jobs: UploadJob[] = [];
+    jobsRef.current = new Map();
+    skippedRef.current = 0;
+    selectedFiles.forEach((file, id) => {
+      const duplicate = decisions.get(id);
+      if (duplicate?.choice === "skip") {
+        skippedRef.current++;
+        return;
+      }
+      const name = duplicate?.choice === "keep" ? duplicate.suggestedName : undefined;
+      const replaceId = duplicate?.choice === "replace" ? duplicate.mediaId : undefined;
+      jobsRef.current.set(id, { file, loaded: 0, status: "pending", name, replaceId });
+      jobs.push({ id, file, name, replaceId });
+    });
+    setDuplicates([]);
+
+    if (jobs.length === 0) {
+      // Everything was a skipped duplicate.
+      setElapsed(0);
+      setSnapshot(takeSnapshot());
+      setPhase("done");
+      setSelectedFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    void run(jobs);
+  };
+
+  // Photos already in the gallery (same name and size) are found before any
+  // byte is sent, and the user decides what happens to them.
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0 || isUploading || phase === "checking") return;
+
+    const photos = selectedFiles
+      .map((file, index) => ({ file, index }))
+      .filter(({ file }) => !isVideoFile(file));
+    let found: Duplicate[] = [];
+
+    if (photos.length > 0) {
+      setPhase("checking");
+      try {
+        const response = await fetch("/api/admin/galleries/check-duplicates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            galleryId,
+            files: photos.map(({ file }) => ({ name: file.name, size: file.size })),
+          }),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as {
+            duplicates: Array<{ index: number; mediaId: string; suggestedName: string }>;
+          };
+          found = data.duplicates.map((duplicate) => ({
+            ...duplicate,
+            index: photos[duplicate.index].index,
+            file: photos[duplicate.index].file,
+            choice: "skip",
+          }));
+        }
+      } catch {
+        // The check is a convenience; if it is unavailable, upload as before.
+      }
+    }
+
+    if (found.length === 0) {
+      startUpload(new Map());
+      return;
+    }
+    setDuplicates(found);
+    setPhase("resolve");
+  };
+
+  const resolveAll = (choice: DuplicateChoice) => {
+    startUpload(new Map(duplicates.map((duplicate) => [duplicate.index, { ...duplicate, choice }])));
+  };
+
+  const resolveEach = () => {
+    startUpload(new Map(duplicates.map((duplicate) => [duplicate.index, duplicate])));
   };
 
   // Re-sends everything that is not in the gallery yet: failed files after an
@@ -250,8 +358,8 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
         next.set(id, job);
         continue;
       }
-      next.set(id, { file: job.file, loaded: 0, status: "pending" });
-      jobs.push({ id, file: job.file });
+      next.set(id, { file: job.file, loaded: 0, status: "pending", name: job.name, replaceId: job.replaceId });
+      jobs.push({ id, file: job.file, name: job.name, replaceId: job.replaceId });
     }
     jobsRef.current = next;
     if (jobs.length > 0) void run(jobs);
@@ -271,6 +379,116 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
     const timer = setTimeout(handleDismiss, 5000);
     return () => clearTimeout(timer);
   }, [phase, snapshot]);
+
+  if (phase === "checking") {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/20 p-4 text-sm" aria-live="polite">
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
+        Checking for photos already in this gallery…
+      </div>
+    );
+  }
+
+  if (phase === "resolve") {
+    const total = selectedFiles.length;
+    const choiceLabel: Record<DuplicateChoice, string> = {
+      skip: "Skip",
+      replace: "Replace",
+      keep: "Keep both",
+    };
+    const bulkLabel: Record<DuplicateChoice, string> = {
+      skip: `Skip all ${duplicates.length}`,
+      replace: `Replace all ${duplicates.length}`,
+      keep: `Keep both for all ${duplicates.length}`,
+    };
+    return (
+      <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4" aria-live="polite">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <TriangleAlert className="size-4 shrink-0 text-amber-600" />
+            <p className="text-sm font-medium">
+              {duplicates.length === total
+                ? `${duplicates.length === 1 ? "This photo is" : `All ${total} photos are`} already in this gallery`
+                : `${duplicates.length} of ${total} ${plural(kindOf(selectedFiles), total)} ${
+                    duplicates.length === 1 ? "is" : "are"
+                  } already in this gallery`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDuplicates([]);
+              setPhase("idle");
+            }}
+            className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground hover:no-underline"
+          >
+            Cancel
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Same file name and size. <strong className="font-medium text-foreground">Replace</strong>{" "}keeps each
+          photo&apos;s place, section, favorites and comments;{" "}
+          <strong className="font-medium text-foreground">Keep both</strong>{" "}adds a copy named like
+          &ldquo;{duplicates[0]?.suggestedName}&rdquo;.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {(["skip", "replace", "keep"] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              onClick={() => resolveAll(choice)}
+              className={`h-9 rounded-xl border px-4 text-xs transition hover:opacity-90 ${
+                choice === "skip"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border bg-white text-foreground"
+              }`}
+            >
+              {duplicates.length > 1 ? bulkLabel[choice] : choiceLabel[choice]}
+            </button>
+          ))}
+        </div>
+
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            Choose for each photo
+          </summary>
+          <ul className="mt-2 max-h-60 space-y-1 overflow-y-auto">
+            {duplicates.map((duplicate) => (
+              <li key={duplicate.index} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-medium">{duplicate.file.name}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {formatBytes(duplicate.file.size)}
+                </span>
+                <select
+                  value={duplicate.choice}
+                  onChange={(event) => {
+                    const choice = event.target.value as DuplicateChoice;
+                    setDuplicates((previous) =>
+                      previous.map((entry) => (entry.index === duplicate.index ? { ...entry, choice } : entry)),
+                    );
+                  }}
+                  className="h-7 shrink-0 rounded-lg border border-border bg-white px-2"
+                  aria-label={`What to do with ${duplicate.file.name}`}
+                >
+                  <option value="skip">Skip</option>
+                  <option value="replace">Replace</option>
+                  <option value="keep">Keep both as {duplicate.suggestedName}</option>
+                </select>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={resolveEach}
+            className="mt-3 h-9 rounded-xl border border-foreground bg-foreground px-4 text-xs text-background transition hover:opacity-90"
+          >
+            Upload with these choices
+          </button>
+        </details>
+      </div>
+    );
+  }
 
   if (phase === "idle" || !snapshot) {
     return (
@@ -335,9 +553,19 @@ export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" 
   } else if (phase === "cancelled") {
     headline = `Upload cancelled — ${snapshot.saved} of ${snapshot.total} ${noun(snapshot.total)} saved`;
     detail = pending > 0 ? `${pending} not uploaded yet.` : "";
+  } else if (snapshot.total === 0) {
+    headline = "Nothing to upload";
+    detail = `${snapshot.skipped} ${noun(snapshot.skipped)} skipped — already in the gallery.`;
   } else if (snapshot.failed.length === 0) {
     headline = `${snapshot.saved} ${noun(snapshot.saved)} uploaded`;
-    detail = `${formatBytes(snapshot.totalBytes)} in ${formatDuration(elapsed)} · ${formatBytes(averageSpeed)}/s on average`;
+    detail = [
+      `${formatBytes(snapshot.totalBytes)} in ${formatDuration(elapsed)}`,
+      `${formatBytes(averageSpeed)}/s on average`,
+      snapshot.replaced > 0 ? `${snapshot.replaced} replaced` : null,
+      snapshot.skipped > 0 ? `${snapshot.skipped} skipped` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   } else {
     headline = `${snapshot.saved} of ${snapshot.total} ${noun(snapshot.total)} uploaded, ${snapshot.failed.length} failed`;
     detail = "The rest are already in the gallery.";

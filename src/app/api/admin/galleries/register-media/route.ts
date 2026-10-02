@@ -5,6 +5,7 @@ import { hasSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStudioUser } from "@/lib/auth";
 import {
+  deleteStoredObjects,
   getBucketName,
   getStorageProviderName,
   mediaThumbKey,
@@ -19,6 +20,10 @@ type RegisterItem = {
   contentType?: string;
   width?: number;
   height?: number;
+  /** Byte size of the original, kept so later uploads can spot duplicates. */
+  size?: number;
+  /** Existing asset this upload replaces in place (same gallery only). */
+  replaceId?: string;
 };
 
 const MAX_BATCH = 100;
@@ -28,6 +33,11 @@ const MAX_BATCH = 100;
 // statement with consecutive sort orders in the order given — the uploader
 // sends batches in selection order, so galleries keep the photographer's
 // sequence even though files upload in parallel.
+//
+// Items with `replaceId` swap the file behind an existing asset instead: the
+// row keeps its id, position, section, cover flag, favorites and comments,
+// and the replaced objects are deleted from storage once nothing references
+// them.
 export async function POST(request: Request) {
   try {
     if (!hasSupabaseEnv) {
@@ -53,6 +63,8 @@ export async function POST(request: Request) {
       contentType: String(item?.contentType || "").trim(),
       width: Number(item?.width),
       height: Number(item?.height),
+      size: Number(item?.size),
+      replaceId: String(item?.replaceId || "").trim(),
     }));
 
     if (
@@ -69,36 +81,102 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Admin client unavailable." }, { status: 500 });
     }
 
-    const { data: latestAsset } = await admin
-      .from("media_assets")
-      .select("sort_order")
-      .eq("gallery_id", galleryId)
-      .order("sort_order", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const replaceIds = items.map((item) => item.replaceId).filter(Boolean);
+    const replaced = new Map<string, { storage_path: string; metadata_json: unknown }>();
+    if (replaceIds.length > 0) {
+      const { data, error } = await admin
+        .from("media_assets")
+        .select("id, storage_path, metadata_json")
+        .eq("gallery_id", galleryId)
+        .in("id", replaceIds);
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      for (const row of data || []) replaced.set(row.id as string, row);
+    }
 
-    const baseSortOrder = latestAsset?.sort_order || 0;
     const provider = getStorageProviderName();
     const bucket = getBucketName();
+    const dimension = (value: number) => (Number.isFinite(value) && value > 0 ? Math.round(value) : null);
+    const sizeOf = (item: (typeof items)[number]) =>
+      Number.isFinite(item.size) && item.size > 0 ? Math.round(item.size) : null;
 
-    const { error } = await admin.from("media_assets").insert(
-      items.map((item, index) => ({
-        gallery_id: galleryId,
-        section_id: sectionId || null,
-        storage_provider: provider,
-        storage_bucket: bucket,
-        storage_path: item.storagePath,
-        original_name: item.originalName || null,
-        media_type: item.contentType.startsWith("video/") ? "video" : "photo",
-        width: Number.isFinite(item.width) && item.width > 0 ? Math.round(item.width) : null,
-        height: Number.isFinite(item.height) && item.height > 0 ? Math.round(item.height) : null,
-        sort_order: baseSortOrder + index + 1,
-        is_cover: false,
-      })),
-    );
+    // A replace target that was deleted meanwhile is simply added as new.
+    const replacements = items.filter((item) => item.replaceId && replaced.has(item.replaceId));
+    const inserts = items.filter((item) => !(item.replaceId && replaced.has(item.replaceId)));
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // Replacements run first: they are idempotent, so if the insert below
+    // fails and the uploader retries the batch, nothing is applied twice.
+    if (replacements.length > 0) {
+      const results = await Promise.all(
+        replacements.map((item) => {
+          const previous = replaced.get(item.replaceId)!;
+          const metadata = (previous.metadata_json as Record<string, unknown> | null) || {};
+          const size = sizeOf(item);
+          return admin
+            .from("media_assets")
+            .update({
+              storage_provider: provider,
+              storage_bucket: bucket,
+              storage_path: item.storagePath,
+              original_name: item.originalName || null,
+              width: dimension(item.width),
+              height: dimension(item.height),
+              metadata_json: size ? { ...metadata, size } : metadata,
+            })
+            .eq("id", item.replaceId)
+            .eq("gallery_id", galleryId);
+        }),
+      );
+      const failed = results.find((result) => result.error);
+      if (failed?.error) {
+        return NextResponse.json({ error: failed.error.message }, { status: 500 });
+      }
+
+      // Drop the old files unless another asset still points at them.
+      const oldPaths = replacements.map((item) => replaced.get(item.replaceId)!.storage_path);
+      const { data: stillUsed } = await admin
+        .from("media_assets")
+        .select("storage_path")
+        .in("storage_path", oldPaths);
+      const inUse = new Set((stillUsed || []).map((row) => row.storage_path as string));
+      await deleteStoredObjects(oldPaths.filter((path) => !inUse.has(path))).catch(() => null);
+    }
+
+    if (inserts.length > 0) {
+      const { data: latestAsset } = await admin
+        .from("media_assets")
+        .select("sort_order")
+        .eq("gallery_id", galleryId)
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const baseSortOrder = latestAsset?.sort_order || 0;
+
+      const { error } = await admin.from("media_assets").insert(
+        inserts.map((item, index) => {
+          const size = sizeOf(item);
+          return {
+            gallery_id: galleryId,
+            section_id: sectionId || null,
+            storage_provider: provider,
+            storage_bucket: bucket,
+            storage_path: item.storagePath,
+            original_name: item.originalName || null,
+            media_type: item.contentType.startsWith("video/") ? "video" : "photo",
+            width: dimension(item.width),
+            height: dimension(item.height),
+            sort_order: baseSortOrder + index + 1,
+            is_cover: false,
+            metadata_json: size ? { size } : null,
+          };
+        }),
+      );
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
     }
 
     // Browser uploads arrive without cache metadata; stamp the immutable
@@ -123,7 +201,7 @@ export async function POST(request: Request) {
     revalidatePath(`/admin/galleries/${galleryId}`);
     revalidatePath(`/g`);
 
-    return NextResponse.json({ ok: true, count: items.length });
+    return NextResponse.json({ ok: true, added: inserts.length, replaced: replacements.length });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not register media.";
     return NextResponse.json({ error: message }, { status: 500 });

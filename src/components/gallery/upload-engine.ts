@@ -17,7 +17,14 @@
 
 import { createPreviewPool, type PhotoPreviews } from "./upload-previews";
 
-export type UploadJob = { id: number; file: File };
+export type UploadJob = {
+  id: number;
+  file: File;
+  /** Name to store instead of the file's own ("Keep both" renames). */
+  name?: string;
+  /** Existing asset whose file this upload replaces in place. */
+  replaceId?: string;
+};
 
 export type UploadCallbacks = {
   /** Bytes of this job's file sent so far (absolute, may go back on retry). */
@@ -52,6 +59,8 @@ type RegisterItem = {
   contentType: string;
   width?: number;
   height?: number;
+  size?: number;
+  replaceId?: string;
 };
 
 const PHOTO_CONCURRENCY = 6;
@@ -410,8 +419,8 @@ async function uploadPhotos(options: UploadOptions, photos: UploadJob[]) {
           "/api/admin/galleries/upload-url",
           {
             galleryId,
-            files: photos.slice(from, to).map(({ file }) => ({
-              fileName: file.name,
+            files: photos.slice(from, to).map(({ file, name }) => ({
+              fileName: name ?? file.name,
               contentType: contentTypeOf(file),
               withThumb: true,
             })),
@@ -436,7 +445,9 @@ async function uploadPhotos(options: UploadOptions, photos: UploadJob[]) {
           if (error instanceof UploadAbortedError) throw error;
           // Signed flow unavailable — fall back to the proxied upload, which
           // records the photo itself.
-          await uploadPhotoProxied(galleryId, sectionId, file, signal, onProgress);
+          // (It cannot replace in place; a replace adds the photo instead.)
+          const named = job.name ? new File([file], job.name, { type: file.type }) : file;
+          await uploadPhotoProxied(galleryId, sectionId, named, signal, onProgress);
           registrar.skip(job.id);
           callbacks.onSaved([job.id]);
           return;
@@ -467,10 +478,12 @@ async function uploadPhotos(options: UploadOptions, photos: UploadJob[]) {
 
         registrar.ready(job.id, {
           storagePath: signed.storagePath,
-          originalName: file.name,
+          originalName: job.name ?? file.name,
           contentType,
           width: preview.width ?? undefined,
           height: preview.height ?? undefined,
+          size: file.size,
+          replaceId: job.replaceId,
         });
       } catch (error) {
         registrar.skip(job.id);
@@ -598,7 +611,7 @@ async function uploadVideo(options: UploadOptions, job: UploadJob) {
     () =>
       postJson(
         "/api/admin/galleries/register-media",
-        { galleryId, sectionId, items: [{ storagePath, originalName: file.name, contentType }] },
+        { galleryId, sectionId, items: [{ storagePath, originalName: file.name, contentType, size: file.size }] },
         signal,
       ),
     signal,
