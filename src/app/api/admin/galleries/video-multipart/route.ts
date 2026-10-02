@@ -15,13 +15,14 @@ import { getStudioUser } from "@/lib/auth";
 export const runtime = "nodejs";
 
 type MultipartBody = {
-  action?: "create" | "sign-part" | "complete" | "abort";
+  action?: "create" | "sign-part" | "sign-parts" | "complete" | "abort";
   galleryId?: string;
   fileName?: string;
   contentType?: string;
   storagePath?: string;
   uploadId?: string;
   partNumber?: number;
+  partNumbers?: number[];
   parts?: Array<{ partNumber?: number; etag?: string }>;
 };
 
@@ -74,6 +75,31 @@ export async function POST(request: Request) {
 
       const url = await signMultipartPart(storagePath, uploadId, partNumber);
       return NextResponse.json({ url });
+    }
+
+    // Signs a run of parts in one call so the browser can keep several part
+    // uploads in flight without a function round trip before each one.
+    if (action === "sign-parts") {
+      const storagePath = String(body?.storagePath || "").trim();
+      const uploadId = String(body?.uploadId || "").trim();
+      const partNumbers = Array.isArray(body?.partNumbers) ? body.partNumbers.map(Number) : [];
+
+      if (
+        !storagePath ||
+        !uploadId ||
+        partNumbers.length === 0 ||
+        partNumbers.length > 100 ||
+        partNumbers.some((n) => !Number.isInteger(n) || n < 1 || n > 10000)
+      ) {
+        return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+      }
+
+      const urls = await Promise.all(
+        partNumbers.map((partNumber) => signMultipartPart(storagePath, uploadId, partNumber)),
+      );
+      return NextResponse.json({
+        urls: Object.fromEntries(partNumbers.map((partNumber, i) => [partNumber, urls[i]])),
+      });
     }
 
     if (action === "complete") {

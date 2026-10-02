@@ -160,33 +160,48 @@ export async function uploadMediaToStorage(path: string, file: File) {
  * straight from the browser (presigned PUTs carry no cache metadata, and
  * signing the header in would require a CORS change on the bucket). Each key
  * is copied onto itself with replaced metadata; missing keys are skipped.
+ * Entries given with their content type skip the HEAD lookup (fresh uploads
+ * never carry the header yet). Runs at most 16 copies at a time.
  * R2 only — Supabase Storage sets its own cache headers at upload time.
  */
-export async function setMediaObjectsCacheControl(storagePaths: string[]): Promise<void> {
+export async function setMediaObjectsCacheControl(
+  objects: Array<string | { key: string; contentType: string }>,
+): Promise<void> {
   if (!useR2) return;
   const client = getR2Client();
+  const queue = objects
+    .map((entry) => (typeof entry === "string" ? { key: entry, contentType: null } : entry))
+    .filter(({ key }) => key && !key.includes("://"));
+
+  const stamp = async ({ key: Key, contentType }: { key: string; contentType: string | null }) => {
+    try {
+      let ContentType = contentType;
+      if (!ContentType) {
+        const head = await client.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key }));
+        if (head.CacheControl === MEDIA_CACHE_CONTROL) return;
+        ContentType = head.ContentType || "application/octet-stream";
+      }
+      await client.send(
+        new CopyObjectCommand({
+          Bucket: R2_BUCKET,
+          Key,
+          CopySource: `${R2_BUCKET}/${encodeURIComponent(Key).replace(/%2F/g, "/")}`,
+          MetadataDirective: "REPLACE",
+          ContentType,
+          CacheControl: MEDIA_CACHE_CONTROL,
+        }),
+      );
+    } catch {
+      // Missing object (e.g. a preview the browser could not encode) or a
+      // transient error: the object simply keeps its current headers.
+    }
+  };
+
+  let next = 0;
   await Promise.all(
-    storagePaths
-      .filter((path) => path && !path.includes("://"))
-      .map(async (Key) => {
-        try {
-          const head = await client.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key }));
-          if (head.CacheControl === MEDIA_CACHE_CONTROL) return;
-          await client.send(
-            new CopyObjectCommand({
-              Bucket: R2_BUCKET,
-              Key,
-              CopySource: `${R2_BUCKET}/${encodeURIComponent(Key).replace(/%2F/g, "/")}`,
-              MetadataDirective: "REPLACE",
-              ContentType: head.ContentType || "application/octet-stream",
-              CacheControl: MEDIA_CACHE_CONTROL,
-            }),
-          );
-        } catch {
-          // Missing object (e.g. a preview the browser could not encode) or a
-          // transient error: the object simply keeps its current headers.
-        }
-      }),
+    Array.from({ length: Math.min(16, queue.length) }, async () => {
+      while (next < queue.length) await stamp(queue[next++]);
+    }),
   );
 }
 

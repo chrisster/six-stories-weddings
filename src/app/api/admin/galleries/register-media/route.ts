@@ -13,6 +13,21 @@ import {
 
 export const runtime = "nodejs";
 
+type RegisterItem = {
+  storagePath?: string;
+  originalName?: string;
+  contentType?: string;
+  width?: number;
+  height?: number;
+};
+
+const MAX_BATCH = 100;
+
+// Records uploaded objects as media assets. Accepts a single item (fields at
+// the top level) or a batch (`items: [...]`), which is inserted in one
+// statement with consecutive sort orders in the order given — the uploader
+// sends batches in selection order, so galleries keep the photographer's
+// sequence even though files upload in parallel.
 export async function POST(request: Request) {
   try {
     if (!hasSupabaseEnv) {
@@ -25,23 +40,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await request.json().catch(() => null)) as {
-      galleryId?: string;
-      sectionId?: string;
-      storagePath?: string;
-      originalName?: string;
-      contentType?: string;
-      width?: number;
-      height?: number;
-    } | null;
+    const body = (await request.json().catch(() => null)) as
+      | (RegisterItem & { galleryId?: string; sectionId?: string; items?: RegisterItem[] })
+      | null;
 
     const galleryId = String(body?.galleryId || "").trim();
-    const storagePath = String(body?.storagePath || "").trim();
-    const originalName = String(body?.originalName || "").trim();
     const sectionId = String(body?.sectionId || "").trim();
-    const contentType = String(body?.contentType || "").trim();
+    const rawItems: RegisterItem[] = Array.isArray(body?.items) ? body!.items! : [body ?? {}];
+    const items = rawItems.map((item) => ({
+      storagePath: String(item?.storagePath || "").trim(),
+      originalName: String(item?.originalName || "").trim(),
+      contentType: String(item?.contentType || "").trim(),
+      width: Number(item?.width),
+      height: Number(item?.height),
+    }));
 
-    if (!galleryId || !storagePath) {
+    if (
+      !galleryId ||
+      items.length === 0 ||
+      items.length > MAX_BATCH ||
+      items.some((item) => !item.storagePath)
+    ) {
       return NextResponse.json({ error: "Invalid request." }, { status: 400 });
     }
 
@@ -58,22 +77,25 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    const width = Number(body?.width);
-    const height = Number(body?.height);
+    const baseSortOrder = latestAsset?.sort_order || 0;
+    const provider = getStorageProviderName();
+    const bucket = getBucketName();
 
-    const { error } = await admin.from("media_assets").insert({
-      gallery_id: galleryId,
-      section_id: sectionId || null,
-      storage_provider: getStorageProviderName(),
-      storage_bucket: getBucketName(),
-      storage_path: storagePath,
-      original_name: originalName || null,
-      media_type: contentType.startsWith("video/") ? "video" : "photo",
-      width: Number.isFinite(width) && width > 0 ? Math.round(width) : null,
-      height: Number.isFinite(height) && height > 0 ? Math.round(height) : null,
-      sort_order: (latestAsset?.sort_order || 0) + 1,
-      is_cover: false,
-    });
+    const { error } = await admin.from("media_assets").insert(
+      items.map((item, index) => ({
+        gallery_id: galleryId,
+        section_id: sectionId || null,
+        storage_provider: provider,
+        storage_bucket: bucket,
+        storage_path: item.storagePath,
+        original_name: item.originalName || null,
+        media_type: item.contentType.startsWith("video/") ? "video" : "photo",
+        width: Number.isFinite(item.width) && item.width > 0 ? Math.round(item.width) : null,
+        height: Number.isFinite(item.height) && item.height > 0 ? Math.round(item.height) : null,
+        sort_order: baseSortOrder + index + 1,
+        is_cover: false,
+      })),
+    );
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -81,18 +103,27 @@ export async function POST(request: Request) {
 
     // Browser uploads arrive without cache metadata; stamp the immutable
     // Cache-Control onto the original and its previews so browsers and the
-    // CDN keep them.
-    const isVideo = contentType.startsWith("video/");
+    // CDN keep them. The content types are known here, which saves a HEAD
+    // per object.
     await setMediaObjectsCacheControl(
-      isVideo
-        ? [storagePath]
-        : [storagePath, mediaThumbKey(storagePath, "lg"), mediaThumbKey(storagePath, "sm")],
+      items.flatMap((item) => {
+        const original = {
+          key: item.storagePath,
+          contentType: item.contentType || "application/octet-stream",
+        };
+        if (item.contentType.startsWith("video/")) return [original];
+        return [
+          original,
+          { key: mediaThumbKey(item.storagePath, "lg"), contentType: "image/webp" },
+          { key: mediaThumbKey(item.storagePath, "sm"), contentType: "image/webp" },
+        ];
+      }),
     );
 
     revalidatePath(`/admin/galleries/${galleryId}`);
     revalidatePath(`/g`);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, count: items.length });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not register media.";
     return NextResponse.json({ error: message }, { status: 500 });

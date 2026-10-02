@@ -1,16 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CircleCheck, Loader2, TriangleAlert } from "lucide-react";
 
-type UploadProgress = {
-  fileIndex: number;
-  fileName: string;
-  progress: number;
-  status: "uploading" | "completed" | "failed";
-  error?: string;
-  file: File;
-};
+import { isVideoFile, UploadAbortedError, uploadMedia, type UploadJob } from "./upload-engine";
 
 type MediaUploaderProps = {
   galleryId: string;
@@ -18,728 +12,410 @@ type MediaUploaderProps = {
   accept?: string;
 };
 
-type SignedTarget =
-  | { provider: "r2"; url: string; path: string }
-  | { provider: "supabase"; bucket: string; path: string; token: string };
+type JobState = { file: File; loaded: number; status: "pending" | "saved" | "failed"; error?: string };
+
+type Snapshot = {
+  kind: "photo" | "video" | "file";
+  total: number;
+  saved: number;
+  failed: Array<{ id: number; name: string; error: string }>;
+  totalBytes: number;
+  sentBytes: number;
+  /** Bytes sent since the current run started (excludes earlier runs). */
+  runBytes: number;
+  bytesPerSecond: number | null;
+};
+
+type Phase = "idle" | "uploading" | "done" | "cancelled";
+
+const TICK_MS = 300;
+const SPEED_WINDOW_MS = 8000;
+const REFRESH_EVERY_MS = 20_000;
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(bytes >= 100 * 1024 ** 2 ? 0 : 1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+function formatEta(seconds: number) {
+  if (seconds < 10) return "a few seconds left";
+  if (seconds < 60) return `about ${Math.ceil(seconds / 10) * 10}s left`;
+  if (seconds < 3600) return `about ${Math.round(seconds / 60)} min left`;
+  const hours = Math.floor(seconds / 3600);
+  return `about ${hours}h ${Math.round((seconds % 3600) / 60)} min left`;
+}
+
+function kindOf(files: File[]): Snapshot["kind"] {
+  const videos = files.filter(isVideoFile).length;
+  return videos === files.length ? "video" : videos === 0 ? "photo" : "file";
+}
+
+function plural(kind: Snapshot["kind"], count: number) {
+  return `${kind}${count === 1 ? "" : "s"}`;
+}
 
 export function MediaUploader({ galleryId, sections, accept = "image/*,video/*" }: MediaUploaderProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [progress, setProgress] = useState<UploadProgress[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const [selectedSectionId, setSelectedSectionId] = useState<string>("");
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
-  async function prepareFileForUpload(file: File): Promise<File> {
-    // Legacy proxied-upload path only: Vercel serverless request bodies can
-    // fail on larger payloads, so large images are recompressed client-side.
-    // The signed direct-to-storage path has no such limit and keeps originals.
-    const MAX_SAFE_BYTES = 4 * 1024 * 1024;
-    if (!file.type.startsWith("image/") || file.size <= MAX_SAFE_BYTES) {
-      return file;
-    }
+  // Progress events fire many times a second per file; they land in this ref
+  // and the panel re-renders from a snapshot a few times a second instead.
+  const jobsRef = useRef(new Map<number, JobState>());
+  const samplesRef = useRef<Array<{ t: number; bytes: number }>>([]);
+  const controllerRef = useRef<AbortController | null>(null);
+  const startedAtRef = useRef(0);
+  const startBytesRef = useRef(0);
+  const lastRefreshRef = useRef(0);
 
-    const bitmap = await createImageBitmap(file);
-    const canvas = document.createElement("canvas");
-    const maxDimension = 2800;
-    const ratio = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
-    canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
-    canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
+  const selectedBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+  const isUploading = phase === "uploading";
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return file;
-    }
-
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((value) => resolve(value), "image/jpeg", 0.86);
-    });
-
-    if (!blob) {
-      return file;
-    }
-
-    const base = file.name.replace(/\.[^/.]+$/, "");
-    return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
-  }
-
-  // Downscaled webp previews generated in the browser at upload time and stored
-  // next to the original: thumbs/<path>.webp at 1600px (lightbox, large grid
-  // rows) and thumbs/sm/<path>.webp at 480px (cards, phones). Grids then load
-  // these directly from the storage CDN — no server-side sharp, no function
-  // transfer. Returns the photo's oriented pixel dimensions even when webp
-  // encoding fails; the previews themselves are optional (the on-demand sharp
-  // route remains the fallback for formats the browser cannot decode, e.g.
-  // HEIC outside Safari).
-  async function makeWebpThumbs(
-    file: File,
-  ): Promise<{ large: Blob | null; small: Blob | null; width: number | null; height: number | null }> {
-    try {
-      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-      const width = bitmap.width;
-      const height = bitmap.height;
-
-      const encode = async (maxWidth: number, quality: number): Promise<Blob | null> => {
-        const ratio = Math.min(1, maxWidth / bitmap.width);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
-        canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return null;
-        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise<Blob | null>((resolve) => {
-          canvas.toBlob((value) => resolve(value), "image/webp", quality);
-        });
-        // Some browsers silently fall back to PNG when webp encoding is
-        // unsupported; the stored key promises webp, so skip the upload then.
-        return blob && blob.type === "image/webp" ? blob : null;
-      };
-
-      const large = await encode(1600, 0.75);
-      const small = await encode(480, 0.7);
-      bitmap.close();
-
-      return { large, small, width, height };
-    } catch {
-      return { large: null, small: null, width: null, height: null };
-    }
-  }
-
-  // PUT a blob to a presigned R2 URL. The Content-Type header must match the
-  // one the URL was signed with.
-  function putSignedR2(
-    url: string,
-    body: Blob,
-    contentType: string,
-    onProgress?: (loaded: number, total: number) => void,
-  ): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", url);
-      xhr.setRequestHeader("Content-Type", contentType);
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && onProgress) onProgress(event.loaded, event.total);
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Upload failed (${xhr.status}).`));
-      };
-      xhr.onerror = () => reject(new Error("Network error while uploading."));
-      xhr.send(body);
-    });
-  }
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    setSelectedFiles(files);
-    setProgress([]);
-  };
-
-  // Legacy fallback: streams the file through /api/admin/galleries/upload.
-  // Only used when a signed upload target could not be issued.
-  async function uploadSingleFile(item: UploadProgress): Promise<void> {
-    const fileToSend = await prepareFileForUpload(item.file);
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", "/api/admin/galleries/upload");
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) {
-          return;
-        }
-
-        const percent = Math.round((event.loaded / event.total) * 100);
-        setProgress((prev) =>
-          prev.map((entry) =>
-            entry.fileIndex === item.fileIndex ? { ...entry, progress: percent } : entry,
-          ),
-        );
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          setProgress((prev) =>
-            prev.map((entry) =>
-              entry.fileIndex === item.fileIndex
-                ? { ...entry, status: "completed", progress: 100, error: undefined }
-                : entry,
-            ),
-          );
-          resolve();
-          return;
-        }
-
-        let message = "Upload failed.";
-        try {
-          const parsed = JSON.parse(xhr.responseText) as { error?: string };
-          if (parsed.error) {
-            message = parsed.error;
-          }
-        } catch {
-          const snippet = xhr.responseText?.slice(0, 120).replace(/\s+/g, " ") || "No response body.";
-          if (xhr.status === 413) {
-            message = "File is too large for this upload path. Try a smaller/compressed image.";
-          } else {
-            message = `Unexpected server response (${xhr.status}): ${snippet}`;
-          }
-        }
-
-        setProgress((prev) =>
-          prev.map((entry) =>
-            entry.fileIndex === item.fileIndex
-              ? { ...entry, status: "failed", error: message }
-              : entry,
-          ),
-        );
-        reject(new Error(message));
-      };
-
-      xhr.onerror = () => {
-        const message = "Network error while uploading.";
-        setProgress((prev) =>
-          prev.map((entry) =>
-            entry.fileIndex === item.fileIndex
-              ? { ...entry, status: "failed", error: message }
-              : entry,
-          ),
-        );
-        reject(new Error(message));
-      };
-
-      const formData = new FormData();
-      formData.append("galleryId", galleryId);
-      formData.append("file", fileToSend);
-      if (selectedSectionId) {
-        formData.append("sectionId", selectedSectionId);
+  function takeSnapshot(): Snapshot {
+    let totalBytes = 0;
+    let sentBytes = 0;
+    let saved = 0;
+    const failed: Snapshot["failed"] = [];
+    const files: File[] = [];
+    for (const [id, job] of jobsRef.current) {
+      files.push(job.file);
+      if (job.status === "failed") {
+        failed.push({ id, name: job.file.name, error: job.error || "Upload failed." });
+        continue;
       }
+      totalBytes += job.file.size;
+      sentBytes += job.status === "saved" ? job.file.size : Math.min(job.loaded, job.file.size);
+      if (job.status === "saved") saved++;
+    }
 
-      xhr.send(formData);
-    });
-  }
+    // Speed over a sliding window, so it reacts to network changes without
+    // jumping around between ticks.
+    const now = performance.now();
+    const samples = samplesRef.current;
+    samples.push({ t: now, bytes: sentBytes });
+    while (samples.length > 2 && now - samples[0].t > SPEED_WINDOW_MS) samples.shift();
+    const first = samples[0];
+    const span = now - first.t;
+    const bytesPerSecond = span > 1500 ? Math.max(0, ((sentBytes - first.bytes) / span) * 1000) : null;
 
-  // Photos go straight to storage like videos: request signed targets, PUT the
-  // original (and a browser-generated webp preview), then register the asset.
-  // Falls back to the legacy proxied route only when no target can be issued —
-  // never after bytes were uploaded, to avoid duplicate objects.
-  async function uploadPhotoDirect(item: UploadProgress): Promise<void> {
-    const setEntry = (patch: Partial<UploadProgress>) => {
-      setProgress((prev) =>
-        prev.map((entry) => (entry.fileIndex === item.fileIndex ? { ...entry, ...patch } : entry)),
-      );
+    return {
+      kind: kindOf(files),
+      total: jobsRef.current.size,
+      saved,
+      failed,
+      totalBytes,
+      sentBytes,
+      runBytes: sentBytes - startBytesRef.current,
+      bytesPerSecond,
     };
-
-    const contentType = item.file.type || "image/jpeg";
-
-    let storagePath: string;
-    let target: SignedTarget;
-    let thumbTarget: SignedTarget | null;
-    let smallThumbTarget: SignedTarget | null;
-
-    try {
-      const urlResponse = await fetch("/api/admin/galleries/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          galleryId,
-          fileName: item.file.name,
-          contentType,
-          withThumb: true,
-        }),
-      });
-      if (!urlResponse.ok) {
-        throw new Error(`Could not create upload URL (${urlResponse.status}).`);
-      }
-      ({ storagePath, target, thumbTarget, smallThumbTarget = null } = (await urlResponse.json()) as {
-        storagePath: string;
-        target: SignedTarget;
-        thumbTarget: SignedTarget | null;
-        smallThumbTarget?: SignedTarget | null;
-      });
-    } catch {
-      // Signed flow unavailable — fall back to the proxied upload.
-      return uploadSingleFile(item);
-    }
-
-    const thumb = await makeWebpThumbs(item.file);
-
-    try {
-      if (target.provider === "r2") {
-        await putSignedR2(target.url, item.file, contentType, (loaded, total) => {
-          setEntry({ progress: Math.min(95, Math.round((loaded / total) * 95)) });
-        });
-      } else {
-        const { createClient } = await import("@/lib/supabase/client");
-        const supabase = createClient();
-        setEntry({ progress: 40 });
-        const { error } = await supabase.storage
-          .from(target.bucket)
-          .uploadToSignedUrl(target.path, target.token, item.file, { contentType });
-        if (error) throw new Error(error.message);
-        setEntry({ progress: 90 });
-      }
-
-      // The previews are best-effort: a missing thumbs/ object just means grids
-      // fall back to the on-demand resize route for this photo.
-      const putPreview = async (previewTarget: SignedTarget | null, blob: Blob | null) => {
-        if (!blob || !previewTarget) return;
-        try {
-          if (previewTarget.provider === "r2") {
-            await putSignedR2(previewTarget.url, blob, "image/webp");
-          } else {
-            const { createClient } = await import("@/lib/supabase/client");
-            const supabase = createClient();
-            await supabase.storage
-              .from(previewTarget.bucket)
-              .uploadToSignedUrl(previewTarget.path, previewTarget.token, blob, {
-                contentType: "image/webp",
-              });
-          }
-        } catch {
-          // Ignore preview failures.
-        }
-      };
-      await Promise.all([putPreview(thumbTarget, thumb.large), putPreview(smallThumbTarget, thumb.small)]);
-
-      const registerResponse = await fetch("/api/admin/galleries/register-media", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          galleryId,
-          sectionId: selectedSectionId || undefined,
-          storagePath,
-          originalName: item.file.name,
-          contentType,
-          width: thumb.width ?? undefined,
-          height: thumb.height ?? undefined,
-        }),
-      });
-      if (!registerResponse.ok) {
-        const message = await registerResponse
-          .json()
-          .then((data: { error?: string }) => data.error)
-          .catch(() => null);
-        throw new Error(message || "Could not save photo.");
-      }
-
-      setEntry({ status: "completed", progress: 100, error: undefined });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Upload failed.";
-      setEntry({ status: "failed", error: message });
-      throw new Error(message);
-    }
   }
 
-  // Uploads a single part to its presigned URL and resolves with the ETag that
-  // R2 returns (required to complete the multipart upload). R2 CORS must expose
-  // the ETag response header for this to work from the browser.
-  function putPart(
-    url: string,
-    chunk: Blob,
-    uploadedBytes: number,
-    totalBytes: number,
-    setEntry: (patch: Partial<UploadProgress>) => void,
-  ): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", url);
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const overall = Math.round(((uploadedBytes + event.loaded) / totalBytes) * 100);
-        setEntry({ progress: Math.min(99, overall) });
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const etag = xhr.getResponseHeader("ETag") || xhr.getResponseHeader("etag");
-          if (!etag) {
-            // The bytes uploaded fine, but the browser can't read the ETag the
-            // storage returned, so the upload can't be finalized. This is
-            // almost always a missing `ExposeHeaders: ["ETag"]` entry in the R2
-            // bucket CORS policy. Surface an admin-actionable message rather
-            // than a silent failure that looks like the video "didn't appear".
-            reject(
-              new Error(
-                "Video uploaded but could not be finalized: the storage ETag header was blocked by CORS. " +
-                  'Add ExposeHeaders: ["ETag"] to the R2 bucket CORS policy for this domain, then re-upload.',
-              ),
-            );
-            return;
-          }
-          resolve(etag);
-          return;
-        }
-        reject(new Error(`Upload failed (${xhr.status}).`));
-      };
-      xhr.onerror = () => reject(new Error("Network error while uploading video."));
-      xhr.send(chunk);
-    });
-  }
+  // Keep the screen awake and warn before leaving while bytes are in flight.
+  useEffect(() => {
+    if (!isUploading) return;
 
-  async function uploadVideoMultipart(
-    item: UploadProgress,
-    storagePath: string,
-    uploadId: string,
-    setEntry: (patch: Partial<UploadProgress>) => void,
-  ): Promise<void> {
-    const file = item.file;
-    const PART_SIZE = 100 * 1024 * 1024; // 100 MB per part.
-    const totalParts = Math.max(1, Math.ceil(file.size / PART_SIZE));
-    const parts: Array<{ partNumber: number; etag: string }> = [];
-    let uploadedBytes = 0;
+    const tick = () => {
+      setSnapshot(takeSnapshot());
+      setElapsed((performance.now() - startedAtRef.current) / 1000);
+    };
+    const interval = setInterval(tick, TICK_MS);
 
-    try {
-      for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-        const start = (partNumber - 1) * PART_SIZE;
-        const end = Math.min(start + PART_SIZE, file.size);
-        const chunk = file.slice(start, end);
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
 
-        const signResponse = await fetch("/api/admin/galleries/video-multipart", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "sign-part", storagePath, uploadId, partNumber }),
-        });
-        if (!signResponse.ok) {
-          throw new Error("Could not sign upload part.");
-        }
-        const { url } = (await signResponse.json()) as { url: string };
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+    };
+    nav.wakeLock
+      ?.request("screen")
+      .then((lock) => {
+        wakeLock = lock;
+      })
+      .catch(() => null);
 
-        const etag = await putPart(url, chunk, uploadedBytes, file.size, setEntry);
-        parts.push({ partNumber, etag });
-        uploadedBytes += end - start;
-      }
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      wakeLock?.release().catch(() => null);
+    };
+  }, [isUploading]);
 
-      const completeResponse = await fetch("/api/admin/galleries/video-multipart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "complete", storagePath, uploadId, parts }),
-      });
-      if (!completeResponse.ok) {
-        const detail = await completeResponse
-          .json()
-          .then((data: { error?: string }) => data.error)
-          .catch(() => null);
-        throw new Error(detail || "Could not finalize video upload.");
-      }
-    } catch (error) {
-      // Discard any uploaded parts so they do not linger and incur storage cost.
-      await fetch("/api/admin/galleries/video-multipart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "abort", storagePath, uploadId }),
-      }).catch(() => null);
-      const message = error instanceof Error ? error.message : "Video upload failed.";
-      setEntry({ status: "failed", error: message });
-      throw new Error(message);
+  async function run(jobs: UploadJob[]) {
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    samplesRef.current = [];
+    startedAtRef.current = performance.now();
+    lastRefreshRef.current = Date.now();
+    setElapsed(0);
+    // Files saved by an earlier run (before a resume) do not count toward
+    // this run's average speed.
+    startBytesRef.current = 0;
+    for (const job of jobsRef.current.values()) {
+      if (job.status === "saved") startBytesRef.current += job.file.size;
     }
+    setSnapshot(takeSnapshot());
+    setPhase("uploading");
 
-    const registerResponse = await fetch("/api/admin/galleries/register-media", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    let cancelled = false;
+    try {
+      await uploadMedia({
         galleryId,
         sectionId: selectedSectionId || undefined,
-        storagePath,
-        originalName: item.file.name,
-        contentType: item.file.type || "video/mp4",
-      }),
-    });
-
-    if (!registerResponse.ok) {
-      const message = await registerResponse
-        .json()
-        .then((data: { error?: string }) => data.error)
-        .catch(() => null);
-      setEntry({ status: "failed", error: message || "Could not save video." });
-      throw new Error(message || "Could not save video.");
-    }
-
-    setEntry({ status: "completed", progress: 100, error: undefined });
-  }
-
-  // Videos can be large and exceed the serverless request-body limit, so they
-  // are uploaded directly to storage. On R2 we use multipart upload (chunked)
-  // because a single presigned PUT is capped at 5 GiB and its URL would expire
-  // before a multi-GB transfer finishes. Non-R2 storage falls back to a single
-  // short-lived signed URL.
-  async function uploadVideoDirect(item: UploadProgress): Promise<void> {
-    const setEntry = (patch: Partial<UploadProgress>) => {
-      setProgress((prev) =>
-        prev.map((entry) => (entry.fileIndex === item.fileIndex ? { ...entry, ...patch } : entry)),
-      );
-    };
-
-    // Try the R2 multipart path first. A 409 means R2 is not the active
-    // provider, so we fall back to the single signed-URL upload below.
-    const createResponse = await fetch("/api/admin/galleries/video-multipart", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create",
-        galleryId,
-        fileName: item.file.name,
-        contentType: item.file.type || "video/mp4",
-      }),
-    });
-
-    if (createResponse.ok) {
-      const { storagePath, uploadId } = (await createResponse.json()) as {
-        storagePath: string;
-        uploadId: string;
-      };
-      await uploadVideoMultipart(item, storagePath, uploadId, setEntry);
-      return;
-    }
-
-    if (createResponse.status !== 409) {
-      const message = await createResponse
-        .json()
-        .then((data: { error?: string }) => data.error)
-        .catch(() => null);
-      setEntry({ status: "failed", error: message || "Could not start video upload." });
-      throw new Error(message || "Could not start video upload.");
-    }
-
-    const urlResponse = await fetch("/api/admin/galleries/upload-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        galleryId,
-        fileName: item.file.name,
-        contentType: item.file.type || "video/mp4",
-      }),
-    });
-
-    if (!urlResponse.ok) {
-      const message = await urlResponse
-        .json()
-        .then((data: { error?: string }) => data.error)
-        .catch(() => null);
-      setEntry({ status: "failed", error: message || "Could not start video upload." });
-      throw new Error(message || "Could not start video upload.");
-    }
-
-    const { storagePath, target } = (await urlResponse.json()) as {
-      storagePath: string;
-      target: SignedTarget;
-    };
-
-    if (target.provider === "r2") {
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", target.url);
-        xhr.setRequestHeader("Content-Type", item.file.type || "video/mp4");
-        xhr.upload.onprogress = (event) => {
-          if (!event.lengthComputable) return;
-          setEntry({ progress: Math.round((event.loaded / event.total) * 100) });
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(`Upload failed (${xhr.status}).`));
-          }
-        };
-        xhr.onerror = () => reject(new Error("Network error while uploading video."));
-        xhr.send(item.file);
+        jobs,
+        signal: controller.signal,
+        callbacks: {
+          onBytes: (id, loaded) => {
+            const job = jobsRef.current.get(id);
+            if (job && job.status === "pending") job.loaded = loaded;
+          },
+          onSaved: (ids) => {
+            for (const id of ids) {
+              const job = jobsRef.current.get(id);
+              if (job) job.status = "saved";
+            }
+            // Let new photos show up in the library as the upload goes on.
+            if (Date.now() - lastRefreshRef.current > REFRESH_EVERY_MS) {
+              lastRefreshRef.current = Date.now();
+              router.refresh();
+            }
+          },
+          onFailed: (id, message) => {
+            const job = jobsRef.current.get(id);
+            if (job && job.status !== "saved") {
+              job.status = "failed";
+              job.error = message;
+            }
+          },
+        },
       });
-    } else {
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
-      setEntry({ progress: 40 });
-      const { error } = await supabase.storage
-        .from(target.bucket)
-        .uploadToSignedUrl(target.path, target.token, item.file, {
-          contentType: item.file.type || "video/mp4",
-        });
-      if (error) {
-        setEntry({ status: "failed", error: error.message });
-        throw new Error(error.message);
-      }
-      setEntry({ progress: 90 });
-    }
-
-    const registerResponse = await fetch("/api/admin/galleries/register-media", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        galleryId,
-        sectionId: selectedSectionId || undefined,
-        storagePath,
-        originalName: item.file.name,
-        contentType: item.file.type || "video/mp4",
-      }),
-    });
-
-    if (!registerResponse.ok) {
-      const message = await registerResponse
-        .json()
-        .then((data: { error?: string }) => data.error)
-        .catch(() => null);
-      setEntry({ status: "failed", error: message || "Could not save video." });
-      throw new Error(message || "Could not save video.");
-    }
-
-    setEntry({ status: "completed", progress: 100, error: undefined });
-  }
-
-  async function uploadItem(item: UploadProgress): Promise<void> {
-    if ((item.file.type || "").startsWith("video/")) {
-      return uploadVideoDirect(item);
-    }
-    return uploadPhotoDirect(item);
-  }
-
-  const handleUpload = async () => {
-    if (selectedFiles.length === 0 || isUploading) {
-      return;
-    }
-
-    const queued: UploadProgress[] = selectedFiles.map((file, index) => ({
-      fileIndex: index,
-      fileName: file.name,
-      progress: 0,
-      status: "uploading",
-      file,
-    }));
-
-    setIsUploading(true);
-    setProgress(queued);
-
-    try {
-      for (const item of queued) {
-        await uploadItem(item);
-      }
-
-      router.refresh();
-      setTimeout(() => {
-        setSelectedFiles([]);
-        setProgress([]);
-        setSelectedSectionId("");
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
+    } catch (error) {
+      cancelled = error instanceof UploadAbortedError;
+      if (!cancelled) {
+        // Unexpected engine failure: whatever is not saved counts as failed.
+        for (const job of jobsRef.current.values()) {
+          if (job.status === "pending") {
+            job.status = "failed";
+            job.error = error instanceof Error ? error.message : "Upload failed.";
+          }
         }
-      }, 800);
+      }
     } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleRetryFailed = async () => {
-    const failed = progress.filter((entry) => entry.status === "failed");
-    if (failed.length === 0 || isUploading) {
-      return;
+      controllerRef.current = null;
     }
 
-    setIsUploading(true);
-    setProgress((prev) =>
-      prev.map((entry) =>
-        entry.status === "failed"
-          ? { ...entry, status: "uploading", progress: 0, error: undefined }
-          : entry,
-      ),
+    const final = takeSnapshot();
+    setSnapshot(final);
+    setElapsed((performance.now() - startedAtRef.current) / 1000);
+    setPhase(cancelled ? "cancelled" : "done");
+    router.refresh();
+
+    if (!cancelled && final.failed.length === 0) {
+      setSelectedFiles([]);
+      setSelectedSectionId("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  const handleUpload = () => {
+    if (selectedFiles.length === 0 || isUploading) return;
+    jobsRef.current = new Map(
+      selectedFiles.map((file, id) => [id, { file, loaded: 0, status: "pending" } satisfies JobState]),
     );
-
-    try {
-      for (const item of failed) {
-        await uploadItem(item);
-      }
-      router.refresh();
-    } finally {
-      setIsUploading(false);
-    }
+    void run(selectedFiles.map((file, id) => ({ id, file })));
   };
 
-  const completedCount = progress.filter((p) => p.status === "completed").length;
-  const failedCount = progress.filter((p) => p.status === "failed").length;
+  // Re-sends everything that is not in the gallery yet: failed files after an
+  // error, or the remainder after a cancel.
+  const handleResume = () => {
+    if (isUploading) return;
+    const next = new Map<number, JobState>();
+    const jobs: UploadJob[] = [];
+    for (const [id, job] of jobsRef.current) {
+      if (job.status === "saved") {
+        next.set(id, job);
+        continue;
+      }
+      next.set(id, { file: job.file, loaded: 0, status: "pending" });
+      jobs.push({ id, file: job.file });
+    }
+    jobsRef.current = next;
+    if (jobs.length > 0) void run(jobs);
+  };
+
+  const handleDismiss = () => {
+    jobsRef.current = new Map();
+    setSnapshot(null);
+    setPhase("idle");
+    setSelectedFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // A clean finish collapses back to the picker after a moment.
+  useEffect(() => {
+    if (phase !== "done" || (snapshot?.failed.length ?? 0) > 0) return;
+    const timer = setTimeout(handleDismiss, 5000);
+    return () => clearTimeout(timer);
+  }, [phase, snapshot]);
+
+  if (phase === "idle" || !snapshot) {
+    return (
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px_auto]">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={accept}
+          multiple
+          onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
+          className="h-10 rounded-xl border border-border bg-white px-3 py-2 text-sm"
+        />
+        <select
+          value={selectedSectionId}
+          onChange={(e) => setSelectedSectionId(e.target.value)}
+          className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+        >
+          <option value="">No section</option>
+          {sections.map((section) => (
+            <option key={section.id} value={section.id}>
+              {section.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleUpload}
+          disabled={selectedFiles.length === 0}
+          className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background transition hover:opacity-90 disabled:opacity-50"
+        >
+          {selectedFiles.length > 0
+            ? `Upload ${selectedFiles.length} ${plural(kindOf(selectedFiles), selectedFiles.length)} · ${formatBytes(selectedBytes)}`
+            : "Select files"}
+        </button>
+      </div>
+    );
+  }
+
+  const noun = (count: number) => plural(snapshot.kind, count);
+  const percent = snapshot.totalBytes > 0 ? (snapshot.sentBytes / snapshot.totalBytes) * 100 : 0;
+  const remainingBytes = snapshot.totalBytes - snapshot.sentBytes;
+  const allBytesSent = remainingBytes <= 0;
+  const pending = snapshot.total - snapshot.saved - snapshot.failed.length;
+  const sectionName = sections.find((section) => section.id === selectedSectionId)?.name;
+  const averageSpeed = elapsed > 0 ? snapshot.runBytes / elapsed : 0;
+
+  let headline: string;
+  let detail: string;
+  if (phase === "uploading") {
+    headline = allBytesSent
+      ? `Saving to gallery… ${snapshot.saved} of ${snapshot.total}`
+      : `Uploading ${snapshot.total} ${noun(snapshot.total)}${sectionName ? ` to ${sectionName}` : ""}`;
+    const speed = snapshot.bytesPerSecond;
+    detail = [
+      `${formatBytes(snapshot.sentBytes)} of ${formatBytes(snapshot.totalBytes)}`,
+      `${snapshot.saved} saved`,
+      speed ? `${formatBytes(speed)}/s` : null,
+      speed && speed > 0 && !allBytesSent ? formatEta(remainingBytes / speed) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  } else if (phase === "cancelled") {
+    headline = `Upload cancelled — ${snapshot.saved} of ${snapshot.total} ${noun(snapshot.total)} saved`;
+    detail = pending > 0 ? `${pending} not uploaded yet.` : "";
+  } else if (snapshot.failed.length === 0) {
+    headline = `${snapshot.saved} ${noun(snapshot.saved)} uploaded`;
+    detail = `${formatBytes(snapshot.totalBytes)} in ${formatDuration(elapsed)} · ${formatBytes(averageSpeed)}/s on average`;
+  } else {
+    headline = `${snapshot.saved} of ${snapshot.total} ${noun(snapshot.total)} uploaded, ${snapshot.failed.length} failed`;
+    detail = "The rest are already in the gallery.";
+  }
+
+  const toResume = snapshot.failed.length + (phase === "cancelled" ? pending : 0);
 
   return (
-    <div className="space-y-4">
-      {progress.length === 0 ? (
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px_auto]">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={accept}
-            multiple
-            onChange={handleFileSelect}
-            className="h-10 rounded-xl border border-border bg-white px-3 py-2 text-sm"
-          />
-          <select
-            value={selectedSectionId}
-            onChange={(e) => setSelectedSectionId(e.target.value)}
-            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
-          >
-            <option value="">No section</option>
-            {sections.map((section) => (
-              <option key={section.id} value={section.id}>
-                {section.name}
-              </option>
-            ))}
-          </select>
+    <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4" aria-live="polite">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {phase === "uploading" ? (
+            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+          ) : phase === "done" && snapshot.failed.length === 0 ? (
+            <CircleCheck className="size-4 shrink-0 text-emerald-600" />
+          ) : (
+            <TriangleAlert className="size-4 shrink-0 text-amber-600" />
+          )}
+          <p className="truncate text-sm font-medium">{headline}</p>
+        </div>
+        {phase === "uploading" ? (
           <button
             type="button"
-            onClick={handleUpload}
-            disabled={selectedFiles.length === 0 || isUploading}
-            className="h-10 rounded-xl border border-foreground bg-foreground px-4 text-sm text-background transition hover:opacity-90 disabled:opacity-50"
+            onClick={() => controllerRef.current?.abort()}
+            className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground hover:no-underline"
           >
-            {selectedFiles.length > 0
-              ? `Upload ${selectedFiles.length} file${selectedFiles.length !== 1 ? "s" : ""}`
-              : "Select files"}
+            Cancel
           </button>
-        </div>
-      ) : (
-        <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium">
-              {completedCount > 0 && `${completedCount} completed`}
-              {failedCount > 0 && ` · ${failedCount} failed`}
-              {progress.filter((p) => p.status === "uploading").length > 0 &&
-                ` · Uploading...`}
-            </span>
-          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleDismiss}
+            className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground hover:no-underline"
+          >
+            {snapshot.failed.length === 0 && phase === "done" ? "Upload more" : "Dismiss"}
+          </button>
+        )}
+      </div>
 
-          {progress.map((item) => (
-            <div key={item.fileIndex} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="truncate text-muted-foreground">{item.fileName}</span>
-                {item.status === "completed" && <span className="text-emerald-600">✓</span>}
-                {item.status === "failed" && <span className="text-red-600">✗</span>}
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-white">
-                <div
-                  className={`h-full transition-all ${
-                    item.status === "completed"
-                      ? "bg-emerald-500"
-                      : item.status === "failed"
-                        ? "bg-red-500"
-                        : "bg-foreground"
-                  }`}
-                  style={{ width: `${item.progress}%` }}
-                />
-              </div>
-              {item.error && (
-                <p className="text-xs text-red-600">{item.error}</p>
-              )}
-            </div>
-          ))}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-white">
+        <div
+          className={`h-full transition-[width] duration-300 ease-out ${
+            phase === "done" && snapshot.failed.length === 0
+              ? "bg-emerald-500"
+              : phase === "uploading"
+                ? "bg-foreground"
+                : "bg-amber-500"
+          } ${phase === "uploading" && allBytesSent ? "animate-pulse" : ""}`}
+          style={{ width: `${Math.min(100, percent)}%` }}
+        />
+      </div>
 
-          {failedCount > 0 && (
-            <button
-              type="button"
-              onClick={handleRetryFailed}
-              disabled={isUploading}
-              className="mt-3 text-xs text-foreground underline hover:no-underline disabled:opacity-50"
-            >
-              Retry failed uploads
-            </button>
-          )}
+      {detail && <p className="text-xs tabular-nums text-muted-foreground">{detail}</p>}
 
-          {completedCount === progress.length && failedCount === 0 && (
-            <p className="text-xs text-emerald-600">All files uploaded successfully!</p>
-          )}
-        </div>
+      {snapshot.failed.length > 0 && (
+        <details className="text-xs" open={phase !== "uploading"}>
+          <summary className="cursor-pointer text-red-600">
+            {snapshot.failed.length} {noun(snapshot.failed.length)} could not be uploaded
+          </summary>
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+            {snapshot.failed.map((item) => (
+              <li key={item.id} className="flex gap-2">
+                <span className="max-w-[40%] shrink-0 truncate font-medium">{item.name}</span>
+                <span className="text-muted-foreground">{item.error}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {phase !== "uploading" && toResume > 0 && (
+        <button
+          type="button"
+          onClick={handleResume}
+          className="h-9 rounded-xl border border-foreground bg-foreground px-4 text-xs text-background transition hover:opacity-90"
+        >
+          {phase === "cancelled" ? `Resume (${toResume} left)` : `Retry ${toResume} failed`}
+        </button>
       )}
     </div>
   );
