@@ -259,7 +259,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                     aria-label={`Open ${project.title}`}
                     className="absolute inset-0 z-[1]"
                   />
-                  <div className="relative h-40 w-full overflow-hidden bg-zinc-200">
+                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-zinc-200">
                     {project.coverImageUrl ? (
                       <CoverImage
                         src={project.coverImageUrl}
