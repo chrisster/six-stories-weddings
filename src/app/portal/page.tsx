@@ -40,7 +40,7 @@ export default async function PortalDashboardPage() {
           <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {galleries.map((gallery) => (
               <article key={gallery.galleryId} className="overflow-hidden rounded-3xl border border-border/70 bg-white shadow-sm">
-                <div className="aspect-[4/3] bg-zinc-200">
+                <div className="aspect-[3/2] bg-zinc-200">
                   {gallery.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={gallery.coverUrl} alt={gallery.title} className="h-full w-full object-cover" />
