@@ -479,7 +479,7 @@ export function PublicGallery({
         />
 
         <div className="mt-12 flex flex-1 flex-col items-center justify-center gap-6 md:mt-0 md:flex-row md:gap-12">
-          <div className="relative aspect-[3/2] w-[360px] max-w-[92vw] overflow-hidden bg-muted/40 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.5)] sm:w-[520px] lg:w-[720px]">
+          <div className="relative aspect-[2/3] w-[300px] max-w-[82vw] overflow-hidden bg-muted/40 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.5)] sm:w-[380px] md:w-[420px]">
             {coverUrl ? (
               <img
                 src={coverUrl}
