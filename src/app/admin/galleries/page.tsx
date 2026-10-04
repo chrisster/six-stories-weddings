@@ -47,7 +47,7 @@ export default async function GalleriesPage() {
             className="group overflow-hidden rounded-2xl border border-border/80 bg-white shadow-sm transition hover:border-foreground/30 hover:shadow-[0_16px_38px_-24px_rgba(0,0,0,0.42)]"
           >
             <Link href={`/admin/galleries/${gallery.id}`} className="block">
-              <div className="relative h-40 w-full overflow-hidden bg-zinc-200">
+              <div className="relative aspect-[3/2] w-full overflow-hidden bg-zinc-200">
                 {project?.coverImageUrl ? (
                   <CoverImage
                     src={project.coverImageUrl}
