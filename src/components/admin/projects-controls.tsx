@@ -108,10 +108,10 @@ export function ProjectsControls({
           className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
         >
           <option value="all">All time</option>
-          <option value="this_week">This week</option>
-          <option value="this_month">This month</option>
-          <option value="this_year">This year</option>
-          <option value="next_year">Next year</option>
+          <option value="2025">2025</option>
+          <option value="2026">2026</option>
+          <option value="2027">2027</option>
+          <option value="2028">2028</option>
         </select>
       </div>
 

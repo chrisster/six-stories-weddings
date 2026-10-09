@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Images, Plus } from "lucide-react";
 
@@ -48,53 +49,17 @@ const statusKpis = [
   { key: "declined", label: "Declined" },
 ] as const;
 
-function isWithinPeriod(eventDate: string, period: string) {
-  if (period === "all") return true;
+// The period filter is the calendar year of the event date. Every number on
+// the page (status pills, galleries, views, downloads, revenue) is computed
+// from the projects in that year.
+const periodYears = ["2025", "2026", "2027", "2028"];
 
-  const date = new Date(`${eventDate}T00:00:00Z`);
-  const now = new Date();
-
-  if (period === "this_week") {
-    const since = new Date(now);
-    since.setUTCDate(since.getUTCDate() - 7);
-    return date >= since;
-  }
-
-  if (period === "this_month") {
-    return (
-      date.getUTCFullYear() === now.getUTCFullYear() &&
-      date.getUTCMonth() === now.getUTCMonth()
-    );
-  }
-
-  if (period === "this_year") {
-    return date.getUTCFullYear() === now.getUTCFullYear();
-  }
-
-  if (period === "next_year") {
-    return date.getUTCFullYear() === now.getUTCFullYear() + 1;
-  }
-
-  return true;
+function normalizePeriod(value: string | undefined) {
+  return value && periodYears.includes(value) ? value : "all";
 }
 
-function periodSince(period: string): Date | null {
-  const now = new Date();
-  if (period === "this_week") {
-    const since = new Date(now);
-    since.setUTCDate(since.getUTCDate() - 7);
-    return since;
-  }
-  if (period === "this_month") {
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  }
-  if (period === "this_year") {
-    return new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
-  }
-  if (period === "next_year") {
-    return new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1));
-  }
-  return null;
+function isWithinPeriod(eventDate: string, period: string) {
+  return period === "all" || eventDate.startsWith(`${period}-`);
 }
 
 function eventTypeText(projectType: string): string {
@@ -108,14 +73,15 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const q = (params.q || "").toLowerCase();
   const statusFilter = params.status || "all";
   const sort = params.sort || "date_desc";
-  const period = params.period || "all";
+  const period = normalizePeriod(params.period);
 
-  // Independent reads, one round trip.
+  // Independent reads, one round trip. The event stats come back per gallery
+  // (one row each) and are summed below for the galleries in the period.
   const [projects, galleries, role, eventStats] = await Promise.all([
     getProjects(),
     getGalleries(),
     requireStudioRole(),
-    getGalleryEventStats(undefined, periodSince(period)),
+    getGalleryEventStats(),
   ]);
   const isCrew = role === "crew";
 
@@ -159,20 +125,49 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   };
 
   const revenuePaid = periodFiltered.reduce((sum, project) => sum + project.amountPaid, 0);
-  const activeGalleries = galleries.length;
-  const publishedGalleries = galleries.filter((g) => g.isPublished).length;
 
-  const insights = [
-    { label: "Galleries", value: String(activeGalleries), hint: `${publishedGalleries} published` },
+  // Galleries of the projects in the period (and, for crew, of their assigned
+  // projects only). Views and downloads are all-time totals of those galleries.
+  const periodProjectIds = new Set(periodFiltered.map((project) => project.id));
+  const periodGalleries = galleries.filter((gallery) => periodProjectIds.has(gallery.projectId));
+  const publishedGalleries = periodGalleries.filter((gallery) => gallery.isPublished).length;
+  const draftGalleries = periodGalleries.length - publishedGalleries;
+  const galleryTotals = { views: 0, viewers: 0, downloads: 0, galleriesWithDownloads: 0 };
+  periodGalleries.forEach((gallery) => {
+    const stats = eventStats.byGallery[gallery.id];
+    if (!stats) return;
+    galleryTotals.views += stats.views;
+    galleryTotals.viewers += stats.viewers;
+    galleryTotals.downloads += stats.downloads;
+    if (stats.downloads > 0) galleryTotals.galleriesWithDownloads += 1;
+  });
+
+  const insights: Array<{ label: string; value: string; hint: ReactNode }> = [
+    {
+      label: "Galleries",
+      value: String(periodGalleries.length),
+      hint: (
+        <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            {publishedGalleries} published
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-zinc-400" />
+            {draftGalleries} draft
+          </span>
+        </span>
+      ),
+    },
     {
       label: "Views",
-      value: eventStats.totals.views.toLocaleString(),
-      hint: `${eventStats.totals.viewers} visitor${eventStats.totals.viewers === 1 ? "" : "s"}`,
+      value: galleryTotals.views.toLocaleString(),
+      hint: `${galleryTotals.viewers} visitor${galleryTotals.viewers === 1 ? "" : "s"}`,
     },
     {
       label: "Downloads",
-      value: eventStats.totals.downloads.toLocaleString(),
-      hint: `from ${eventStats.totals.galleriesWithDownloads} galler${eventStats.totals.galleriesWithDownloads === 1 ? "y" : "ies"}`,
+      value: galleryTotals.downloads.toLocaleString(),
+      hint: `from ${galleryTotals.galleriesWithDownloads} galler${galleryTotals.galleriesWithDownloads === 1 ? "y" : "ies"}`,
     },
     isCrew
       ? { label: "Projects", value: String(statusCounts.all), hint: `${statusCounts.scheduled} scheduled` }
@@ -186,7 +181,6 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           <h1 className="title-cinematic text-3xl font-semibold sm:text-[2.1rem]">
             Welcome, Six Stories Studio
           </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">Create something beautiful.</p>
         </div>
         {!isCrew ? (
           <Link
@@ -207,7 +201,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                 {item.value}
               </p>
               <p className="mt-2 text-sm font-medium text-foreground/80">{item.label}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{item.hint}</p>
+              <div className="mt-0.5 text-xs text-muted-foreground">{item.hint}</div>
             </div>
           ))}
         </div>
