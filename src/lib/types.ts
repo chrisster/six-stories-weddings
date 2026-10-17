@@ -42,6 +42,13 @@ export type CrewAssignment = {
   participantType: "inhouse" | "freelancer";
   freelancerFee: number | null;
   notes?: string | null;
+  /** Availability request state; "accepted" for assignments made before requests existed. */
+  requestStatus?: "pending" | "emailed" | "seen" | "accepted" | "declined";
+  emailedAt?: string | null;
+  seenAt?: string | null;
+  respondedAt?: string | null;
+  responseNote?: string | null;
+  reminderCount?: number;
   crewMember: CrewMember;
 };
 

@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 
 import { hasSupabaseEnv } from "@/lib/env";
 import { getCurrentUser, requireStudioAdmin, requireStudioUser, type AppRole } from "@/lib/auth";
+import { markCrewRequestPending, sendCrewRequest } from "@/lib/crew-requests";
 import { notifyCrewMemberById } from "@/lib/data";
 import { sendPortalAccessLink } from "@/lib/portal-access";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -382,11 +383,18 @@ export async function createProjectAction(formData: FormData) {
 
     if (!crewMemberId) continue;
 
-    await admin.from("crew_assignments").insert({
-      project_id: project.id,
-      crew_member_id: crewMemberId,
-      assignment_role: entry.assignmentRole || entry.roleType || "crew",
-    });
+    const { data: assignment } = await admin
+      .from("crew_assignments")
+      .insert({
+        project_id: project.id,
+        crew_member_id: crewMemberId,
+        assignment_role: entry.assignmentRole || entry.roleType || "crew",
+      })
+      .select("id")
+      .single();
+    // No fee is set on this form, so the availability request is sent from
+    // the project's Crew section once the assignment is complete.
+    if (assignment?.id) await markCrewRequestPending(String(assignment.id));
   }
 
   const baseSlug = slugify(String(project.title || title));
@@ -765,13 +773,20 @@ export async function addCrewToProjectAction(formData: FormData) {
     .match({ project_id: projectId, crew_member_id: crewMemberId, assignment_role: assignmentRole })
     .maybeSingle();
   if (!existing) {
-    await admin.from("crew_assignments").insert({
-      project_id: projectId,
-      crew_member_id: crewMemberId,
-      assignment_role: assignmentRole,
-      participant_type: participantType,
-      freelancer_fee: freelancerFee,
-    });
+    const { data: inserted } = await admin
+      .from("crew_assignments")
+      .insert({
+        project_id: projectId,
+        crew_member_id: crewMemberId,
+        assignment_role: assignmentRole,
+        participant_type: participantType,
+        freelancer_fee: freelancerFee,
+      })
+      .select("id")
+      .single();
+
+    // Email the availability request (project, date, services, role, fee).
+    if (inserted?.id) await sendCrewRequest(String(inserted.id));
 
     const { data: project } = await admin
       .from("projects")
@@ -783,8 +798,8 @@ export async function addCrewToProjectAction(formData: FormData) {
       crewMemberId,
       {
         type: "project_assigned",
-        title: "You were added to a project",
-        body: `You've been added to ${String(project?.title || "a project")} as ${assignmentRole}. Open the project to see the details and schedule.`,
+        title: "New project request",
+        body: `You've been asked to join ${String(project?.title || "a project")} as ${assignmentRole}. Check your email to accept or decline.`,
         link: `/admin/projects/${projectId}`,
       },
       actor?.email,
@@ -792,6 +807,19 @@ export async function addCrewToProjectAction(formData: FormData) {
   }
 
   revalidatePath(`/admin/projects/${projectId}`);
+}
+
+export async function sendCrewRequestAction(formData: FormData) {
+  if (!hasSupabaseEnv) return;
+  if ((await requireStudioUser())?.role === "crew") return;
+  const projectId = String(formData.get("projectId") || "").trim();
+  const assignmentId = String(formData.get("assignmentId") || "").trim();
+  if (!projectId || !assignmentId) return;
+  const result = await sendCrewRequest(assignmentId);
+  revalidatePath(`/admin/projects/${projectId}`);
+  redirect(
+    `/admin/projects/${projectId}?crewRequest=${result.ok ? "sent" : encodeURIComponent(result.error || "failed")}#crew`,
+  );
 }
 
 export async function removeCrewFromProjectAction(formData: FormData) {

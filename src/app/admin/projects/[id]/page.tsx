@@ -5,6 +5,7 @@ import {
   addCrewToProjectAction,
   removeClientFromProjectAction,
   removeCrewFromProjectAction,
+  sendCrewRequestAction,
   sendClientPortalAccessLinkAction,
   setClientPortalPasswordAction,
   shareTimeplanAction,
@@ -47,8 +48,53 @@ type ProjectPageProps = {
     portalReason?: string;
     contract?: string;
     created?: string;
+    crewRequest?: string;
   }>;
 };
+
+const CREW_REQUEST_MESSAGES: Record<string, { tone: "ok" | "error"; text: string }> = {
+  sent: { tone: "ok", text: "Availability request emailed." },
+  no_email: { tone: "error", text: "This crew member has no email address — add one in Team, then send the request." },
+  email_not_configured: { tone: "error", text: "Email delivery is not configured, so the request could not be sent." },
+};
+
+function shortDateTime(iso: string | null | undefined) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Athens",
+  });
+}
+
+function crewRequestBadge(assignment: {
+  requestStatus?: string;
+  emailedAt?: string | null;
+  seenAt?: string | null;
+  respondedAt?: string | null;
+  reminderCount?: number;
+}) {
+  const reminders = assignment.reminderCount
+    ? ` · ${assignment.reminderCount} reminder${assignment.reminderCount > 1 ? "s" : ""}`
+    : "";
+  switch (assignment.requestStatus) {
+    case "pending":
+      return { className: "bg-zinc-200 text-zinc-700", label: "Not emailed" };
+    case "emailed":
+      return { className: "bg-sky-100 text-sky-800", label: `Emailed ${shortDateTime(assignment.emailedAt)}${reminders}` };
+    case "seen":
+      return { className: "bg-amber-100 text-amber-800", label: `Seen ${shortDateTime(assignment.seenAt)}${reminders}` };
+    case "declined":
+      return { className: "bg-red-100 text-red-700", label: `Declined ${shortDateTime(assignment.respondedAt)}` };
+    default:
+      return {
+        className: "bg-emerald-100 text-emerald-800",
+        label: assignment.respondedAt ? `Accepted ${shortDateTime(assignment.respondedAt)}` : "Accepted",
+      };
+  }
+}
 
 const CONTRACT_MESSAGES: Record<string, { tone: "ok" | "warn" | "error"; text: string }> = {
   sent: { tone: "ok", text: "Contract sent for signature." },
@@ -262,6 +308,18 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
           {query.detail ? (
             <p className="mt-1 text-xs text-red-600/80">Details: {query.detail}</p>
           ) : null}
+        </div>
+      ) : null}
+
+      {query.crewRequest ? (
+        <div
+          className={
+            (CREW_REQUEST_MESSAGES[query.crewRequest]?.tone ?? "error") === "ok"
+              ? "rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700"
+              : "rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700"
+          }
+        >
+          {CREW_REQUEST_MESSAGES[query.crewRequest]?.text ?? `The availability request could not be sent: ${query.crewRequest}`}
         </div>
       ) : null}
 
@@ -637,7 +695,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
         </p>
       </section>
 
-      <section className="soft-panel p-5">
+      <section id="crew" className="soft-panel scroll-mt-6 p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
           <ul className="space-y-3">
             {project.crewAssignments.map((assignment) => (
@@ -655,6 +713,27 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                       "In-house"
                     )}
                     </p>
+                    {!isCrew ? (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${crewRequestBadge(assignment).className}`}>
+                          {crewRequestBadge(assignment).label}
+                        </span>
+                        {assignment.requestStatus === "pending" ||
+                        assignment.requestStatus === "emailed" ||
+                        assignment.requestStatus === "seen" ? (
+                          <form action={sendCrewRequestAction}>
+                            <input type="hidden" name="projectId" value={project.id} />
+                            <input type="hidden" name="assignmentId" value={assignment.id} />
+                            <button type="submit" className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                              {assignment.requestStatus === "pending" ? "Send request" : "Resend"}
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {!isCrew && assignment.responseNote ? (
+                      <p className="mt-1.5 text-xs text-muted-foreground italic">“{assignment.responseNote}”</p>
+                    ) : null}
                   </div>
                   {!isCrew && (assignment as any).participantType === "freelancer" ? (
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Freelancer{(assignment as any).freelancerBudget ? ` €${(assignment as any).freelancerBudget}` : ""}</span>

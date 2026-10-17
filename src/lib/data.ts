@@ -9,6 +9,7 @@ import {
   demoProject,
 } from "@/lib/demo-data";
 import { hasSupabaseEnv } from "@/lib/env";
+import { normalizeCrewRequestStatus } from "@/lib/crew-request-status";
 import { resolveEmailHeroUrl, normalizeHeroOverride } from "@/lib/gallery-hero";
 import { buildDefaultGalleryNotificationTemplate } from "@/lib/gallery-notifications";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -145,6 +146,12 @@ function normalizeProject(
         participantType: ((assignment.participant_type as string) === "freelancer" ? "freelancer" : "inhouse") as "inhouse" | "freelancer",
         freelancerFee: assignment.freelancer_fee != null ? Number(assignment.freelancer_fee) : null,
         notes: assignment.notes as string | null,
+        requestStatus: normalizeCrewRequestStatus(assignment.request_status),
+        emailedAt: (assignment.emailed_at as string | null) || null,
+        seenAt: (assignment.seen_at as string | null) || null,
+        respondedAt: (assignment.responded_at as string | null) || null,
+        responseNote: (assignment.response_note as string | null) || null,
+        reminderCount: Number(assignment.reminder_count || 0),
         crewMember: {
           id: String(member.id || ""),
           fullName: String(member.full_name || ""),
