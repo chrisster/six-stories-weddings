@@ -4,6 +4,7 @@ import { Images, Plus } from "lucide-react";
 
 import { CoverImage } from "@/components/admin/cover-image";
 import { ProjectsControls } from "@/components/admin/projects-controls";
+import { ProjectsGrid } from "@/components/admin/projects-grid";
 import { getCurrentUser, requireStudioRole } from "@/lib/auth";
 import { getAssignedProjectIdsForEmail, getGalleries, getGalleryEventStats, getProjects } from "@/lib/data";
 import { formatDateDDMMYY } from "@/lib/utils";
@@ -70,7 +71,6 @@ function eventTypeText(projectType: string): string {
 
 export default async function AdminOverviewPage({ searchParams }: AdminPageProps) {
   const params = await searchParams;
-  const q = (params.q || "").toLowerCase();
   const statusFilter = params.status || "all";
   const sort = params.sort || "date_desc";
   const period = normalizePeriod(params.period);
@@ -97,14 +97,9 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
   const periodFiltered = scopedProjects.filter((project) => isWithinPeriod(project.eventDate, period));
 
   const filtered = periodFiltered
-    .filter((project) => {
-    const matchesText =
-      q.length === 0 ||
-      project.title.toLowerCase().includes(q) ||
-      project.clients.some((c) => c.fullName.toLowerCase().includes(q));
-    const matchesStatus = statusFilter === "all" || project.status === statusFilter;
-    return matchesText && matchesStatus;
-    })
+    // The text search (?q=) is applied in ProjectsGrid on the client, so
+    // typing does not re-render this page; it changes no number above.
+    .filter((project) => statusFilter === "all" || project.status === statusFilter)
     .sort((a, b) => {
       if (sort === "name_asc") return a.title.localeCompare(b.title);
       if (sort === "name_desc") return b.title.localeCompare(a.title);
@@ -230,22 +225,19 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
           statusCounts={statusCounts}
         />
 
-        {filtered.length === 0 ? (
-          <div className="px-4 py-12 text-center">
-            <p className="text-sm text-muted-foreground">No projects found.</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((project) => {
+        <ProjectsGrid
+          items={filtered.map((project) => {
               const gallery = galleryByProject.get(project.id);
               const galleryHref = gallery
                 ? gallery.isPublished
                   ? `/g/${gallery.slug}`
                   : `/admin/galleries/${gallery.id}`
                 : null;
-              return (
+              return {
+                id: project.id,
+                searchText: [project.title, ...project.clients.map((c) => c.fullName)].join("\n").toLowerCase(),
+                card: (
                 <div
-                  key={project.id}
                   className="group relative overflow-hidden rounded-2xl border border-border/80 bg-white shadow-sm transition hover:border-foreground/30 hover:shadow-[0_16px_38px_-24px_rgba(0,0,0,0.42)]"
                 >
                   <Link
@@ -307,10 +299,10 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                     </div>
                   </div>
                 </div>
-              );
+                ),
+              };
             })}
-          </div>
-        )}
+        />
       </section>
     </div>
   );
