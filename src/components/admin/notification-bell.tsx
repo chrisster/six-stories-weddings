@@ -68,7 +68,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
       </button>
 
       {open ? (
-        <div className="absolute left-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/70 bg-white p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]">
+        <div className="absolute right-0 top-full z-50 mt-2 w-80 lg:top-auto lg:right-auto lg:left-0 lg:bottom-full lg:mt-0 lg:mb-2 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/70 bg-white p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]">
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-sm font-medium">Notifications</p>
             {unread > 0 ? (
@@ -102,9 +102,9 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
                           <span className="mt-1.5 size-2 shrink-0 rounded-full bg-transparent" />
                         )}
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">{n.title}</p>
+                          <p className="text-sm font-medium break-words text-foreground">{n.title}</p>
                           {n.body ? (
-                            <p className="mt-0.5 text-xs text-muted-foreground">{n.body}</p>
+                            <p className="mt-0.5 text-xs break-words text-muted-foreground">{n.body}</p>
                           ) : null}
                           <p className="mt-0.5 text-[11px] text-muted-foreground/70">
                             {timeAgo(n.createdAt)}
