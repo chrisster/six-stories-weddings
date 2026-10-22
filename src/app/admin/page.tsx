@@ -202,7 +202,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border/70 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] sm:p-6">
+      <section className="rounded-3xl border border-border/70 bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)] sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="title-cinematic text-xl font-semibold">Projects</h2>
           {!isCrew ? (
@@ -255,10 +255,10 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                       />
                     ) : null}
                   </div>
-                  <div className="p-6">
-                    <div className="mb-3 flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <h3 className="title-cinematic truncate text-lg font-semibold leading-snug group-hover:text-foreground">
+                  <div className="p-3 sm:p-6">
+                    <div className="mb-3 flex flex-col items-start gap-2 sm:flex-row sm:justify-between">
+                      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+                        <h3 className="title-cinematic line-clamp-2 min-w-0 flex-1 text-base font-semibold [overflow-wrap:anywhere] sm:block sm:flex-initial sm:truncate sm:text-lg leading-snug group-hover:text-foreground">
                           {project.title}
                         </h3>
                         {galleryHref ? (
@@ -268,7 +268,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                             rel="noopener noreferrer"
                             title="Preview gallery"
                             aria-label="Preview gallery"
-                            className="relative z-[2] inline-flex size-9 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
+                            className="relative z-[2] inline-flex size-8 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
                           >
                             <Images className="size-4" />
                           </Link>
@@ -276,7 +276,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                           <span
                             title="No gallery yet"
                             aria-label="No gallery yet"
-                            className="inline-flex size-9 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-dashed border-border/60 text-muted-foreground/40"
+                            className="inline-flex size-8 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-dashed border-border/60 text-muted-foreground/40"
                           >
                             <Images className="size-4" />
                           </span>
@@ -289,7 +289,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                       </span>
                     </div>
 
-                    <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
+                    <div className="mb-3 space-y-1.5 text-sm sm:mb-4 text-muted-foreground">
                       <p className="text-xs text-foreground/80">{formatDateDDMMYY(project.eventDate)}</p>
                       <p className="text-xs text-muted-foreground">{eventTypeText(project.projectType)}</p>
                     </div>

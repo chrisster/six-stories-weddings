@@ -28,11 +28,11 @@ export default function AdminLoading() {
 
       <div className="rounded-3xl border border-border/70 bg-white p-5 sm:p-6">
         <div className="mb-5 h-5 w-32 rounded bg-foreground/[0.06]" />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <div key={index} className="overflow-hidden rounded-2xl border border-border/70">
               <div className="h-40 bg-foreground/[0.05]" />
-              <div className="space-y-2 p-6">
+              <div className="space-y-2 p-3 sm:p-6">
                 <div className="h-4 w-3/4 rounded bg-foreground/[0.06]" />
                 <div className="h-3 w-1/3 rounded bg-foreground/[0.05]" />
               </div>

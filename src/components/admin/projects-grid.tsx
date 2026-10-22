@@ -28,7 +28,7 @@ export function ProjectsGrid({ items }: { items: ProjectsGridItem[] }) {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
       {visible.map((item) => (
         <div key={item.id} className="contents">
           {item.card}
