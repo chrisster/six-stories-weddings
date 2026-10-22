@@ -153,7 +153,11 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null, toke
     await logGalleryEvent(detail.gallery.id, "download");
   }
 
-  const zipName = `${slugifyName(detail.project.title || detail.gallery.title)}.zip`;
+  // Name photo-only and video-only archives apart so both can sit side by side.
+  const hasPhotos = assets.some((asset) => asset.mediaType !== "video");
+  const hasVideos = assets.some((asset) => asset.mediaType === "video");
+  const kindSuffix = hasPhotos && hasVideos ? "" : hasVideos ? "-videos" : "-photos";
+  const zipName = `${slugifyName(detail.project.title || detail.gallery.title)}${kindSuffix}.zip`;
   const entries = entryNames(assets);
 
   // With the public R2 domain available, assemble the archive once inside R2
