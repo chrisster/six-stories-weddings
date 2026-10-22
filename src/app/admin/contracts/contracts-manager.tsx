@@ -271,8 +271,8 @@ export function ContractsManager({
       ) : null}
 
       {/* --- Table ---------------------------------------------------------- */}
-      <section className="overflow-hidden rounded-2xl border border-border/80 bg-white/80">
-        <table className="w-full border-collapse text-left text-sm">
+      <section className="overflow-x-auto rounded-2xl border border-border/80 bg-white/80">
+        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
               <th className="w-10 px-4 py-3">

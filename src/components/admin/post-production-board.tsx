@@ -275,7 +275,7 @@ export function PostProductionBoard({ tasks, assignees, projects, canManage }: P
                         <button
                           type="button"
                           onClick={() => remove(task.id)}
-                          className="h-8 w-8 justify-self-end rounded-lg border border-border text-sm text-muted-foreground transition hover:border-red-200 hover:text-red-600"
+                          className="size-9 sm:size-8 justify-self-end rounded-lg border border-border text-sm text-muted-foreground transition hover:border-red-200 hover:text-red-600"
                           aria-label="Delete task"
                         >
                           ×

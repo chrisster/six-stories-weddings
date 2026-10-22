@@ -74,11 +74,11 @@ export function GuestLinkManager({ galleryId, initialLinks, gallerySlug }: Guest
           Share this link with clients to give them direct access without needing a portal account.
         </p>
 
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <select
             value={expiresInDays || ""}
             onChange={(e) => setExpiresInDays(e.target.value ? parseInt(e.target.value, 10) : null)}
-            className="h-10 rounded-xl border border-border bg-white px-3 text-sm"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-white px-3 text-sm sm:flex-none"
           >
             <option value="">Never expires</option>
             <option value="1">Expires in 1 day</option>
@@ -103,7 +103,7 @@ export function GuestLinkManager({ galleryId, initialLinks, gallerySlug }: Guest
               type="text"
               readOnly
               value={`${window.location.origin}/g/${gallerySlug}?token=${encodeURIComponent(newLinkToken)}`}
-              className="h-9 flex-1 rounded-lg border border-emerald-200 bg-white px-3 text-xs text-emerald-900"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-3 text-xs text-emerald-900"
             />
             <button
               onClick={() => copyToClipboard(newLinkToken)}

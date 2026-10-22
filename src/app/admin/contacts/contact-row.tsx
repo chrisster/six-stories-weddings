@@ -31,7 +31,7 @@ export function ClientContactRow({ contact }: { contact: Contact }) {
         <td className="px-4 py-3">
           <button
             onClick={() => setEditing((v) => !v)}
-            className="h-8 rounded-lg border border-border px-2 text-xs hover:border-foreground/40"
+            className="h-9 sm:h-8 rounded-lg border border-border px-2 text-xs hover:border-foreground/40"
           >
             {editing ? "Cancel" : "Edit"}
           </button>
@@ -62,13 +62,13 @@ export function ClientContactRow({ contact }: { contact: Contact }) {
                 <input name="notes" defaultValue={contact.notes || ""} className={inputCls} />
               </div>
               <div className="flex gap-2 sm:col-span-4">
-                <button type="submit" className="h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background">
+                <button type="submit" className="h-9 sm:h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background">
                   Save
                 </button>
                 <button
                   type="submit"
                   form={`del-c-${contact.id}`}
-                  className="h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
+                  className="h-9 sm:h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
                 >
                   Delete
                 </button>
@@ -102,7 +102,7 @@ export function CrewContactRow({ member }: { member: CrewMember }) {
         <td className="px-4 py-3">
           <button
             onClick={() => setEditing((v) => !v)}
-            className="h-8 rounded-lg border border-border px-2 text-xs hover:border-foreground/40"
+            className="h-9 sm:h-8 rounded-lg border border-border px-2 text-xs hover:border-foreground/40"
           >
             {editing ? "Cancel" : "Edit"}
           </button>
@@ -135,13 +135,13 @@ export function CrewContactRow({ member }: { member: CrewMember }) {
                 <input name="email" type="email" defaultValue={member.contactInfo || ""} className={inputCls} />
               </div>
               <div className="flex gap-2 sm:col-span-4">
-                <button type="submit" className="h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background">
+                <button type="submit" className="h-9 sm:h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background">
                   Save
                 </button>
                 <button
                   type="submit"
                   form={`del-cr-${member.id}`}
-                  className="h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
+                  className="h-9 sm:h-8 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400"
                 >
                   Remove
                 </button>

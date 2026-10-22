@@ -28,8 +28,8 @@ export default async function ContactsPage() {
         </details>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-border/80 bg-white/80">
-        <table className="w-full border-collapse text-left text-sm">
+      <section className="overflow-x-auto rounded-2xl border border-border/80 bg-white/80">
+        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
               <th className="px-4 py-3">Name</th>

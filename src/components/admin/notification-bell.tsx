@@ -57,7 +57,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Notifications"
-        className="relative flex size-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-foreground/[0.05] hover:text-foreground"
+        className="relative flex size-10 items-center lg:size-9 justify-center rounded-xl text-muted-foreground transition hover:bg-foreground/[0.05] hover:text-foreground"
       >
         <Bell className="size-[18px]" strokeWidth={1.8} />
         {unread > 0 ? (
@@ -68,7 +68,9 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 lg:top-auto lg:right-auto lg:left-0 lg:bottom-full lg:mt-0 lg:mb-2 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/70 bg-white p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]">
+        // Below lg the bell sits in the sticky top bar, so the popover spans the
+        // viewport under it; on desktop it opens upward from the sidebar foot.
+        <div className="fixed inset-x-4 top-[4.75rem] z-50 lg:absolute lg:inset-x-auto lg:top-auto lg:left-0 lg:bottom-full lg:mb-2 lg:w-80 rounded-2xl border border-border/70 bg-white p-2 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]">
           <div className="flex items-center justify-between px-2 py-1.5">
             <p className="text-sm font-medium">Notifications</p>
             {unread > 0 ? (
@@ -83,7 +85,7 @@ export function NotificationBell({ notifications }: { notifications: Notificatio
             ) : null}
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-[calc(100dvh-9rem)] overflow-y-auto lg:max-h-96">
             {notifications.length === 0 ? (
               <p className="px-2 py-6 text-center text-sm text-muted-foreground">No notifications.</p>
             ) : (

@@ -268,7 +268,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                             rel="noopener noreferrer"
                             title="Preview gallery"
                             aria-label="Preview gallery"
-                            className="relative z-[2] inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
+                            className="relative z-[2] inline-flex size-9 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
                           >
                             <Images className="size-4" />
                           </Link>
@@ -276,7 +276,7 @@ export default async function AdminOverviewPage({ searchParams }: AdminPageProps
                           <span
                             title="No gallery yet"
                             aria-label="No gallery yet"
-                            className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-dashed border-border/60 text-muted-foreground/40"
+                            className="inline-flex size-9 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-dashed border-border/60 text-muted-foreground/40"
                           >
                             <Images className="size-4" />
                           </span>

@@ -49,12 +49,12 @@ export function SectionRow({
               required
               defaultValue={section.name}
               autoFocus
-              className="h-8 flex-1 rounded-lg border border-border px-2 text-sm"
+              className="h-9 sm:h-8 flex-1 rounded-lg border border-border px-2 text-sm"
             />
-            <button type="submit" className="h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background transition hover:opacity-90">
+            <button type="submit" className="h-9 sm:h-8 rounded-lg border border-foreground bg-foreground px-3 text-xs text-background transition hover:opacity-90">
               Save
             </button>
-            <button type="button" onClick={() => setRenaming(false)} className="h-8 rounded-lg border border-border px-3 text-xs hover:border-foreground/30">
+            <button type="button" onClick={() => setRenaming(false)} className="h-9 sm:h-8 rounded-lg border border-border px-3 text-xs hover:border-foreground/30">
               Cancel
             </button>
           </form>
@@ -121,14 +121,14 @@ export function SectionRow({
             <button
               type="button"
               onClick={() => setRenaming(true)}
-              className="h-7 rounded-lg border border-border px-2 text-xs hover:border-foreground/40"
+              className="h-9 sm:h-7 rounded-lg border border-border px-2 text-xs hover:border-foreground/40"
             >
               Rename
             </button>
             <form action={deleteSectionAction}>
               <input type="hidden" name="sectionId" value={section.id} />
               <input type="hidden" name="galleryId" value={galleryId} />
-              <button type="submit" className="h-7 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">
+              <button type="submit" className="h-9 sm:h-7 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">
                 Delete
               </button>
             </form>

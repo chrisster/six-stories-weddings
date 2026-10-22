@@ -695,7 +695,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
         </p>
       </section>
 
-      <section id="crew" className="soft-panel scroll-mt-6 p-5">
+      <section id="crew" className="soft-panel scroll-mt-24 lg:scroll-mt-6 p-5">
         <h3 className="mb-3 text-sm tracking-[0.2em] text-muted-foreground uppercase">Crew</h3>
           <ul className="space-y-3">
             {project.crewAssignments.map((assignment) => (
@@ -739,12 +739,13 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                     <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">Freelancer{(assignment as any).freelancerBudget ? ` €${(assignment as any).freelancerBudget}` : ""}</span>
                   ) : null}
                   {!isCrew ? (
-                    <div className="flex shrink-0 items-center gap-2">
+                    // Full row on phones so the Edit popover always opens from the left edge.
+                    <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
                       <details className="group relative">
-                        <summary className="cursor-pointer list-none rounded-lg border border-border bg-white px-2 py-1.5 text-xs text-foreground hover:border-foreground/40">
+                        <summary className="cursor-pointer list-none rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground hover:border-foreground/40 sm:px-2 sm:py-1.5">
                           Edit
                         </summary>
-                        <div className="absolute right-0 z-10 mt-2 w-72 rounded-xl border border-border bg-white p-3 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.4)]">
+                        <div className="absolute left-0 z-10 mt-2 w-72 max-w-[calc(100vw-4rem)] rounded-xl sm:left-auto sm:right-0 border border-border bg-white p-3 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.4)]">
                           <form action={updateCrewAssignmentAction} className="grid gap-2">
                             <input type="hidden" name="projectId" value={project.id} />
                             <input type="hidden" name="assignmentId" value={assignment.id} />
@@ -782,7 +783,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                       <form action={removeCrewFromProjectAction}>
                         <input type="hidden" name="projectId" value={project.id} />
                         <input type="hidden" name="assignmentId" value={assignment.id} />
-                        <button type="submit" className="h-8 rounded-lg border border-red-200 px-2 text-xs text-red-600 hover:border-red-400">Remove</button>
+                        <button type="submit" className="h-9 rounded-lg border border-red-200 px-3 text-xs text-red-600 hover:border-red-400 sm:h-8 sm:px-2">Remove</button>
                       </form>
                     </div>
                   ) : null}
@@ -852,12 +853,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Projec
                       <option value="in_progress">In progress</option>
                       <option value="done">Done</option>
                     </select>
-                    <button type="submit" className="h-8 rounded-lg border border-border px-2 text-xs">✓</button>
+                    <button type="submit" className="h-9 rounded-lg border border-border px-2 text-xs sm:h-8">✓</button>
                   </form>
                   <form action={deleteTaskAction}>
                     <input type="hidden" name="taskId" value={task.id} />
                     <input type="hidden" name="projectId" value={project.id} />
-                    <button type="submit" className="h-8 w-8 rounded-lg border border-border text-sm text-muted-foreground hover:border-red-200 hover:text-red-600">×</button>
+                    <button type="submit" className="size-9 sm:size-8 rounded-lg border border-border text-sm text-muted-foreground hover:border-red-200 hover:text-red-600">×</button>
                   </form>
                 </div>
               </li>

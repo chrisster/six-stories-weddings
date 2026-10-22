@@ -128,7 +128,7 @@ export default async function GalleryManagerPage({ params, searchParams }: Galle
 
           <div className="flex flex-col p-5 lg:p-6">
             <p className="quiet-label">Gallery Summary</p>
-            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <div className="rounded-xl border border-border/70 px-3 py-2">
                 <p className="text-xs text-muted-foreground">Total media</p>
                 <p className="mt-1 font-medium">{mediaWithUrl.length}</p>
@@ -175,7 +175,7 @@ export default async function GalleryManagerPage({ params, searchParams }: Galle
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <article className="admin-surface p-5">
           <h3 className="quiet-label mb-3">Gallery Settings</h3>
           {notifyResult ? (
