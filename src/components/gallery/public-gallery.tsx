@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Download,
   Heart,
+  Loader2,
   MessageCircle,
   Share2,
   X,
@@ -81,6 +82,7 @@ export function PublicGallery({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const downloadNoticeTimer = useRef<number | null>(null);
   const [sharing, setSharing] = useState(false);
   const [sharePreviewUrl, setSharePreviewUrl] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -198,9 +200,13 @@ export function PublicGallery({
         form.remove();
       }
 
-      // The browser takes over the download once streaming begins; clear the
-      // preparing indicator shortly after.
-      window.setTimeout(() => setDownloading(false), 4000);
+      // The archive is assembled on the server before the browser's download
+      // starts, which can take minutes for a large gallery, and the page can't
+      // tell when it begins. Keep the "please wait" notice (and the disabled
+      // buttons, so a second click doesn't start a second archive) up for a
+      // while; the visitor can dismiss it sooner.
+      if (downloadNoticeTimer.current) window.clearTimeout(downloadNoticeTimer.current);
+      downloadNoticeTimer.current = window.setTimeout(() => setDownloading(false), 3 * 60 * 1000);
     },
     [assets.length, gallerySlug],
   );
@@ -841,6 +847,35 @@ export function PublicGallery({
           })
         )}
       </div>
+
+      {/* ---------- ZIP "PLEASE WAIT" NOTICE ---------- */}
+      {downloading ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-4 bottom-6 z-40 mx-auto flex max-w-md items-start gap-3 rounded-2xl border border-border/70 bg-white px-4 py-3 shadow-[0_24px_60px_-30px_rgba(0,0,0,0.45)]"
+        >
+          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+          <div className="flex-1 text-sm">
+            <p className="font-medium text-foreground">Preparing your download…</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              This might take a few minutes, especially for large galleries and videos. Please wait and
+              keep this page open. Your download will start automatically.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (downloadNoticeTimer.current) window.clearTimeout(downloadNoticeTimer.current);
+              setDownloading(false);
+            }}
+            aria-label="Dismiss"
+            className="-mr-1 rounded-full p-1 text-muted-foreground transition hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : null}
 
       {/* ---------- LIGHTBOX ---------- */}
       {activeAsset ? (
