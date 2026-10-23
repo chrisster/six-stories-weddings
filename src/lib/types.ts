@@ -156,6 +156,8 @@ export type MediaAsset = {
   height?: number | null;
   /** Storage path of the poster frame chosen for a video (metadata_json.thumbnail_path). */
   thumbnailPath?: string | null;
+  /** Upload time (media_assets.created_at). */
+  createdAt?: string | null;
 };
 
 export type GalleryDetail = {

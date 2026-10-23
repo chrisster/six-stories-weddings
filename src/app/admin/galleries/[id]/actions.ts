@@ -712,12 +712,25 @@ export async function reorderMediaAction(formData: FormData) {
     return;
   }
 
-  for (let i = 0; i < orderedIds.length; i += 1) {
-    await admin
-      .from("media_assets")
-      .update({ sort_order: i + 1 })
-      .eq("gallery_id", galleryId)
-      .eq("id", orderedIds[i]);
+  // Only rows whose position changed are written, a batch at a time, so
+  // re-sorting a large gallery doesn't run one request after another.
+  const { data: current } = await admin
+    .from("media_assets")
+    .select("id, sort_order")
+    .eq("gallery_id", galleryId)
+    .range(0, 9999);
+  const currentOrder = new Map((current || []).map((row) => [String(row.id), Number(row.sort_order)]));
+  const changes = orderedIds
+    .map((id, index) => ({ id, sortOrder: index + 1 }))
+    .filter(({ id, sortOrder }) => currentOrder.get(id) !== sortOrder);
+
+  const BATCH = 25;
+  for (let i = 0; i < changes.length; i += BATCH) {
+    await Promise.all(
+      changes.slice(i, i + BATCH).map(({ id, sortOrder }) =>
+        admin.from("media_assets").update({ sort_order: sortOrder }).eq("gallery_id", galleryId).eq("id", id),
+      ),
+    );
   }
 
   revalidatePath(`/admin/galleries/${galleryId}`);

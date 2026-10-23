@@ -26,7 +26,7 @@ type MediaManagerProps = {
   galleryId: string;
 };
 
-type SortOption = "date" | "name" | "section";
+type SortOption = "custom" | "name" | "date";
 type SortDirection = "asc" | "desc";
 
 // Natural, case-insensitive order: IMG_2 before IMG_10, "a" next to "A".
@@ -35,6 +35,28 @@ const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 
 function fileName(item: Pick<MediaAsset, "originalName" | "storagePath">) {
   return item.originalName?.trim() || item.storagePath.split("/").pop() || "";
 }
+
+function uploadTime(item: Pick<MediaAsset, "createdAt">) {
+  const time = item.createdAt ? Date.parse(item.createdAt) : NaN;
+  return Number.isFinite(time) ? time : 0;
+}
+
+/**
+ * The order an admin sort choice produces. It is written to sort_order, so the
+ * client gallery shows exactly this order. "custom" keeps the current order
+ * (reversed when descending).
+ */
+function orderFor<T extends MediaAsset>(items: T[], sortBy: SortOption, direction: SortDirection): T[] {
+  const sign = direction === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    let primary = 0;
+    if (sortBy === "name") primary = nameCollator.compare(fileName(a), fileName(b));
+    else if (sortBy === "date") primary = uploadTime(a) - uploadTime(b);
+    return sign * (primary || a.sortOrder - b.sortOrder);
+  });
+}
+
+const sortPreferenceKey = (galleryId: string) => `media-sort:${galleryId}`;
 
 type ThumbnailStatus = "idle" | "capturing" | "saving" | "done" | "error";
 
@@ -110,8 +132,11 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   const router = useRouter();
   const [mediaState, setMediaState] = useState(media);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<SortOption>("date");
+  // Which ordering was last applied to this gallery (remembered per browser);
+  // the grid itself always shows the saved order, i.e. what clients see.
+  const [sortBy, setSortBy] = useState<SortOption>("custom");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [savingOrder, setSavingOrder] = useState(false);
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>("");
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -126,6 +151,54 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     setMediaState(media);
   }, [media]);
 
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(sortPreferenceKey(galleryId)) || "null");
+      if (saved && ["custom", "name", "date"].includes(saved.sortBy)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of a browser-only preference
+        setSortBy(saved.sortBy);
+        setSortDirection(saved.sortDirection === "desc" ? "desc" : "asc");
+      }
+    } catch {
+      // Storage unavailable — fall back to "custom".
+    }
+  }, [galleryId]);
+
+  function rememberSort(nextSortBy: SortOption, nextDirection: SortDirection) {
+    setSortBy(nextSortBy);
+    setSortDirection(nextDirection);
+    try {
+      window.localStorage.setItem(
+        sortPreferenceKey(galleryId),
+        JSON.stringify({ sortBy: nextSortBy, sortDirection: nextDirection }),
+      );
+    } catch {
+      // Ignore storage errors.
+    }
+  }
+
+  /** Applies a sort to the whole gallery and saves it as the client order. */
+  async function applySort(nextSortBy: SortOption, nextDirection: SortDirection) {
+    if (savingOrder) return;
+    if (
+      sortBy === "custom" &&
+      nextSortBy !== "custom" &&
+      !confirm("Re-order the whole gallery? Clients will see this order and any hand-arranged order is replaced.")
+    ) {
+      return;
+    }
+    const ordered = orderFor(mediaState, nextSortBy, nextDirection);
+    const next = ordered.map((item, index) => ({ ...item, sortOrder: index + 1 }));
+    rememberSort(nextSortBy, nextDirection);
+    setMediaState(next);
+    setSavingOrder(true);
+    try {
+      await persistOrder(next);
+    } finally {
+      setSavingOrder(false);
+    }
+  }
+
   const sectionMap = useMemo(() => {
     return new Map(sections.map((s) => [s.id, s.name]));
   }, [sections]);
@@ -138,21 +211,11 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
       sorted = sorted.filter((m) => m.sectionId === selectedSectionFilter);
     }
 
-    // Sort
-    // Stored paths are random UUIDs, so "name" must use the original file name.
-    const direction = sortDirection === "asc" ? 1 : -1;
-    if (sortBy === "name") {
-      sorted.sort(
-        (a, b) =>
-          direction *
-          (nameCollator.compare(fileName(a), fileName(b)) || a.sortOrder - b.sortOrder),
-      );
-    } else {
-      sorted.sort((a, b) => direction * (a.sortOrder - b.sortOrder));
-    }
+    // Always the saved order — the one the client gallery shows.
+    sorted.sort((a, b) => a.sortOrder - b.sortOrder);
 
     // Group by section
-    if (sortBy === "section" || !selectedSectionFilter) {
+    if (!selectedSectionFilter) {
       const grouped = new Map<string, typeof media>();
       sorted.forEach((item) => {
         const key = item.sectionId
@@ -177,11 +240,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     }
 
     return new Map([[selectedSectionFilter, sorted]]);
-  }, [mediaState, sortBy, sortDirection, selectedSectionFilter, sectionMap, sections]);
-
-  // Drag-reordering edits the order clients see, so only allow it while the
-  // grid shows that order (not a name sort or a reversed view).
-  const canDragReorder = sortBy !== "name" && sortDirection === "asc";
+  }, [mediaState, selectedSectionFilter, sectionMap, sections]);
 
   async function persistOrder(next: typeof mediaState) {
     const orderedIds = [...next]
@@ -232,6 +291,8 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
 
     setMediaState(next);
     setDraggedId(null);
+    // A hand-made change means the gallery no longer follows a name/date sort.
+    rememberSort("custom", "asc");
     await persistOrder(next);
   }
 
@@ -469,22 +530,26 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            disabled={savingOrder}
+            onChange={(e) => void applySort(e.target.value as SortOption, sortDirection)}
+            title="Sets the order clients see"
             className="h-8 rounded-lg border border-border bg-white px-2 text-xs"
           >
-            <option value="date">Sort by date</option>
+            <option value="custom">Custom order</option>
             <option value="name">Sort by name</option>
-            <option value="section">Group by section</option>
+            <option value="date">Sort by upload date</option>
           </select>
           <button
             type="button"
-            onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+            disabled={savingOrder}
+            onClick={() => void applySort(sortBy, sortDirection === "asc" ? "desc" : "asc")}
             title={sortDirection === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}
             aria-label={sortDirection === "asc" ? "Sort ascending" : "Sort descending"}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-white hover:bg-muted"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-white hover:bg-muted disabled:opacity-50"
           >
             {sortDirection === "asc" ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />}
           </button>
+          {savingOrder ? <span className="text-xs text-muted-foreground">Saving order…</span> : null}
 
           {sections.length > 0 && (
             <select
@@ -582,7 +647,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                       return (
                         <div
                           key={asset.id}
-                          draggable={canDragReorder}
+                          draggable
                           onDragStart={() => setDraggedId(asset.id)}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={() => handleDropInSection(sectionName, asset.id)}

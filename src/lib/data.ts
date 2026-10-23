@@ -520,7 +520,7 @@ async function loadGalleries(): Promise<Gallery[]> {
 export const getGalleries = cache(loadGalleries);
 
 const MEDIA_SELECT =
-  "id, gallery_id, section_id, storage_path, media_type, sort_order, is_cover, original_name, width, height, metadata_json";
+  "id, gallery_id, section_id, storage_path, media_type, sort_order, is_cover, original_name, width, height, metadata_json, created_at";
 
 function normalizeGalleryRow(row: Record<string, unknown>): Gallery {
   return {
@@ -554,6 +554,7 @@ function normalizeMediaRow(row: Record<string, unknown>): MediaAsset {
     width: Number.isFinite(width) && width > 0 ? width : null,
     height: Number.isFinite(height) && height > 0 ? height : null,
     thumbnailPath: metadata && typeof metadata.thumbnail_path === "string" ? metadata.thumbnail_path : null,
+    createdAt: (row.created_at as string | null) || null,
   };
 }
 
