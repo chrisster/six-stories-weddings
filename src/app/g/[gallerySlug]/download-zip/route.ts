@@ -17,7 +17,9 @@ import {
 import type { MediaAsset } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// Building a full-gallery archive (videos included) can take minutes; 800s is
+// the Pro plan ceiling with Fluid compute.
+export const maxDuration = 800;
 
 function slugifyName(value: string) {
   return value.replace(/[^\w\-]+/g, "-").replace(/^-+|-+$/g, "") || "gallery";
