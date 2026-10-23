@@ -493,17 +493,16 @@ export async function storeMediaObjectStream(
     throw new Error("Could not start streaming upload.");
   }
 
+  // R2 rejects a multipart upload unless every part but the last has exactly
+  // the same length, so parts are cut at PART_SIZE boundaries and whatever
+  // spills over a boundary starts the next part.
   const PART_SIZE = 8 * 1024 * 1024;
   const parts: Array<{ PartNumber: number; ETag: string }> = [];
-  let buffered: Uint8Array[] = [];
-  let bufferedBytes = 0;
+  let partBuffer = Buffer.allocUnsafe(PART_SIZE);
+  let partBytes = 0;
 
-  const flushPart = async () => {
-    if (bufferedBytes === 0 && parts.length > 0) return;
+  const uploadPart = async (body: Buffer) => {
     const partNumber = parts.length + 1;
-    const body = Buffer.concat(buffered, bufferedBytes);
-    buffered = [];
-    bufferedBytes = 0;
     const result = await client.send(
       new UploadPartCommand({
         Bucket: R2_BUCKET,
@@ -521,14 +520,23 @@ export async function storeMediaObjectStream(
 
   try {
     for await (const chunk of chunks) {
-      if (chunk.length === 0) continue;
-      buffered.push(chunk);
-      bufferedBytes += chunk.length;
-      if (bufferedBytes >= PART_SIZE) {
-        await flushPart();
+      let offset = 0;
+      while (offset < chunk.length) {
+        const take = Math.min(PART_SIZE - partBytes, chunk.length - offset);
+        partBuffer.set(chunk.subarray(offset, offset + take), partBytes);
+        partBytes += take;
+        offset += take;
+        if (partBytes === PART_SIZE) {
+          await uploadPart(partBuffer);
+          partBuffer = Buffer.allocUnsafe(PART_SIZE);
+          partBytes = 0;
+        }
       }
     }
-    await flushPart();
+    // The trailing part may be shorter (or the only part, even if empty).
+    if (partBytes > 0 || parts.length === 0) {
+      await uploadPart(partBuffer.subarray(0, partBytes));
+    }
 
     await client.send(
       new CompleteMultipartUploadCommand({
