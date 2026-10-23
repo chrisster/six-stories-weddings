@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
 import {
   bulkDeleteMediaAction,
   moveMediaToSectionAction,
@@ -27,10 +27,16 @@ type MediaManagerProps = {
 };
 
 type SortOption = "date" | "name" | "section";
+type SortDirection = "asc" | "desc";
+
+// Natural, case-insensitive order: IMG_2 before IMG_10, "a" next to "A".
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+function fileName(item: Pick<MediaAsset, "originalName" | "storagePath">) {
+  return item.originalName?.trim() || item.storagePath.split("/").pop() || "";
+}
 
 type ThumbnailStatus = "idle" | "capturing" | "saving" | "done" | "error";
-
-const PAGE_SIZE = 24;
 
 /**
  * Captures one frame of a stored video at `timeSeconds` and returns it as a
@@ -105,9 +111,9 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
   const [mediaState, setMediaState] = useState(media);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortOption>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>("");
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [previewVideo, setPreviewVideo] = useState<
     { id: string; url: string; name: string; storagePath: string } | null
@@ -133,10 +139,16 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     }
 
     // Sort
+    // Stored paths are random UUIDs, so "name" must use the original file name.
+    const direction = sortDirection === "asc" ? 1 : -1;
     if (sortBy === "name") {
-      sorted.sort((a, b) => a.storagePath.localeCompare(b.storagePath));
-    } else if (sortBy === "date") {
-      sorted.sort((a, b) => a.sortOrder - b.sortOrder);
+      sorted.sort(
+        (a, b) =>
+          direction *
+          (nameCollator.compare(fileName(a), fileName(b)) || a.sortOrder - b.sortOrder),
+      );
+    } else {
+      sorted.sort((a, b) => direction * (a.sortOrder - b.sortOrder));
     }
 
     // Group by section
@@ -165,7 +177,11 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
     }
 
     return new Map([[selectedSectionFilter, sorted]]);
-  }, [mediaState, sortBy, selectedSectionFilter, sectionMap, sections]);
+  }, [mediaState, sortBy, sortDirection, selectedSectionFilter, sectionMap, sections]);
+
+  // Drag-reordering edits the order clients see, so only allow it while the
+  // grid shows that order (not a name sort or a reversed view).
+  const canDragReorder = sortBy !== "name" && sortDirection === "asc";
 
   async function persistOrder(next: typeof mediaState) {
     const orderedIds = [...next]
@@ -460,6 +476,15 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
             <option value="name">Sort by name</option>
             <option value="section">Group by section</option>
           </select>
+          <button
+            type="button"
+            onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+            title={sortDirection === "asc" ? "Ascending — click for descending" : "Descending — click for ascending"}
+            aria-label={sortDirection === "asc" ? "Sort ascending" : "Sort descending"}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-white hover:bg-muted"
+          >
+            {sortDirection === "asc" ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />}
+          </button>
 
           {sections.length > 0 && (
             <select
@@ -501,9 +526,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
       <div className="space-y-8">
         {[...groupedAndSorted.entries()].map(([sectionName, sectionMedia]) => {
           const sectionId = sections.find((s) => sectionMap.get(s.id) === sectionName)?.id;
-          const visibleCount = visibleBySection[sectionName] ?? PAGE_SIZE;
-          const visibleMedia = sectionMedia.slice(0, visibleCount);
-          const remaining = sectionMedia.length - visibleMedia.length;
           const isCollapsed = collapsedSections[sectionName] ?? true;
           const allSectionSelected =
             sectionMedia.length > 0 && sectionMedia.every((item) => selectedIds.has(item.id));
@@ -552,13 +574,15 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
 
               {!isCollapsed && (
                 <>
-                  <div className="columns-2 gap-3 sm:columns-3 xl:columns-4 [&>*]:mb-3">
-                    {visibleMedia.map((asset) => {
+                  {/* A row-major grid, so the sort order reads left to right, top to
+                      bottom (CSS columns would fill each column top-down instead). */}
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                    {sectionMedia.map((asset) => {
                       const selected = selectedIds.has(asset.id);
                       return (
                         <div
                           key={asset.id}
-                          draggable
+                          draggable={canDragReorder}
                           onDragStart={() => setDraggedId(asset.id)}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={() => handleDropInSection(sectionName, asset.id)}
@@ -575,7 +599,7 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                               });
                             }
                           }}
-                          className={`group relative block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-md border bg-muted/50 transition ${
+                          className={`group relative flex aspect-square w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border bg-muted/50 transition ${
                             selected
                               ? "border-foreground ring-2 ring-foreground"
                               : "border-border hover:border-foreground/40"
@@ -615,14 +639,14 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                                   if (img.src !== asset.url) img.src = asset.url;
                                 }
                               }}
-                              className="block w-full"
+                              className="block h-full w-full object-contain"
                             />
                           ) : (
                             <>
                               <video
                                 src={asset.url}
                                 poster={asset.posterUrl || undefined}
-                                className="block w-full bg-black"
+                                className="block h-full w-full bg-black object-contain"
                                 preload={asset.posterUrl ? "none" : "metadata"}
                                 muted
                                 playsInline
@@ -642,22 +666,6 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                     })}
                   </div>
 
-                  {remaining > 0 ? (
-                    <div className="flex justify-center pt-1">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setVisibleBySection((current) => ({
-                            ...current,
-                            [sectionName]: visibleCount + PAGE_SIZE,
-                          }))
-                        }
-                        className="rounded-full border border-border px-4 py-2 text-sm hover:border-foreground/30"
-                      >
-                        Load more ({remaining} remaining)
-                      </button>
-                    </div>
-                  ) : null}
                 </>
               )}
             </div>

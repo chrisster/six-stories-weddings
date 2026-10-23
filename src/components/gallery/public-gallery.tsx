@@ -52,7 +52,6 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-const PHOTO_PAGE_SIZE = 30;
 
 function displayName(name?: string) {
   if (!name) return "";
@@ -85,7 +84,6 @@ export function PublicGallery({
   const [sharing, setSharing] = useState(false);
   const [sharePreviewUrl, setSharePreviewUrl] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [visibleBySection, setVisibleBySection] = useState<Record<string, number>>({});
   const [showComments, setShowComments] = useState(false);
   const sessionRef = useRef<string>("");
 
@@ -812,10 +810,6 @@ export function PublicGallery({
           </div>
         ) : (
           displayedGroups.map((group, index) => {
-            const visibleCount = visibleBySection[group.name] ?? PHOTO_PAGE_SIZE;
-            const visibleItems = group.items.slice(0, visibleCount);
-            const remaining = group.items.length - visibleItems.length;
-
             return (
               <section
                 key={group.name}
@@ -830,7 +824,7 @@ export function PublicGallery({
                   {group.name}
                 </h2>
                 <JustifiedGrid
-                  items={visibleItems}
+                  items={group.items}
                   mediaBase={mediaBase}
                   favorites={favorites}
                   allowDownloads={allowDownloads}
@@ -842,22 +836,6 @@ export function PublicGallery({
                   onToggleSelect={toggleSelect}
                   onDownload={downloadAsset}
                 />
-                {remaining > 0 ? (
-                  <div className="flex justify-center pt-8">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setVisibleBySection((current) => ({
-                          ...current,
-                          [group.name]: visibleCount + PHOTO_PAGE_SIZE,
-                        }))
-                      }
-                      className="rounded-full border border-foreground/30 px-6 py-2.5 text-[11px] uppercase tracking-[0.22em] text-foreground transition hover:border-foreground"
-                    >
-                      Load more ({remaining})
-                    </button>
-                  </div>
-                ) : null}
               </section>
             );
           })
