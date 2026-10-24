@@ -1411,6 +1411,14 @@ export function SectionSelectButton({
 }) {
   const count = ids.filter((id) => selected.has(id)).length;
   const allSelected = ids.length > 0 && count === ids.length;
+  if (ids.length === 0) {
+    // Everything here is hidden from guests, so nothing can be shared.
+    return (
+      <p className="-mt-6 mb-6 text-center text-[11px] uppercase tracking-[0.18em] text-muted-foreground sm:-mt-8">
+        All hidden from guests · unhide to share
+      </p>
+    );
+  }
   return (
     <div className="-mt-6 mb-6 flex justify-center sm:-mt-8">
       <button
