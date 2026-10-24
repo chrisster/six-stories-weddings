@@ -8,6 +8,7 @@ import { getGuestAccessByToken, getPublicGalleryBySlug, logGalleryEvent, portalE
 import { readPortalSession } from "@/lib/portal-auth";
 import {
   deleteStoredObjects,
+  getMediaFetchUrl,
   getSignedMediaUrl,
   headMediaObject,
   isR2PublicEnabled,
@@ -64,8 +65,10 @@ type PreparedEntry =
 
 async function prepareEntry(asset: MediaAsset): Promise<PreparedEntry> {
   try {
-    const signedUrl = await getSignedMediaUrl(asset.storagePath);
-    const upstream = await fetch(signedUrl);
+    // The storage API endpoint, not the public media domain: large objects
+    // came through the CDN domain at ~1 MB/s, which made video zips time out.
+    const sourceUrl = await getMediaFetchUrl(asset.storagePath);
+    const upstream = await fetch(sourceUrl);
     if (!upstream.ok || !upstream.body) return { kind: "skip" };
     const length = Number(upstream.headers.get("content-length") || "0");
     if (length > 0 && length <= BUFFER_LIMIT) {

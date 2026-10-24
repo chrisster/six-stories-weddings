@@ -278,6 +278,25 @@ export async function getSignedMediaUrl(storagePath: string, expiresIn = 60 * 60
  * download routes so files reach the browser straight from storage instead of
  * being proxied through a function.
  */
+/**
+ * A short-lived URL for server-side reads of a stored object. With R2 it is a
+ * presigned URL on the storage API endpoint rather than the public media
+ * domain, which is much faster for multi-gigabyte objects such as videos.
+ */
+export async function getMediaFetchUrl(storagePath: string, expiresIn = 60 * 60): Promise<string> {
+  if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+    return storagePath;
+  }
+  if (useR2) {
+    return getSignedUrl(
+      getR2Client(),
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: storagePath }),
+      { expiresIn },
+    );
+  }
+  return getSignedMediaUrl(storagePath, expiresIn);
+}
+
 export async function getMediaDownloadUrl(
   storagePath: string,
   fileName: string,

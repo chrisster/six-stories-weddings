@@ -83,6 +83,7 @@ export function PublicGallery({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const downloadNoticeTimer = useRef<number | null>(null);
+  const [downloadKind, setDownloadKind] = useState<"zip" | "files">("zip");
   const [sharing, setSharing] = useState(false);
   const [sharePreviewUrl, setSharePreviewUrl] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -169,6 +170,24 @@ export function PublicGallery({
     (list: PublicAsset[]) => {
       if (list.length === 0) return;
       setDownloading(true);
+      if (downloadNoticeTimer.current) window.clearTimeout(downloadNoticeTimer.current);
+
+      // Videos are already compressed and very large, so zipping them only
+      // adds a long server-side copy before anything downloads. Download each
+      // file directly instead, a moment apart so the browser accepts them.
+      if (list.every((asset) => asset.type === "video")) {
+        setDownloadKind("files");
+        list.forEach((asset, index) => {
+          window.setTimeout(() => downloadAsset(asset), index * 1500);
+        });
+        downloadNoticeTimer.current = window.setTimeout(
+          () => setDownloading(false),
+          list.length * 1500 + 8000,
+        );
+        return;
+      }
+
+      setDownloadKind("zip");
       const token = new URLSearchParams(window.location.search).get("token");
       const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
 
@@ -205,10 +224,9 @@ export function PublicGallery({
       // tell when it begins. Keep the "please wait" notice (and the disabled
       // buttons, so a second click doesn't start a second archive) up for a
       // while; the visitor can dismiss it sooner.
-      if (downloadNoticeTimer.current) window.clearTimeout(downloadNoticeTimer.current);
       downloadNoticeTimer.current = window.setTimeout(() => setDownloading(false), 3 * 60 * 1000);
     },
-    [assets.length, gallerySlug],
+    [assets.length, gallerySlug, downloadAsset],
   );
 
   const toggleSelect = useCallback((assetId: string) => {
@@ -857,11 +875,23 @@ export function PublicGallery({
         >
           <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
           <div className="flex-1 text-sm">
-            <p className="font-medium text-foreground">Preparing your download…</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              This might take a few minutes, especially for large galleries and videos. Please wait and
-              keep this page open. Your download will start automatically.
-            </p>
+            {downloadKind === "files" ? (
+              <>
+                <p className="font-medium text-foreground">Downloading your videos…</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  Each video downloads as its own file. If your browser asks to allow multiple
+                  downloads, choose Allow. Large videos may take a while, so please keep this page open.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-foreground">Preparing your download…</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                  This might take a few minutes, especially for large galleries. Please wait and keep
+                  this page open. Your download will start automatically.
+                </p>
+              </>
+            )}
           </div>
           <button
             type="button"
