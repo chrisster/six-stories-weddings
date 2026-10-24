@@ -50,6 +50,34 @@ function entryNames(assets: MediaAsset[]): Array<{ asset: MediaAsset; name: stri
   return entries;
 }
 
+// Files up to this size are downloaded whole, several at once, ahead of the
+// one being written; larger ones (videos) stream in their turn so memory stays
+// bounded. Fetching one photo at a time left the function waiting on storage
+// round trips for most of the build.
+const PREFETCH_WINDOW = 8;
+const BUFFER_LIMIT = 48 * 1024 * 1024;
+
+type PreparedEntry =
+  | { kind: "buffer"; data: Uint8Array }
+  | { kind: "stream"; body: ReadableStream<Uint8Array> }
+  | { kind: "skip" };
+
+async function prepareEntry(asset: MediaAsset): Promise<PreparedEntry> {
+  try {
+    const signedUrl = await getSignedMediaUrl(asset.storagePath);
+    const upstream = await fetch(signedUrl);
+    if (!upstream.ok || !upstream.body) return { kind: "skip" };
+    const length = Number(upstream.headers.get("content-length") || "0");
+    if (length > 0 && length <= BUFFER_LIMIT) {
+      return { kind: "buffer", data: new Uint8Array(await upstream.arrayBuffer()) };
+    }
+    return { kind: "stream", body: upstream.body };
+  } catch {
+    // Skip individual file failures and continue.
+    return { kind: "skip" };
+  }
+}
+
 // Pure-JS streaming ZIP via fflate. ZipPassThrough = STORE (no compression) —
 // ideal for JPEGs. The generator yields archive bytes as they are produced;
 // pauses between yields provide backpressure against the consumer.
@@ -67,31 +95,47 @@ async function* zipChunks(
     if (data.length > 0) pending.push(data);
   });
 
-  for (const { asset, name } of entries) {
+  // Entries are written strictly in order; up to PREFETCH_WINDOW of the next
+  // files are already being fetched while the current one is written.
+  const prepared: Array<Promise<PreparedEntry> | undefined> = [];
+  const ensurePrefetched = (from: number) => {
+    for (let i = from; i < Math.min(entries.length, from + PREFETCH_WINDOW); i += 1) {
+      if (!prepared[i]) prepared[i] = prepareEntry(entries[i].asset);
+    }
+  };
+
+  for (let index = 0; index < entries.length; index += 1) {
+    ensurePrefetched(index);
+    const item = await prepared[index]!;
+    prepared[index] = undefined; // release the buffer once written
+    if (item.kind === "skip") continue;
+
+    const entry = new ZipPassThrough(entries[index].name);
+    zip.add(entry);
+
+    if (item.kind === "buffer") {
+      entry.push(item.data, true);
+      if (zipError) throw zipError;
+      while (pending.length > 0) yield pending.shift()!;
+      continue;
+    }
+
+    const reader = item.body.getReader();
     try {
-      const signedUrl = await getSignedMediaUrl(asset.storagePath);
-      const upstream = await fetch(signedUrl);
-      if (!upstream.ok || !upstream.body) continue;
-
-      const entry = new ZipPassThrough(name);
-      zip.add(entry);
-
-      const reader = upstream.body.getReader();
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          entry.push(new Uint8Array(0), true);
-          break;
-        }
+        if (done) break;
         entry.push(value, false);
         if (zipError) throw zipError;
         while (pending.length > 0) yield pending.shift()!;
       }
-      while (pending.length > 0) yield pending.shift()!;
     } catch (error) {
       if (zipError) throw error;
-      // Skip individual file failures and continue.
+      // A broken stream mid-file: close the entry with what arrived.
     }
+    entry.push(new Uint8Array(0), true);
+    if (zipError) throw zipError;
+    while (pending.length > 0) yield pending.shift()!;
   }
 
   zip.end();

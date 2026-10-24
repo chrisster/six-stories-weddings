@@ -496,13 +496,18 @@ export async function storeMediaObjectStream(
   // R2 rejects a multipart upload unless every part but the last has exactly
   // the same length, so parts are cut at PART_SIZE boundaries and whatever
   // spills over a boundary starts the next part.
-  const PART_SIZE = 8 * 1024 * 1024;
+  // Up to MAX_IN_FLIGHT parts upload at once while the next one fills, so the
+  // archive is never waiting on a single storage round trip.
+  const PART_SIZE = 16 * 1024 * 1024;
+  const MAX_IN_FLIGHT = 4;
   const parts: Array<{ PartNumber: number; ETag: string }> = [];
+  const inFlight = new Set<Promise<void>>();
+  let nextPartNumber = 1;
+  let partError: unknown = null;
   let partBuffer = Buffer.allocUnsafe(PART_SIZE);
   let partBytes = 0;
 
-  const uploadPart = async (body: Buffer) => {
-    const partNumber = parts.length + 1;
+  const sendPart = async (partNumber: number, body: Buffer) => {
     const result = await client.send(
       new UploadPartCommand({
         Bucket: R2_BUCKET,
@@ -516,6 +521,23 @@ export async function storeMediaObjectStream(
       throw new Error("Storage did not return a part ETag.");
     }
     parts.push({ PartNumber: partNumber, ETag: result.ETag });
+  };
+
+  const uploadPart = async (body: Buffer) => {
+    const task = sendPart(nextPartNumber, body);
+    nextPartNumber += 1;
+    inFlight.add(task);
+    task.then(
+      () => inFlight.delete(task),
+      (error) => {
+        partError ??= error;
+        inFlight.delete(task);
+      },
+    );
+    if (inFlight.size >= MAX_IN_FLIGHT) {
+      await Promise.race(inFlight).catch(() => null);
+    }
+    if (partError) throw partError;
   };
 
   try {
@@ -534,9 +556,12 @@ export async function storeMediaObjectStream(
       }
     }
     // The trailing part may be shorter (or the only part, even if empty).
-    if (partBytes > 0 || parts.length === 0) {
+    if (partBytes > 0 || nextPartNumber === 1) {
       await uploadPart(partBuffer.subarray(0, partBytes));
     }
+    await Promise.allSettled(inFlight);
+    if (partError) throw partError;
+    parts.sort((a, b) => a.PartNumber - b.PartNumber);
 
     await client.send(
       new CompleteMultipartUploadCommand({
@@ -547,6 +572,7 @@ export async function storeMediaObjectStream(
       }),
     );
   } catch (error) {
+    await Promise.allSettled(inFlight);
     await client
       .send(new AbortMultipartUploadCommand({ Bucket: R2_BUCKET, Key: path, UploadId: uploadId }))
       .catch(() => null);
