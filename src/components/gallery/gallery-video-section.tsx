@@ -30,6 +30,8 @@ type GalleryVideoSectionProps = {
   selected?: Set<string>;
   /** Hidden from shared-link guests (shown to the couple as a badge). */
   hiddenIds?: Set<string>;
+  /** Not selectable right now (hidden films while choosing what to share). */
+  lockedIds?: Set<string>;
   onToggleSelect?: (assetId: string) => void;
   onToggleSelectAll?: () => void;
   canComment?: boolean;
@@ -60,6 +62,7 @@ export function GalleryVideoSection({
   selectMode = false,
   selected,
   hiddenIds,
+  lockedIds,
   onToggleSelect,
   onToggleSelectAll,
   canComment = false,
@@ -68,8 +71,9 @@ export function GalleryVideoSection({
   sectionRef,
 }: GalleryVideoSectionProps) {
   if (videos.length === 0) return null;
-  const selectedCount = videos.filter((video) => selected?.has(video.id)).length;
-  const allSelected = selectedCount === videos.length;
+  const selectable = videos.filter((video) => !lockedIds?.has(video.id));
+  const selectedCount = selectable.filter((video) => selected?.has(video.id)).length;
+  const allSelected = selectable.length > 0 && selectedCount === selectable.length;
 
   return (
     <section
@@ -80,7 +84,7 @@ export function GalleryVideoSection({
       <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
         Film
       </h2>
-      {selectMode && onToggleSelectAll ? (
+      {selectMode && onToggleSelectAll && selectable.length > 0 ? (
         <div className="-mt-6 mb-6 flex justify-center sm:-mt-8">
           <button
             type="button"
@@ -92,7 +96,7 @@ export function GalleryVideoSection({
             }`}
           >
             <Check className="size-3.5" />
-            {allSelected ? `Deselect all (${videos.length})` : `Select all (${videos.length})`}
+            {allSelected ? `Deselect all (${selectable.length})` : `Select all (${selectable.length})`}
             {selectedCount > 0 && !allSelected ? (
               <span className="text-muted-foreground">· {selectedCount} selected</span>
             ) : null}
@@ -111,6 +115,7 @@ export function GalleryVideoSection({
             selectMode={selectMode}
             isSelected={Boolean(selected?.has(video.id))}
             isHidden={Boolean(hiddenIds?.has(video.id))}
+            isLocked={Boolean(lockedIds?.has(video.id))}
             onToggleSelect={onToggleSelect}
             canComment={canComment}
             commentsEnabled={commentsEnabled}
@@ -131,6 +136,7 @@ function GalleryVideoItem({
   selectMode,
   isSelected,
   isHidden,
+  isLocked,
   onToggleSelect,
   canComment,
   commentsEnabled,
@@ -144,6 +150,7 @@ function GalleryVideoItem({
   selectMode: boolean;
   isSelected: boolean;
   isHidden: boolean;
+  isLocked: boolean;
   onToggleSelect?: (assetId: string) => void;
   canComment: boolean;
   commentsEnabled: boolean;
@@ -278,7 +285,12 @@ function GalleryVideoItem({
             </span>
           ) : null}
         </p>
-        {selectMode && onToggleSelect ? (
+        {selectMode && isLocked ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+            <EyeOff className="size-3.5" />
+            Unhide to share
+          </span>
+        ) : selectMode && onToggleSelect ? (
           <button
             type="button"
             onClick={() => onToggleSelect(video.id)}

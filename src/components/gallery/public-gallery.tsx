@@ -89,6 +89,9 @@ export function PublicGallery({
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
+  // What the selection is for: sharing/downloading, or hiding from guests.
+  // Hidden items can't be picked for sharing — they must be unhidden first.
+  const [selectPurpose, setSelectPurpose] = useState<"share" | "hide">("share");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const downloadNoticeTimer = useRef<number | null>(null);
@@ -503,6 +506,7 @@ export function PublicGallery({
           return next;
         });
         setSelected(new Set());
+        setSelectMode(false);
       } catch {
         window.alert("Sorry, that didn't work. Please try again.");
       } finally {
@@ -510,6 +514,10 @@ export function PublicGallery({
       }
     },
     [gallerySlug, selected],
+  );
+  const lockedIds = useMemo(
+    () => (selectMode && selectPurpose === "share" ? hiddenIds : new Set<string>()),
+    [selectMode, selectPurpose, hiddenIds],
   );
   const selectionAllHidden = selected.size > 0 && [...selected].every((id) => hiddenIds.has(id));
 
@@ -763,6 +771,7 @@ export function PublicGallery({
                     onClick={() => {
                       setShareMenuOpen(false);
                       setSelected(new Set());
+                      setSelectPurpose("share");
                       setSelectMode(true);
                     }}
                     className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
@@ -777,6 +786,7 @@ export function PublicGallery({
                         onClick={() => {
                           setShareMenuOpen(false);
                           setSelected(new Set());
+                          setSelectPurpose("hide");
                           setSelectMode(true);
                         }}
                         className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
@@ -805,6 +815,8 @@ export function PublicGallery({
             {selected.size} selected
           </span>
           <div className="flex items-center gap-2">
+            {selectPurpose === "share" ? (
+            <>
             <button
               type="button"
               disabled={selected.size === 0 || downloading}
@@ -823,7 +835,9 @@ export function PublicGallery({
               <Share2 className="size-3.5" />
               {sharing ? "Sharing…" : "Share"}
             </button>
-            {canHide ? (
+            </>
+            ) : null}
+            {canHide && selectPurpose === "hide" ? (
               <button
                 type="button"
                 disabled={selected.size === 0 || hiding}
@@ -921,8 +935,13 @@ export function PublicGallery({
           selectMode={selectMode}
           selected={selected}
           hiddenIds={hiddenIds}
+          lockedIds={lockedIds}
           onToggleSelect={toggleSelect}
-          onToggleSelectAll={() => toggleSelectGroup(videoAssets.map((asset) => asset.id))}
+          onToggleSelectAll={() =>
+            toggleSelectGroup(
+              videoAssets.map((asset) => asset.id).filter((id) => !lockedIds.has(id)),
+            )
+          }
           canComment={canComment}
           commentsEnabled={commentsEnabled}
           commenterName={commenterName}
@@ -958,7 +977,7 @@ export function PublicGallery({
                 </h2>
                 {selectMode ? (
                   <SectionSelectButton
-                    ids={group.items.map((asset) => asset.id)}
+                    ids={group.items.map((asset) => asset.id).filter((id) => !lockedIds.has(id))}
                     selected={selected}
                     onToggle={toggleSelectGroup}
                   />
@@ -971,6 +990,7 @@ export function PublicGallery({
                   selectMode={selectMode}
                   selected={selected}
                   hiddenIds={hiddenIds}
+                  lockedIds={lockedIds}
                   commentCounts={commentsEnabled ? commentCounts : {}}
                   onSelect={openAt}
                   onToggleFavorite={toggleFavorite}
@@ -1194,6 +1214,8 @@ type JustifiedGridProps = {
   selected: Set<string>;
   /** Items hidden from shared-link guests (badge only; the couple still sees them). */
   hiddenIds?: Set<string>;
+  /** Not selectable right now (hidden items while choosing what to share). */
+  lockedIds?: Set<string>;
   commentCounts?: Record<string, number>;
   onSelect: (assetId: string) => void;
   onToggleFavorite: (assetId: string) => void;
@@ -1212,6 +1234,7 @@ function JustifiedGrid({
   selectMode,
   selected,
   hiddenIds,
+  lockedIds,
   commentCounts = {},
   onSelect,
   onToggleFavorite,
@@ -1237,6 +1260,7 @@ function JustifiedGrid({
         const isFavorite = favorites.has(asset.id);
         const isSelected = selected.has(asset.id);
         const isHidden = Boolean(hiddenIds?.has(asset.id));
+        const isLocked = selectMode && Boolean(lockedIds?.has(asset.id));
         const commentCount = commentCounts[asset.id] || 0;
         return (
           <div
@@ -1250,8 +1274,12 @@ function JustifiedGrid({
           >
             <button
               type="button"
-              onClick={() => (selectMode ? onToggleSelect(asset.id) : onSelect(asset.id))}
-              className="block h-full w-full"
+              onClick={() => {
+                if (!selectMode) onSelect(asset.id);
+                else if (!isLocked) onToggleSelect(asset.id);
+              }}
+              title={isLocked ? "Hidden from guests — unhide it to share" : undefined}
+              className={`block h-full w-full ${isLocked ? "cursor-not-allowed" : ""}`}
             >
               {asset.type === "photo" ? (
                 <img
@@ -1286,7 +1314,7 @@ function JustifiedGrid({
                     );
                   }}
                   className={`h-full w-full object-cover transition duration-500 group-hover:scale-[1.04] ${
-                    selectMode && !isSelected ? "opacity-70" : isHidden ? "opacity-60" : ""
+                    isLocked ? "opacity-35 grayscale" : selectMode && !isSelected ? "opacity-70" : isHidden ? "opacity-60" : ""
                   }`}
                 />
               ) : (
@@ -1329,11 +1357,11 @@ function JustifiedGrid({
             {isHidden ? (
               <span className="pointer-events-none absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-white backdrop-blur">
                 <EyeOff className="size-3" />
-                Hidden
+                {isLocked ? "Hidden · unhide to share" : "Hidden"}
               </span>
             ) : null}
 
-            {selectMode ? (
+            {selectMode && !isLocked ? (
               <span
                 className={`pointer-events-none absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border-2 transition ${
                   isSelected
