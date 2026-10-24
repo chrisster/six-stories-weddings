@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, MessageCircle, Share2 } from "lucide-react";
+import { Check, Download, MessageCircle, Share2 } from "lucide-react";
 
 export type GalleryVideoAsset = {
   id: string;
@@ -25,6 +25,11 @@ type GalleryVideoSectionProps = {
   allowDownloads: boolean;
   onDownload: (video: GalleryVideoAsset) => void;
   onShare: (assetId: string) => void;
+  /** Share/download selection mode, shared with the photo grid. */
+  selectMode?: boolean;
+  selected?: Set<string>;
+  onToggleSelect?: (assetId: string) => void;
+  onToggleSelectAll?: () => void;
   canComment?: boolean;
   /** Gallery-level toggle: when false, the comments block is hidden entirely. */
   commentsEnabled?: boolean;
@@ -50,12 +55,18 @@ export function GalleryVideoSection({
   allowDownloads,
   onDownload,
   onShare,
+  selectMode = false,
+  selected,
+  onToggleSelect,
+  onToggleSelectAll,
   canComment = false,
   commentsEnabled = true,
   commenterName = null,
   sectionRef,
 }: GalleryVideoSectionProps) {
   if (videos.length === 0) return null;
+  const selectedCount = videos.filter((video) => selected?.has(video.id)).length;
+  const allSelected = selectedCount === videos.length;
 
   return (
     <section
@@ -66,6 +77,25 @@ export function GalleryVideoSection({
       <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
         Film
       </h2>
+      {selectMode && onToggleSelectAll ? (
+        <div className="-mt-6 mb-6 flex justify-center sm:-mt-8">
+          <button
+            type="button"
+            onClick={onToggleSelectAll}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.18em] transition ${
+              allSelected
+                ? "border-foreground bg-foreground text-background"
+                : "border-foreground/30 text-foreground hover:border-foreground"
+            }`}
+          >
+            <Check className="size-3.5" />
+            {allSelected ? `Deselect all (${videos.length})` : `Select all (${videos.length})`}
+            {selectedCount > 0 && !allSelected ? (
+              <span className="text-muted-foreground">· {selectedCount} selected</span>
+            ) : null}
+          </button>
+        </div>
+      ) : null}
       <div className="mx-auto flex max-w-4xl flex-col gap-16">
         {videos.map((video) => (
           <GalleryVideoItem
@@ -75,6 +105,9 @@ export function GalleryVideoSection({
             allowDownloads={allowDownloads}
             onDownload={onDownload}
             onShare={onShare}
+            selectMode={selectMode}
+            isSelected={Boolean(selected?.has(video.id))}
+            onToggleSelect={onToggleSelect}
             canComment={canComment}
             commentsEnabled={commentsEnabled}
             commenterName={commenterName}
@@ -91,6 +124,9 @@ function GalleryVideoItem({
   allowDownloads,
   onDownload,
   onShare,
+  selectMode,
+  isSelected,
+  onToggleSelect,
   canComment,
   commentsEnabled,
   commenterName,
@@ -100,6 +136,9 @@ function GalleryVideoItem({
   allowDownloads: boolean;
   onDownload: (video: GalleryVideoAsset) => void;
   onShare: (assetId: string) => void;
+  selectMode: boolean;
+  isSelected: boolean;
+  onToggleSelect?: (assetId: string) => void;
   canComment: boolean;
   commentsEnabled: boolean;
   commenterName: string | null;
@@ -206,7 +245,11 @@ function GalleryVideoItem({
   };
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-border/70 bg-white">
+    <article
+      className={`overflow-hidden rounded-2xl border bg-white transition ${
+        selectMode && isSelected ? "border-foreground ring-2 ring-foreground" : "border-border/70"
+      }`}
+    >
       <div className="flex justify-center bg-black">
         <video
           ref={videoRef}
@@ -221,6 +264,21 @@ function GalleryVideoItem({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
         <p className="text-sm font-medium text-foreground">{displayName(video.fileName) || "Film"}</p>
+        {selectMode && onToggleSelect ? (
+          <button
+            type="button"
+            onClick={() => onToggleSelect(video.id)}
+            aria-pressed={isSelected}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition ${
+              isSelected
+                ? "border-foreground bg-foreground text-background"
+                : "border-border hover:border-foreground/30"
+            }`}
+          >
+            <Check className="size-3.5" />
+            {isSelected ? "Selected" : "Select"}
+          </button>
+        ) : (
         <div className="flex items-center gap-2">
           {allowDownloads ? (
             <button
@@ -241,6 +299,7 @@ function GalleryVideoItem({
             Share
           </button>
         </div>
+        )}
       </div>
 
       {commentsEnabled ? (

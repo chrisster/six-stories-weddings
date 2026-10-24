@@ -178,11 +178,12 @@ export function PublicGallery({
       // link clicks in the same page are navigations of one document, and
       // when Chrome releases them together (after "allow multiple downloads")
       // each cancels the one before it, so only some files arrived.
-      if (list.every((asset) => asset.type === "video")) {
-        setDownloadKind("files");
+      const videos = list.filter((asset) => asset.type === "video");
+      const photos = list.filter((asset) => asset.type !== "video");
+      if (videos.length > 0) {
         const token = new URLSearchParams(window.location.search).get("token");
         const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-        list.forEach((asset, index) => {
+        videos.forEach((asset, index) => {
           window.setTimeout(() => {
             const frame = document.createElement("iframe");
             frame.style.display = "none";
@@ -192,12 +193,16 @@ export function PublicGallery({
             window.setTimeout(() => frame.remove(), 10 * 60 * 1000);
           }, index * 1000);
         });
+      }
+      if (photos.length === 0) {
+        setDownloadKind("files");
         downloadNoticeTimer.current = window.setTimeout(
           () => setDownloading(false),
-          list.length * 1000 + 8000,
+          videos.length * 1000 + 8000,
         );
         return;
       }
+      list = photos;
 
       setDownloadKind("zip");
       const token = new URLSearchParams(window.location.search).get("token");
@@ -250,6 +255,16 @@ export function PublicGallery({
     });
   }, []);
 
+  /** Selects every id in a section, or clears them all when all are selected. */
+  const toggleSelectGroup = useCallback((ids: string[]) => {
+    setSelected((previous) => {
+      const nextSet = new Set(previous);
+      const allSelected = ids.length > 0 && ids.every((id) => nextSet.has(id));
+      ids.forEach((id) => (allSelected ? nextSet.delete(id) : nextSet.add(id)));
+      return nextSet;
+    });
+  }, []);
+
   const photoAssets = useMemo(
     () => assets.filter((asset) => asset.type !== "video"),
     [assets],
@@ -287,6 +302,11 @@ export function PublicGallery({
   const flatOrdered = useMemo(
     () => displayedGroups.flatMap((group) => group.items),
     [displayedGroups],
+  );
+  // Everything that can be selected, in page order: films first, then photos.
+  const selectableOrdered = useMemo(
+    () => (favoritesOnly ? flatOrdered : [...videoAssets, ...flatOrdered]),
+    [favoritesOnly, flatOrdered, videoAssets],
   );
 
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -441,7 +461,7 @@ export function PublicGallery({
     setSharing(true);
 
     try {
-      const ids = flatOrdered.filter((asset) => selected.has(asset.id)).map((asset) => asset.id);
+      const ids = selectableOrdered.filter((asset) => selected.has(asset.id)).map((asset) => asset.id);
       const url = await createShareLink({ shareAll: false, assetIds: ids });
       openSharePreview(url);
 
@@ -452,7 +472,7 @@ export function PublicGallery({
     } finally {
       setSharing(false);
     }
-  }, [createShareLink, flatOrdered, openSharePreview, selected]);
+  }, [createShareLink, selectableOrdered, openSharePreview, selected]);
 
   const shareAsset = useCallback(
     async (assetId: string) => {
@@ -709,7 +729,7 @@ export function PublicGallery({
                     className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
                   >
                     <Check className="size-4" />
-                    Select photos to share
+                    {videoAssets.length > 0 ? "Select photos & videos to share" : "Select photos to share"}
                   </button>
                 </div>
               </>
@@ -728,7 +748,7 @@ export function PublicGallery({
             <button
               type="button"
               disabled={selected.size === 0 || downloading}
-              onClick={() => downloadMany(flatOrdered.filter((asset) => selected.has(asset.id)))}
+              onClick={() => downloadMany(selectableOrdered.filter((asset) => selected.has(asset.id)))}
               className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
             >
               <Download className="size-3.5" />
@@ -826,6 +846,10 @@ export function PublicGallery({
           allowDownloads={allowDownloads}
           onDownload={downloadVideo}
           onShare={shareAsset}
+          selectMode={selectMode}
+          selected={selected}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={() => toggleSelectGroup(videoAssets.map((asset) => asset.id))}
           canComment={canComment}
           commentsEnabled={commentsEnabled}
           commenterName={commenterName}
@@ -859,6 +883,13 @@ export function PublicGallery({
                 <h2 className="title-cinematic py-10 text-center text-sm uppercase tracking-[0.4em] text-foreground/80 sm:py-14">
                   {group.name}
                 </h2>
+                {selectMode ? (
+                  <SectionSelectButton
+                    ids={group.items.map((asset) => asset.id)}
+                    selected={selected}
+                    onToggle={toggleSelectGroup}
+                  />
+                ) : null}
                 <JustifiedGrid
                   items={group.items}
                   mediaBase={mediaBase}
@@ -1252,6 +1283,36 @@ function JustifiedGrid({
       })}
       {/* Absorbs the leftover width so the last row keeps its natural height. */}
       <div aria-hidden className="h-0" style={{ flexGrow: 1000, flexBasis: 0 }} />
+    </div>
+  );
+}
+/** "Select all" / "Deselect all" for one section while choosing items to share. */
+export function SectionSelectButton({
+  ids,
+  selected,
+  onToggle,
+}: {
+  ids: string[];
+  selected: Set<string>;
+  onToggle: (ids: string[]) => void;
+}) {
+  const count = ids.filter((id) => selected.has(id)).length;
+  const allSelected = ids.length > 0 && count === ids.length;
+  return (
+    <div className="-mt-6 mb-6 flex justify-center sm:-mt-8">
+      <button
+        type="button"
+        onClick={() => onToggle(ids)}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-[11px] uppercase tracking-[0.18em] transition ${
+          allSelected
+            ? "border-foreground bg-foreground text-background"
+            : "border-foreground/30 text-foreground hover:border-foreground"
+        }`}
+      >
+        <Check className="size-3.5" />
+        {allSelected ? `Deselect all (${ids.length})` : `Select all (${ids.length})`}
+        {count > 0 && !allSelected ? <span className="text-muted-foreground">· {count} selected</span> : null}
+      </button>
     </div>
   );
 }
