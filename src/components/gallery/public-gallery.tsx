@@ -488,9 +488,8 @@ export function PublicGallery({
 
   // Hide (or show again) the selected items for anyone opening a shared link.
   // Applies to links that were already sent as well as new ones.
-  const setSelectionHidden = useCallback(
-    async (hidden: boolean) => {
-      const ids = [...selected];
+  const setItemsHidden = useCallback(
+    async (ids: string[], hidden: boolean) => {
       if (ids.length === 0) return;
       setHiding(true);
       try {
@@ -513,13 +512,20 @@ export function PublicGallery({
         setHiding(false);
       }
     },
-    [gallerySlug, selected],
+    [gallerySlug],
   );
+  const selectedHiddenIds = [...selected].filter((id) => hiddenIds.has(id));
+  const selectedVisibleIds = [...selected].filter((id) => !hiddenIds.has(id));
+  const unhideAll = useCallback(() => {
+    if (hiddenIds.size === 0) return;
+    const count = hiddenIds.size;
+    if (!window.confirm(`Show all ${count} hidden item${count === 1 ? "" : "s"} to guests again?`)) return;
+    void setItemsHidden([...hiddenIds], false);
+  }, [hiddenIds, setItemsHidden]);
   const lockedIds = useMemo(
     () => (selectMode && selectPurpose === "share" ? hiddenIds : new Set<string>()),
     [selectMode, selectPurpose, hiddenIds],
   );
-  const selectionAllHidden = selected.size > 0 && [...selected].every((id) => hiddenIds.has(id));
 
   const shareAsset = useCallback(
     async (assetId: string) => {
@@ -799,6 +805,20 @@ export function PublicGallery({
                           ? `${hiddenIds.size} item${hiddenIds.size === 1 ? " is" : "s are"} hidden from anyone you share with, including links you already sent.`
                           : "Hidden items stay visible to you but not to anyone you share the gallery with."}
                       </p>
+                      {hiddenIds.size > 0 ? (
+                        <button
+                          type="button"
+                          disabled={hiding}
+                          onClick={() => {
+                            setShareMenuOpen(false);
+                            unhideAll();
+                          }}
+                          className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60 disabled:opacity-50"
+                        >
+                          <Eye className="size-4" />
+                          {hiding ? "Saving…" : `Unhide all (${hiddenIds.size})`}
+                        </button>
+                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -838,16 +858,42 @@ export function PublicGallery({
             </>
             ) : null}
             {canHide && selectPurpose === "hide" ? (
-              <button
-                type="button"
-                disabled={selected.size === 0 || hiding}
-                onClick={() => void setSelectionHidden(!selectionAllHidden)}
-                title="Hidden items stay visible to you but not to anyone you share the gallery with"
-                className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
-              >
-                {selectionAllHidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-                {hiding ? "Saving…" : selectionAllHidden ? "Unhide" : "Hide from guests"}
-              </button>
+              <>
+                {selectedHiddenIds.length === 0 || selectedVisibleIds.length > 0 ? (
+                  <button
+                    type="button"
+                    disabled={selectedVisibleIds.length === 0 || hiding}
+                    onClick={() => void setItemsHidden(selectedVisibleIds, true)}
+                    title="Hidden items stay visible to you but not to anyone you share the gallery with"
+                    className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
+                  >
+                    <EyeOff className="size-3.5" />
+                    {hiding ? "Saving…" : `Hide${selectedVisibleIds.length > 0 ? ` (${selectedVisibleIds.length})` : " from guests"}`}
+                  </button>
+                ) : null}
+                {selectedHiddenIds.length > 0 ? (
+                  <button
+                    type="button"
+                    disabled={hiding}
+                    onClick={() => void setItemsHidden(selectedHiddenIds, false)}
+                    className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
+                  >
+                    <Eye className="size-3.5" />
+                    {hiding ? "Saving…" : `Unhide (${selectedHiddenIds.length})`}
+                  </button>
+                ) : null}
+                {hiddenIds.size > 0 ? (
+                  <button
+                    type="button"
+                    disabled={hiding}
+                    onClick={unhideAll}
+                    className="flex items-center gap-1.5 rounded-full border border-background/40 px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-background transition hover:border-background disabled:opacity-40"
+                  >
+                    <Eye className="size-3.5" />
+                    Unhide all ({hiddenIds.size})
+                  </button>
+                ) : null}
+              </>
             ) : null}
             <button
               type="button"
