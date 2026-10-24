@@ -19,6 +19,8 @@ export type GalleryAsset = {
   h: number | null;
   /** Poster frame URL for videos. */
   poster: string | null;
+  /** Hidden from shared-link guests; only sent to the couple and the studio. */
+  hidden?: boolean;
   /** Explicit URLs, only when the media base is unavailable (or for videos). */
   url?: string;
   thumb?: string;

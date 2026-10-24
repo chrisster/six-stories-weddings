@@ -54,7 +54,7 @@ export async function GET(
     return new NextResponse("Unauthorized", { status: 403 });
   }
 
-  if (!asset) {
+  if (!asset || (asset.hiddenFromGuests && !adminUser && !hasPortalAccess)) {
     return new NextResponse("Not found", { status: 404 });
   }
 

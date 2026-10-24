@@ -680,6 +680,15 @@ export function MediaManager({ media, sections, galleryId }: MediaManagerProps) 
                             className="absolute top-2 left-2 z-20 h-5 w-5 cursor-pointer rounded border border-white bg-white/90 shadow accent-foreground"
                           />
 
+                          {asset.hiddenFromGuests ? (
+                            <span
+                              title="The couple hid this from people they share the gallery with"
+                              className="absolute bottom-2 right-2 z-10 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-medium text-white"
+                            >
+                              Hidden from guests
+                            </span>
+                          ) : null}
+
                           {asset.isCover && (
                             <span className="absolute top-2 right-2 z-10 rounded-full bg-foreground px-2 py-0.5 text-[10px] font-medium text-background">
                               Cover

@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Download, MessageCircle, Share2 } from "lucide-react";
+import { Check, Download, EyeOff, MessageCircle, Share2 } from "lucide-react";
 
 export type GalleryVideoAsset = {
   id: string;
@@ -28,6 +28,8 @@ type GalleryVideoSectionProps = {
   /** Share/download selection mode, shared with the photo grid. */
   selectMode?: boolean;
   selected?: Set<string>;
+  /** Hidden from shared-link guests (shown to the couple as a badge). */
+  hiddenIds?: Set<string>;
   onToggleSelect?: (assetId: string) => void;
   onToggleSelectAll?: () => void;
   canComment?: boolean;
@@ -57,6 +59,7 @@ export function GalleryVideoSection({
   onShare,
   selectMode = false,
   selected,
+  hiddenIds,
   onToggleSelect,
   onToggleSelectAll,
   canComment = false,
@@ -107,6 +110,7 @@ export function GalleryVideoSection({
             onShare={onShare}
             selectMode={selectMode}
             isSelected={Boolean(selected?.has(video.id))}
+            isHidden={Boolean(hiddenIds?.has(video.id))}
             onToggleSelect={onToggleSelect}
             canComment={canComment}
             commentsEnabled={commentsEnabled}
@@ -126,6 +130,7 @@ function GalleryVideoItem({
   onShare,
   selectMode,
   isSelected,
+  isHidden,
   onToggleSelect,
   canComment,
   commentsEnabled,
@@ -138,6 +143,7 @@ function GalleryVideoItem({
   onShare: (assetId: string) => void;
   selectMode: boolean;
   isSelected: boolean;
+  isHidden: boolean;
   onToggleSelect?: (assetId: string) => void;
   canComment: boolean;
   commentsEnabled: boolean;
@@ -263,7 +269,15 @@ function GalleryVideoItem({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-        <p className="text-sm font-medium text-foreground">{displayName(video.fileName) || "Film"}</p>
+        <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+          {displayName(video.fileName) || "Film"}
+          {isHidden ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-foreground/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-background">
+              <EyeOff className="size-3" />
+              Hidden from guests
+            </span>
+          ) : null}
+        </p>
         {selectMode && onToggleSelect ? (
           <button
             type="button"

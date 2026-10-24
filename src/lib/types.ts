@@ -158,6 +158,8 @@ export type MediaAsset = {
   thumbnailPath?: string | null;
   /** Upload time (media_assets.created_at). */
   createdAt?: string | null;
+  /** Hidden by the couple from anyone viewing through a shared link (metadata_json.hidden_from_guests). */
+  hiddenFromGuests?: boolean;
 };
 
 export type GalleryDetail = {

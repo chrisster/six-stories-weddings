@@ -61,10 +61,15 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
     redirect(`/portal/login?error=${encodeURIComponent("Please sign in to access this gallery")}&next=${encodeURIComponent(nextUrl)}`);
   }
 
+  // The couple (every invited client) and the studio see everything and can
+  // hide items; someone who arrived through a shared link never sees them.
+  const isClientViewer = Boolean(adminUser || hasPortalAccess);
   const permittedIds = guestAssetIds && guestAssetIds.length > 0 ? new Set(guestAssetIds) : null;
-  const visibleAssets = permittedIds
-    ? detail.mediaAssets.filter((asset) => permittedIds.has(asset.id))
-    : detail.mediaAssets;
+  const visibleAssets = detail.mediaAssets.filter(
+    (asset) =>
+      (!permittedIds || permittedIds.has(asset.id)) &&
+      (isClientViewer || !asset.hiddenFromGuests),
+  );
 
   // With the public media domain, the browser derives every URL from the
   // storage key and one shared base, which keeps the payload for a
@@ -82,6 +87,7 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
         type: asset.mediaType,
         section: sectionById.get(asset.sectionId || "") || "Photos",
         name: asset.originalName || "",
+        ...(isClientViewer && asset.hiddenFromGuests ? { hidden: true } : {}),
         w: asset.width ?? null,
         h: asset.height ?? null,
         poster:
@@ -138,6 +144,7 @@ export default async function PublicGalleryPage({ params, searchParams }: Public
         commentsEnabled={commentsEnabled}
         commenterName={commenterName}
         commentCounts={commentCounts}
+        canHide={isClientViewer}
       />
     </main>
   );

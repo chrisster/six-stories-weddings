@@ -555,6 +555,7 @@ function normalizeMediaRow(row: Record<string, unknown>): MediaAsset {
     height: Number.isFinite(height) && height > 0 ? height : null,
     thumbnailPath: metadata && typeof metadata.thumbnail_path === "string" ? metadata.thumbnail_path : null,
     createdAt: (row.created_at as string | null) || null,
+    hiddenFromGuests: Boolean(metadata && metadata.hidden_from_guests === true),
   };
 }
 
@@ -742,6 +743,54 @@ export const getPublishedGalleryAccess = cache(
 );
 
 /** One media row, scoped to its gallery so handlers validate ownership in a single query. */
+/**
+ * Hides media from (or shows it again to) people who open the gallery through a
+ * shared link. Stored as metadata_json.hidden_from_guests so no schema change
+ * is needed; the flag is checked whenever a guest link is used, so it also
+ * applies to links shared before the change. Returns the ids updated.
+ */
+export async function setMediaHiddenFromGuests(
+  galleryId: string,
+  assetIds: string[],
+  hidden: boolean,
+): Promise<string[]> {
+  const admin = createAdminClient();
+  if (!admin || !galleryId || assetIds.length === 0) return [];
+
+  const updated: string[] = [];
+  const CHUNK = 200;
+  for (let i = 0; i < assetIds.length; i += CHUNK) {
+    const { data, error } = await admin
+      .from("media_assets")
+      .select("id, metadata_json")
+      .eq("gallery_id", galleryId)
+      .in("id", assetIds.slice(i, i + CHUNK));
+    if (error || !data) continue;
+
+    const rows = data.filter((row) => {
+      const metadata = (row.metadata_json as Record<string, unknown> | null) || {};
+      return (metadata.hidden_from_guests === true) !== hidden;
+    });
+    const BATCH = 25;
+    for (let j = 0; j < rows.length; j += BATCH) {
+      await Promise.all(
+        rows.slice(j, j + BATCH).map(async (row) => {
+          const metadata = { ...((row.metadata_json as Record<string, unknown> | null) || {}) };
+          if (hidden) metadata.hidden_from_guests = true;
+          else delete metadata.hidden_from_guests;
+          const { error: updateError } = await admin
+            .from("media_assets")
+            .update({ metadata_json: Object.keys(metadata).length > 0 ? metadata : null })
+            .eq("gallery_id", galleryId)
+            .eq("id", row.id);
+          if (!updateError) updated.push(String(row.id));
+        }),
+      );
+    }
+  }
+  return updated;
+}
+
 export async function getMediaAssetInGallery(
   galleryId: string,
   assetId: string,

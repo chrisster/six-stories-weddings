@@ -8,6 +8,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  EyeOff,
+  Eye,
   Heart,
   Loader2,
   MessageCircle,
@@ -39,6 +41,8 @@ type PublicGalleryProps = {
   commentsEnabled?: boolean;
   commenterName?: string | null;
   commentCounts?: Record<string, number>;
+  /** The couple / studio: may hide items from people opening shared links. */
+  canHide?: boolean;
 };
 
 type GroupedSection = {
@@ -74,7 +78,12 @@ export function PublicGallery({
   commentsEnabled = true,
   commenterName = null,
   commentCounts = {},
+  canHide = false,
 }: PublicGalleryProps) {
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(
+    () => new Set(assets.filter((asset) => asset.hidden).map((asset) => asset.id)),
+  );
+  const [hiding, setHiding] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
@@ -474,6 +483,36 @@ export function PublicGallery({
     }
   }, [createShareLink, selectableOrdered, openSharePreview, selected]);
 
+  // Hide (or show again) the selected items for anyone opening a shared link.
+  // Applies to links that were already sent as well as new ones.
+  const setSelectionHidden = useCallback(
+    async (hidden: boolean) => {
+      const ids = [...selected];
+      if (ids.length === 0) return;
+      setHiding(true);
+      try {
+        const response = await fetch(`/g/${gallerySlug}/hide`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assetIds: ids, hidden }),
+        });
+        if (!response.ok) throw new Error("Could not update");
+        setHiddenIds((previous) => {
+          const next = new Set(previous);
+          ids.forEach((id) => (hidden ? next.add(id) : next.delete(id)));
+          return next;
+        });
+        setSelected(new Set());
+      } catch {
+        window.alert("Sorry, that didn't work. Please try again.");
+      } finally {
+        setHiding(false);
+      }
+    },
+    [gallerySlug, selected],
+  );
+  const selectionAllHidden = selected.size > 0 && [...selected].every((id) => hiddenIds.has(id));
+
   const shareAsset = useCallback(
     async (assetId: string) => {
       setSharing(true);
@@ -731,6 +770,27 @@ export function PublicGallery({
                     <Check className="size-4" />
                     {videoAssets.length > 0 ? "Select photos & videos to share" : "Select photos to share"}
                   </button>
+                  {canHide ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShareMenuOpen(false);
+                          setSelected(new Set());
+                          setSelectMode(true);
+                        }}
+                        className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-muted/60"
+                      >
+                        <EyeOff className="size-4" />
+                        Hide items from guests
+                      </button>
+                      <p className="mt-2 border-t border-border/60 px-3 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+                        {hiddenIds.size > 0
+                          ? `${hiddenIds.size} item${hiddenIds.size === 1 ? " is" : "s are"} hidden from anyone you share with, including links you already sent.`
+                          : "Hidden items stay visible to you but not to anyone you share the gallery with."}
+                      </p>
+                    </>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -763,6 +823,18 @@ export function PublicGallery({
               <Share2 className="size-3.5" />
               {sharing ? "Sharing…" : "Share"}
             </button>
+            {canHide ? (
+              <button
+                type="button"
+                disabled={selected.size === 0 || hiding}
+                onClick={() => void setSelectionHidden(!selectionAllHidden)}
+                title="Hidden items stay visible to you but not to anyone you share the gallery with"
+                className="flex items-center gap-1.5 rounded-full bg-background px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-foreground transition hover:opacity-90 disabled:opacity-40"
+              >
+                {selectionAllHidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                {hiding ? "Saving…" : selectionAllHidden ? "Unhide" : "Hide from guests"}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -848,6 +920,7 @@ export function PublicGallery({
           onShare={shareAsset}
           selectMode={selectMode}
           selected={selected}
+          hiddenIds={hiddenIds}
           onToggleSelect={toggleSelect}
           onToggleSelectAll={() => toggleSelectGroup(videoAssets.map((asset) => asset.id))}
           canComment={canComment}
@@ -897,6 +970,7 @@ export function PublicGallery({
                   allowDownloads={allowDownloads}
                   selectMode={selectMode}
                   selected={selected}
+                  hiddenIds={hiddenIds}
                   commentCounts={commentsEnabled ? commentCounts : {}}
                   onSelect={openAt}
                   onToggleFavorite={toggleFavorite}
@@ -1118,6 +1192,8 @@ type JustifiedGridProps = {
   allowDownloads: boolean;
   selectMode: boolean;
   selected: Set<string>;
+  /** Items hidden from shared-link guests (badge only; the couple still sees them). */
+  hiddenIds?: Set<string>;
   commentCounts?: Record<string, number>;
   onSelect: (assetId: string) => void;
   onToggleFavorite: (assetId: string) => void;
@@ -1135,6 +1211,7 @@ function JustifiedGrid({
   allowDownloads,
   selectMode,
   selected,
+  hiddenIds,
   commentCounts = {},
   onSelect,
   onToggleFavorite,
@@ -1159,6 +1236,7 @@ function JustifiedGrid({
         const urls = assetUrls(asset, mediaBase);
         const isFavorite = favorites.has(asset.id);
         const isSelected = selected.has(asset.id);
+        const isHidden = Boolean(hiddenIds?.has(asset.id));
         const commentCount = commentCounts[asset.id] || 0;
         return (
           <div
@@ -1208,7 +1286,7 @@ function JustifiedGrid({
                     );
                   }}
                   className={`h-full w-full object-cover transition duration-500 group-hover:scale-[1.04] ${
-                    selectMode && !isSelected ? "opacity-70" : ""
+                    selectMode && !isSelected ? "opacity-70" : isHidden ? "opacity-60" : ""
                   }`}
                 />
               ) : (
@@ -1247,6 +1325,13 @@ function JustifiedGrid({
                 </button>
               ) : null}
             </div>
+
+            {isHidden ? (
+              <span className="pointer-events-none absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-white backdrop-blur">
+                <EyeOff className="size-3" />
+                Hidden
+              </span>
+            ) : null}
 
             {selectMode ? (
               <span

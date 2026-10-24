@@ -174,7 +174,11 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null, toke
     return new Response("Unauthorized", { status: 403 });
   }
 
-  let assets: MediaAsset[] = detail.mediaAssets;
+  // Items the couple hid are left out for anyone using a shared link.
+  let assets: MediaAsset[] =
+    adminUser || hasPortalAccess
+      ? detail.mediaAssets
+      : detail.mediaAssets.filter((asset) => !asset.hiddenFromGuests);
   if (guestAssetIds && guestAssetIds.length > 0) {
     const allowed = new Set(guestAssetIds);
     assets = assets.filter((asset) => allowed.has(asset.id));
@@ -189,7 +193,9 @@ async function buildZipResponse(gallerySlug: string, idsCsv: string | null, toke
       assets = filtered;
     }
   }
-  if (guestAssetIds && guestAssetIds.length > 0) {
+  if ((guestAssetIds && guestAssetIds.length > 0) || assets.length !== detail.mediaAssets.length) {
+    // A guest's view (hidden items removed) must never replace the couple's
+    // cached full-gallery archive.
     isSubset = isSubset || assets.length !== detail.mediaAssets.length;
   }
 
