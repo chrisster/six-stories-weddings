@@ -174,15 +174,27 @@ export function PublicGallery({
 
       // Videos are already compressed and very large, so zipping them only
       // adds a long server-side copy before anything downloads. Download each
-      // file directly instead, a moment apart so the browser accepts them.
+      // file directly instead. Each one gets its own hidden iframe: several
+      // link clicks in the same page are navigations of one document, and
+      // when Chrome releases them together (after "allow multiple downloads")
+      // each cancels the one before it, so only some files arrived.
       if (list.every((asset) => asset.type === "video")) {
         setDownloadKind("files");
+        const token = new URLSearchParams(window.location.search).get("token");
+        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
         list.forEach((asset, index) => {
-          window.setTimeout(() => downloadAsset(asset), index * 1500);
+          window.setTimeout(() => {
+            const frame = document.createElement("iframe");
+            frame.style.display = "none";
+            frame.src = `/g/${gallerySlug}/download?asset=${encodeURIComponent(asset.id)}&download=1${tokenParam}`;
+            document.body.appendChild(frame);
+            // The download continues on its own once started; tidy up later.
+            window.setTimeout(() => frame.remove(), 10 * 60 * 1000);
+          }, index * 1000);
         });
         downloadNoticeTimer.current = window.setTimeout(
           () => setDownloading(false),
-          list.length * 1500 + 8000,
+          list.length * 1000 + 8000,
         );
         return;
       }
@@ -226,7 +238,7 @@ export function PublicGallery({
       // while; the visitor can dismiss it sooner.
       downloadNoticeTimer.current = window.setTimeout(() => setDownloading(false), 3 * 60 * 1000);
     },
-    [assets.length, gallerySlug, downloadAsset],
+    [assets.length, gallerySlug],
   );
 
   const toggleSelect = useCallback((assetId: string) => {
