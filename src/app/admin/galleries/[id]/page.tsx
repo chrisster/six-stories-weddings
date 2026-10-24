@@ -10,6 +10,7 @@ import { MediaUploader } from "@/components/gallery/media-uploader";
 import { MediaManager } from "@/components/gallery/media-manager";
 import { HeroImageUploader } from "@/components/gallery/hero-image-uploader";
 import { GuestLinkManager } from "@/components/gallery/guest-link-manager";
+import { FavoritesTools } from "@/components/gallery/favorites-tools";
 import { updateGallerySettingsAction } from "@/app/admin/galleries/[id]/actions";
 import { requireStudioRole } from "@/lib/auth";
 import { getGalleryById, getGalleryEventStats, getGalleryFavorites, getGalleryNotificationTemplate, getGuestLinksByGallery } from "@/lib/data";
@@ -340,6 +341,18 @@ export default async function GalleryManagerPage({ params, searchParams }: Galle
             No favorites yet. They will appear here once clients heart photos in the gallery.
           </p>
         ) : (
+          <>
+          <FavoritesTools
+            galleryId={detail.gallery.id}
+            items={favoritedMedia.map((asset) => ({
+              id: asset.id,
+              name: asset.originalName || asset.storagePath.split("/").pop() || asset.id,
+              section:
+                detail.sections.find((section) => section.id === asset.sectionId)?.name || "Unsorted",
+              hearts: favorites.counts[asset.id] || 0,
+              type: asset.mediaType,
+            }))}
+          />
           <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border/70 pt-5 sm:grid-cols-4 md:grid-cols-6">
             {favoritedMedia.map((asset) => (
               <div key={asset.id} className="group relative aspect-square overflow-hidden rounded-xl bg-zinc-200">
@@ -355,6 +368,7 @@ export default async function GalleryManagerPage({ params, searchParams }: Galle
               </div>
             ))}
           </div>
+          </>
         )}
       </section>
 
